@@ -5,27 +5,32 @@ import { CraftsPage } from '../pages/crafts/CraftsPage'
 import { IngredientsPage } from '../pages/ingredients/IngredientsPage'
 import { NotFoundPage } from '../pages/not-found/NotFoundPage'
 
-export const appRouter = createBrowserRouter([
+export const appRouter = createBrowserRouter(
+  [
+    {
+      path: '/',
+      element: <AppShellLayout />,
+      children: [
+        {
+          index: true,
+          element: <HomePage />,
+        },
+        {
+          path: 'crafts',
+          element: <CraftsPage />,
+        },
+        {
+          path: 'ingredients',
+          element: <IngredientsPage />,
+        },
+      ],
+    },
+    {
+      path: '*',
+      element: <NotFoundPage />,
+    },
+  ],
   {
-    path: '/',
-    element: <AppShellLayout />,
-    children: [
-      {
-        index: true,
-        element: <HomePage />,
-      },
-      {
-        path: 'crafts',
-        element: <CraftsPage />,
-      },
-      {
-        path: 'ingredients',
-        element: <IngredientsPage />,
-      },
-    ],
+    basename: import.meta.env.BASE_URL,
   },
-  {
-    path: '*',
-    element: <NotFoundPage />,
-  },
-])
+)
