@@ -1,5 +1,7 @@
 import { ActionIcon, Box, Group, Text } from '@mantine/core'
 import { useFavoritesStore } from '../../shared/store/favoritesStore'
+import { getQualityGlowColor } from '../../shared/lib/getQualityGlowColor'
+import { useItemDetailsModalStore } from '../../shared/store/itemDetailsModalStore'
 
 type ItemBadgeProps = {
   itemId?: string
@@ -9,23 +11,7 @@ type ItemBadgeProps = {
   qualityColor?: string
   size?: 'result' | 'ingredient'
   disableGlow?: boolean
-}
-
-function getGlowByQuality(qualityColor?: string): string {
-  switch (qualityColor) {
-    case 'RANK_NEWBIE':
-      return '#3fbf4f'
-    case 'RANK_STALKER':
-      return '#3b82f6'
-    case 'RANK_VETERAN':
-      return '#ec4899'
-    case 'RANK_MASTER':
-      return '#ef4444'
-    case 'DEFAULT':
-    case 'RANK_LOCKPICK':
-    default:
-      return '#ffffff'
-  }
+  showFavoriteButton?: boolean
 }
 
 export function ItemBadge({
@@ -36,29 +22,40 @@ export function ItemBadge({
   qualityColor,
   size = 'ingredient',
   disableGlow = false,
+  showFavoriteButton = true,
 }: ItemBadgeProps) {
   const { isFavorite, toggleFavorite } = useFavoritesStore()
-  const glowColor = getGlowByQuality(qualityColor)
-  const iconBoxSize = size === 'result' ? 48 : 36
-  const imageSize = size === 'result' ? 38 : 28
-  const iconPadding = size === 'result' ? 6 : 4
+  const openItemModal = useItemDetailsModalStore((state) => state.open)
+  const glowColor = getQualityGlowColor(qualityColor)
+  const iconBoxSize = size === 'result' ? 58 : 43
+  const imageSize = size === 'result' ? 46 : 34
+  const iconPadding = size === 'result' ? 7 : 5
   const glow = disableGlow
     ? 'none'
     : size === 'result'
-      ? `0 0 12px 2px ${glowColor}66`
-      : `0 0 10px 1px ${glowColor}55`
+      ? `0 0 14px 2px ${glowColor}66`
+      : `0 0 12px 1px ${glowColor}55`
   const fontSize = size === 'result' ? 19 : 14
   const fontWeight = size === 'result' ? 700 : 500
-  const favoriteButtonSize = size === 'result' ? 24 : 20
+  const favoriteButtonSize = size === 'result' ? 29 : 24
 
   return (
-    <Box style={{ position: 'relative', width: '100%', paddingRight: itemId ? 22 : 0 }}>
-      {itemId ? (
+    <Box
+      style={{
+        position: 'relative',
+        width: '100%',
+        paddingRight: itemId && showFavoriteButton ? 26 : 0,
+      }}
+    >
+      {itemId && showFavoriteButton ? (
         <ActionIcon
           size={favoriteButtonSize}
           variant="subtle"
           color={isFavorite(itemId) ? 'yellow' : 'gray'}
-          onClick={() => toggleFavorite(itemId)}
+          onClick={(event) => {
+            event.stopPropagation()
+            toggleFavorite(itemId)
+          }}
           style={{ position: 'absolute', top: 0, right: 0, zIndex: 1 }}
           aria-label="Добавить в избранное"
         >
@@ -66,13 +63,22 @@ export function ItemBadge({
         </ActionIcon>
       ) : null}
 
-      <Group gap="xs" wrap="nowrap" align="center">
+      <Group
+        gap="xs"
+        wrap="nowrap"
+        align="center"
+        style={{ cursor: itemId ? 'pointer' : 'default' }}
+        onClick={() => {
+          if (itemId) openItemModal(itemId)
+        }}
+      >
         <Box
           w={iconBoxSize}
           h={iconBoxSize}
           p={iconPadding}
           style={{
-            borderRadius: 12,
+            borderRadius: 9,
+            border: `1px solid ${glowColor}`,
             flex: `0 0 ${iconBoxSize}px`,
             display: 'grid',
             placeItems: 'center',

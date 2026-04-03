@@ -6,6 +6,7 @@ import { getItemsListing } from '../item/api'
 import { toItemsById } from '../item/lib'
 import type { ListingItemWithId } from '../item/types'
 import { appConfig, type Realm } from '../../shared/config/app'
+import { collectMissingCraftBoostFactors } from './bonus'
 
 type HideoutStoreState = {
   realm: Realm
@@ -35,6 +36,15 @@ export const useHideoutStore = create<HideoutStoreState>((set) => ({
 
       const itemsById = toItemsById(listingResponse)
       const craftableItemIds = extractUniqueCraftableItemIds(recipesResponse.recipes)
+      const missingCraftBoostReport = collectMissingCraftBoostFactors(recipesResponse.recipes)
+
+      if (missingCraftBoostReport.craftedItemsWithoutExplicitFactor.length > 0) {
+        console.warn(
+          `[craft-boost] No explicit craftBoostFactor for ${missingCraftBoostReport.craftedItemsWithoutExplicitFactor.length} crafted items. Using default=${75}. Sample: ${missingCraftBoostReport.craftedItemsWithoutExplicitFactor
+            .slice(0, 10)
+            .join(', ')}`,
+        )
+      }
 
       set({
         recipes: recipesResponse.recipes,

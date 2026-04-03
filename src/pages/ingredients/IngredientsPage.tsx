@@ -3,11 +3,11 @@ import {
   Button,
   Group,
   Loader,
-  ScrollArea,
   SimpleGrid,
   Stack,
   Text,
   TextInput,
+  useComputedColorScheme,
 } from '@mantine/core'
 import { useEffect, useMemo, useState } from 'react'
 import { PageContainer } from '../../components/page-container/PageContainer'
@@ -18,13 +18,24 @@ import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import { useFavoritesStore } from '../../shared/store/favoritesStore'
 import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
 
+function createEnergyIconSvg(fillColor: string): string {
+  return `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 54 54" fill="none">
+      <path d="M30 8L16 30h10l-2 16 14-22H28l2-16z" fill="${fillColor}"/>
+    </svg>`,
+  )}`
+}
+
 export function IngredientsPage() {
+  const colorScheme = useComputedColorScheme('dark')
   const { recipes, itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
   const favoriteItemIds = useFavoritesStore((state) => state.favoriteItemIds)
-  const { buyPricesByItemId, setBuyPrice } = useIngredientPricesStore()
+  const { buyPricesByItemId, setBuyPrice, energyPrice, setEnergyPrice } = useIngredientPricesStore()
+  const [draftEnergyPrice, setDraftEnergyPrice] = useState('')
   const [search, setSearch] = useState('')
   const [activeFilter, setActiveFilter] = useState<'all' | 'base' | 'favorites'>('all')
   const [draftBuyPricesByItemId, setDraftBuyPricesByItemId] = useState<Record<string, string>>({})
+  const energyIconSvg = createEnergyIconSvg(colorScheme === 'light' ? '#4b5563' : '#ffffff')
 
   useEffect(() => {
     void fetchRecipes()
@@ -33,6 +44,10 @@ export function IngredientsPage() {
   useEffect(() => {
     setDraftBuyPricesByItemId(buyPricesByItemId)
   }, [buyPricesByItemId])
+
+  useEffect(() => {
+    setDraftEnergyPrice(energyPrice)
+  }, [energyPrice])
 
   const ingredients = useMemo(() => {
     const ingredientIds = new Set<string>()
@@ -77,7 +92,7 @@ export function IngredientsPage() {
   return (
     <PageContainer>
       <SectionCard title="" description="">
-        <Stack gap="md" h="calc(100vh - 108px)">
+        <Stack gap="md">
           <Text size="xl" fw={700}>
             Ингредиенты
           </Text>
@@ -96,13 +111,8 @@ export function IngredientsPage() {
           ) : null}
 
           {!isLoading && !error ? (
-            <ScrollArea
-              flex={1}
-              type="auto"
-              offsetScrollbars
-              viewportProps={{ style: { padding: '10px 12px 16px' } }}
-            >
-              <Stack gap="md" mb="lg">
+            <>
+              <Stack gap="md" mb="lg" px={12} pt={10}>
                 <Group align="flex-end" wrap="wrap">
                   <TextInput
                     placeholder="Поиск: название или ID ингредиента..."
@@ -161,13 +171,56 @@ export function IngredientsPage() {
                 </Group>
               </Stack>
 
-              <SimpleGrid cols={{ base: 1, sm: 2, md: 3, xl: 4 }} spacing="lg" verticalSpacing="lg">
+              <Group justify="center" mb="md">
+                <Stack
+                  gap={8}
+                  p="md"
+                  bd="1px solid var(--mantine-color-default-border)"
+                  style={{ borderRadius: 8, width: '100%', maxWidth: 420 }}
+                >
+                  <ItemBadge
+                    name="Энергия"
+                    iconUrl={energyIconSvg}
+                    qualityColor="DEFAULT"
+                    size="result"
+                    disableGlow
+                  />
+                  <Text size="sm" c="dimmed">
+                    Средняя цена аукциона:
+                  </Text>
+                  <Group wrap="nowrap" align="flex-end">
+                    <TextInput
+                      placeholder="Цена скупа за 1 ед."
+                      value={draftEnergyPrice}
+                      onChange={(event) =>
+                        setDraftEnergyPrice(event.currentTarget.value.replace(/[^\d]/g, ''))
+                      }
+                      style={{ flex: 1 }}
+                    />
+                    <Button
+                      variant="default"
+                      color="gray"
+                      onClick={() => setEnergyPrice(draftEnergyPrice.replace(/[^\d]/g, ''))}
+                    >
+                      Сохранить
+                    </Button>
+                  </Group>
+                </Stack>
+              </Group>
+
+              <SimpleGrid
+                cols={{ base: 1, sm: 2, md: 3, xl: 4 }}
+                spacing="lg"
+                verticalSpacing="lg"
+                px={12}
+                pb={16}
+              >
                 {filteredIngredients.map((item) => (
                   <Stack
                     key={item.itemId}
                     gap={8}
                     p="md"
-                    bd="1px solid var(--mantine-color-dark-4)"
+                    bd="1px solid var(--mantine-color-default-border)"
                     style={{ borderRadius: 8 }}
                   >
                     <ItemBadge
@@ -208,7 +261,7 @@ export function IngredientsPage() {
                   </Stack>
                 ))}
               </SimpleGrid>
-            </ScrollArea>
+            </>
           ) : null}
         </Stack>
       </SectionCard>

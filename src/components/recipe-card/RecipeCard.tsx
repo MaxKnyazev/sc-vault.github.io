@@ -1,4 +1,4 @@
-import { ActionIcon, Group, Stack, Text } from '@mantine/core'
+import { ActionIcon, Group, Stack, Text, useComputedColorScheme } from '@mantine/core'
 import { ItemBadge } from '../item-badge/ItemBadge'
 import type { HideoutRecipe } from '../../entities/hideout/types'
 import type { ListingItemWithId } from '../../entities/item/types'
@@ -6,12 +6,15 @@ import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import type { Realm } from '../../shared/config/app'
 import { getLocalizedLine } from '../../shared/lib/getLocalizedLine'
 import { useFavoritesStore } from '../../shared/store/favoritesStore'
+import { calculateLevelBonus } from '../../entities/hideout/bonus'
 
-const energyIconSvg = `data:image/svg+xml;utf8,${encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 54 54" fill="none">
-    <path d="M30 8L16 30h10l-2 16 14-22H28l2-16z" fill="#ffffff"/>
-  </svg>`,
-)}`
+function createEnergyIconSvg(fillColor: string): string {
+  return `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 54 54" fill="none">
+      <path d="M30 8L16 30h10l-2 16 14-22H28l2-16z" fill="${fillColor}"/>
+    </svg>`,
+  )}`
+}
 
 type RecipeCardProps = {
   recipe: HideoutRecipe
@@ -35,11 +38,23 @@ function getItemPresentation(
 
 export function RecipeCard({ recipe, itemsById, realm }: RecipeCardProps) {
   const { isFavorite, toggleFavorite } = useFavoritesStore()
+  const colorScheme = useComputedColorScheme('dark')
   const primaryResultItemId = recipe.result[0]?.item
+  const bonus = calculateLevelBonus(recipe)
+  const energyIconSvg = createEnergyIconSvg(colorScheme === 'light' ? '#4b5563' : '#ffffff')
 
   const resultItems = recipe.result.map((entry) => {
     const view = getItemPresentation(entry.item, itemsById, realm)
     return { ...entry, ...view }
+  })
+
+  const resultItemsWithBonus = recipe.result.map((entry) => {
+    const view = getItemPresentation(entry.item, itemsById, realm)
+    return {
+      ...entry,
+      ...view,
+      amountWithBonus: Number((entry.amount + bonus.expectedBonusUnits).toFixed(2)),
+    }
   })
 
   const ingredientItems = recipe.ingredients.map((entry) => {
@@ -51,7 +66,7 @@ export function RecipeCard({ recipe, itemsById, realm }: RecipeCardProps) {
     <Stack
       gap="sm"
       p="md"
-      bd="1px solid var(--mantine-color-dark-4)"
+      bd="1px solid var(--mantine-color-default-border)"
       style={{ borderRadius: 8, position: 'relative' }}
     >
       {primaryResultItemId ? (
@@ -59,7 +74,10 @@ export function RecipeCard({ recipe, itemsById, realm }: RecipeCardProps) {
           size={36}
           variant="subtle"
           color={isFavorite(primaryResultItemId) ? 'yellow' : 'gray'}
-          onClick={() => toggleFavorite(primaryResultItemId)}
+          onClick={(event) => {
+            event.stopPropagation()
+            toggleFavorite(primaryResultItemId)
+          }}
           style={{ position: 'absolute', top: 6, right: 6, zIndex: 2 }}
           aria-label="Добавить крафт в избранное"
         >
@@ -83,9 +101,35 @@ export function RecipeCard({ recipe, itemsById, realm }: RecipeCardProps) {
         {resultItems.map((item) => (
           <ItemBadge
             key={`result-${item.item}`}
+            itemId={item.itemId}
+            showFavoriteButton={false}
             name={item.name}
             iconUrl={item.iconUrl}
             amount={item.amount}
+            qualityColor={item.qualityColor}
+            size="result"
+          />
+        ))}
+      </Stack>
+
+      <Stack gap={6}>
+        <Text size="xs" c="dimmed">
+          Итог с бонусом
+        </Text>
+        <Text size="xs" c="dimmed">
+          {(bonus.playerLevel - bonus.requiredLevel)} x {bonus.craftBoostFactor} = {bonus.bonusPercent}%
+        </Text>
+        <Text size="xs" c="dimmed">
+          +{bonus.guaranteedBonusUnits} гарантировано, +{bonus.extraBonusChancePercent}% шанс еще +1
+        </Text>
+        {resultItemsWithBonus.map((item) => (
+          <ItemBadge
+            key={`result-bonus-${item.item}`}
+            itemId={item.itemId}
+            showFavoriteButton={false}
+            name={item.name}
+            iconUrl={item.iconUrl}
+            amount={item.amountWithBonus}
             qualityColor={item.qualityColor}
             size="result"
           />
@@ -100,6 +144,8 @@ export function RecipeCard({ recipe, itemsById, realm }: RecipeCardProps) {
           {ingredientItems.map((item) => (
             <ItemBadge
               key={`ingredient-${item.item}`}
+              itemId={item.itemId}
+              showFavoriteButton={false}
               name={item.name}
               iconUrl={item.iconUrl}
               amount={item.amount}

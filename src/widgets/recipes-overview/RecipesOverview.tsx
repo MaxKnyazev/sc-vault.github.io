@@ -4,7 +4,6 @@ import {
   Button,
   Group,
   Loader,
-  ScrollArea,
   SimpleGrid,
   Stack,
   Text,
@@ -113,7 +112,7 @@ export function RecipesOverview() {
 
   return (
     <SectionCard title="" description="">
-      <Stack gap="xs" h="calc(100vh - 108px)">
+      <Stack gap="xs">
         {isLoading ? (
           <Group gap="xs">
             <Loader size="sm" />
@@ -191,36 +190,34 @@ export function RecipesOverview() {
                 </Button>
               ))}
             </Group>
-            <ScrollArea flex={1} type="auto" offsetScrollbars>
-              <Accordion multiple defaultValue={defaultOpenedCategories} mt="xs">
-                {categoryEntries.map(([categoryName, categoryRecipes]) => (
-                  <Accordion.Item key={categoryName} value={categoryName}>
-                    <Accordion.Control>
-                      <Group justify="space-between" wrap="nowrap">
-                        <Text fw={600} style={{ wordBreak: 'break-word' }}>
-                          {categoryName}
-                        </Text>
-                        <Text size="sm" c="dimmed">
-                          {categoryRecipes.length}
-                        </Text>
-                      </Group>
-                    </Accordion.Control>
-                    <Accordion.Panel>
-                      <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="sm">
-                        {categoryRecipes.map((recipe, index) => (
-                          <RecipeCard
-                            key={`${categoryName}-${recipe.bench}-${index}`}
-                            recipe={recipe}
-                            itemsById={itemsById}
-                            realm={realm}
-                          />
-                        ))}
-                      </SimpleGrid>
-                    </Accordion.Panel>
-                  </Accordion.Item>
-                ))}
-              </Accordion>
-            </ScrollArea>
+            <Accordion multiple defaultValue={defaultOpenedCategories} mt="xs">
+              {categoryEntries.map(([categoryName, categoryRecipes]) => (
+                <Accordion.Item key={categoryName} value={categoryName}>
+                  <Accordion.Control>
+                    <Group justify="space-between" wrap="nowrap">
+                      <Text fw={600} style={{ wordBreak: 'break-word' }}>
+                        {categoryName}
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        {categoryRecipes.length}
+                      </Text>
+                    </Group>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="sm">
+                      {categoryRecipes.map((recipe, index) => (
+                        <RecipeCard
+                          key={`${categoryName}-${recipe.bench}-${index}`}
+                          recipe={recipe}
+                          itemsById={itemsById}
+                          realm={realm}
+                        />
+                      ))}
+                    </SimpleGrid>
+                  </Accordion.Panel>
+                </Accordion.Item>
+              ))}
+            </Accordion>
           </>
         ) : null}
       </Stack>
