@@ -11,8 +11,10 @@ import {
 } from '@mantine/core'
 import { useEffect, useMemo, useState } from 'react'
 import { useHideoutStore } from '../../entities/hideout/store'
+import { AuctionRefreshToolbar } from '../../components/auction-refresh-toolbar/AuctionRefreshToolbar'
 import { SectionCard } from '../../components/section-card/SectionCard'
 import { RecipeCard } from '../../components/recipe-card/RecipeCard'
+import { collectHideoutItemIds } from '../../shared/lib/collectHideoutItemIds'
 import { getLocalizedLine } from '../../shared/lib/getLocalizedLine'
 import { getItemName } from '../../entities/item/lib'
 import { useFavoritesStore } from '../../shared/store/favoritesStore'
@@ -109,6 +111,7 @@ export function RecipesOverview() {
     () => categoryEntries.map(([category]) => category),
     [categoryEntries],
   )
+  const auctionItemIds = useMemo(() => collectHideoutItemIds(recipes), [recipes])
 
   return (
     <SectionCard title="" description="">
@@ -131,6 +134,7 @@ export function RecipesOverview() {
             <Text size="xl" fw={700}>
               Крафты
             </Text>
+            <AuctionRefreshToolbar itemIds={auctionItemIds} />
             <Group align="flex-end" wrap="wrap">
               <TextInput
                 placeholder="Поиск: категория, станок, ID или название предмета..."

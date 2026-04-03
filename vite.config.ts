@@ -17,4 +17,15 @@ const pagesBasePath =
 export default defineConfig({
   base: pagesBasePath,
   plugins: [react()],
+  server: {
+    proxy: {
+      // Dev-only proxy to bypass browser CORS for eapi.stalcraft.net.
+      '/stalcraft-eapi': {
+        target: 'https://eapi.stalcraft.net',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/stalcraft-eapi/, ''),
+      },
+    },
+  },
 })

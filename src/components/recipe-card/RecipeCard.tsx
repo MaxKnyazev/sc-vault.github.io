@@ -1,4 +1,5 @@
 import { ActionIcon, Group, Stack, Text, useComputedColorScheme } from '@mantine/core'
+import { AuctionPrice24hLine } from '../auction-price-24h/AuctionPrice24hLine'
 import { ItemBadge } from '../item-badge/ItemBadge'
 import type { HideoutRecipe } from '../../entities/hideout/types'
 import type { ListingItemWithId } from '../../entities/item/types'
@@ -99,16 +100,18 @@ export function RecipeCard({ recipe, itemsById, realm }: RecipeCardProps) {
           Результат
         </Text>
         {resultItems.map((item) => (
-          <ItemBadge
-            key={`result-${item.item}`}
-            itemId={item.itemId}
-            showFavoriteButton={false}
-            name={item.name}
-            iconUrl={item.iconUrl}
-            amount={item.amount}
-            qualityColor={item.qualityColor}
-            size="result"
-          />
+          <Stack key={`result-${item.item}`} gap={4}>
+            <ItemBadge
+              itemId={item.itemId}
+              showFavoriteButton={false}
+              name={item.name}
+              iconUrl={item.iconUrl}
+              amount={item.amount}
+              qualityColor={item.qualityColor}
+              size="result"
+            />
+            <AuctionPrice24hLine itemId={item.itemId} />
+          </Stack>
         ))}
       </Stack>
 
@@ -142,16 +145,18 @@ export function RecipeCard({ recipe, itemsById, realm }: RecipeCardProps) {
         </Text>
         <Stack gap="xs">
           {ingredientItems.map((item) => (
-            <ItemBadge
-              key={`ingredient-${item.item}`}
-              itemId={item.itemId}
-              showFavoriteButton={false}
-              name={item.name}
-              iconUrl={item.iconUrl}
-              amount={item.amount}
-              qualityColor={item.qualityColor}
-              size="ingredient"
-            />
+            <Stack key={`ingredient-${item.item}`} gap={4}>
+              <ItemBadge
+                itemId={item.itemId}
+                showFavoriteButton={false}
+                name={item.name}
+                iconUrl={item.iconUrl}
+                amount={item.amount}
+                qualityColor={item.qualityColor}
+                size="ingredient"
+              />
+              <AuctionPrice24hLine itemId={item.itemId} />
+            </Stack>
           ))}
           <ItemBadge
             name="Энергия"

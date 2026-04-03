@@ -10,9 +10,12 @@ import {
   useComputedColorScheme,
 } from '@mantine/core'
 import { useEffect, useMemo, useState } from 'react'
+import { AuctionPrice24hLine } from '../../components/auction-price-24h/AuctionPrice24hLine'
+import { AuctionRefreshToolbar } from '../../components/auction-refresh-toolbar/AuctionRefreshToolbar'
 import { PageContainer } from '../../components/page-container/PageContainer'
 import { SectionCard } from '../../components/section-card/SectionCard'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
+import { collectHideoutItemIds } from '../../shared/lib/collectHideoutItemIds'
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import { useFavoritesStore } from '../../shared/store/favoritesStore'
@@ -76,6 +79,8 @@ export function IngredientsPage() {
       .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
   }, [itemsById, recipes, realm])
 
+  const auctionItemIds = useMemo(() => collectHideoutItemIds(recipes), [recipes])
+
   const filteredIngredients = useMemo(() => {
     const query = search.trim().toLowerCase()
 
@@ -96,6 +101,8 @@ export function IngredientsPage() {
           <Text size="xl" fw={700}>
             Ингредиенты
           </Text>
+
+          {!isLoading && !error ? <AuctionRefreshToolbar itemIds={auctionItemIds} /> : null}
 
           {isLoading ? (
             <Stack gap="xs">
@@ -186,7 +193,10 @@ export function IngredientsPage() {
                     disableGlow
                   />
                   <Text size="sm" c="dimmed">
-                    Средняя цена аукциона:
+                    Средняя цена аукциона (вручную):
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    История выкупов по энергии в API не привязана к предмету.
                   </Text>
                   <Group wrap="nowrap" align="flex-end">
                     <TextInput
@@ -231,8 +241,9 @@ export function IngredientsPage() {
                       size="result"
                     />
                     <Text size="sm" c="dimmed">
-                      Средняя цена аукциона:
+                      Средняя цена аукциона (вручную):
                     </Text>
+                    <AuctionPrice24hLine itemId={item.itemId} size="sm" />
                     <Group wrap="nowrap" align="flex-end">
                       <TextInput
                         placeholder="Цена скупа за 1 ед."
