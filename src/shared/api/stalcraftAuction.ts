@@ -102,6 +102,12 @@ export async function fetchAuctionHistoryPage(
       return parsed
     }
 
+    if (response.status === 401) {
+      throw new Error(
+        'API Stalcraft: 401 Unauthorized — отклонены Client ID / Client Secret (или токен). Проверьте значения в левой панели и нажмите «Сохранить», либо переменные VITE_* в .env.',
+      )
+    }
+
     if (RETRYABLE_STATUS_CODES.has(response.status) && attempt < RETRY_DELAYS_MS.length) {
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]!))
       continue
