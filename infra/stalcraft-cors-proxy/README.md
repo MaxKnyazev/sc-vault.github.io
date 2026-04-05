@@ -20,6 +20,8 @@
 
 **Первый запуск Cloudflare:** если аккаунт ещё не использовал Workers, один раз зарегистрируйте поддомен `*.workers.dev` (в Dashboard **Workers & Pages** или локально `cd infra/stalcraft-cors-proxy && npx wrangler login && npx wrangler deploy`), иначе неинтерактивный CI может завершиться ошибкой.
 
+**Если workflow падает после `wrangler deploy`:** в логе ищите шаг «Deploy Cloudflare Worker». URL воркера берётся из вывода wrangler или через API `workers/subdomain`. Убедитесь, что у токена есть доступ к аккаунту; при нескольких аккаунтах задайте **`CLOUDFLARE_ACCOUNT_ID`** или раскомментируйте `account_id` в `wrangler.toml`.
+
 ## Вручную (без CI)
 
 ```bash

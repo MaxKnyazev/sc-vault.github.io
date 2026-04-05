@@ -26,15 +26,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            infra/stalcraft-cors-proxy/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Deploy Cloudflare Worker (прокси eAPI, обход CORS)
         id: cf_worker
         if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
         working-directory: infra/stalcraft-cors-proxy
         env:
+          CI: true
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
@@ -45,7 +44,7 @@ jobs:
           fi
           OUT=$("${DEPLOY[@]}" 2>&1) || { echo "$OUT"; exit 1; }
           echo "$OUT"
-          URL=$(printf '%s' "$OUT" | node "${GITHUB_WORKSPACE}/scripts/ci/parse-workers-dev-url.mjs")
+          URL=$(printf '%s' "$OUT" | node "${GITHUB_WORKSPACE}/scripts/ci/resolve-stalcraft-worker-url.mjs")
           echo "VITE_STALCRAFT_API_BASE_URL=$URL" >> "$GITHUB_ENV"
           echo "Сборка будет использовать прокси: $URL"
 
