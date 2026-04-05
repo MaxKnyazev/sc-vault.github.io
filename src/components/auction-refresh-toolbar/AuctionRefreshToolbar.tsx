@@ -1,4 +1,4 @@
-import { Alert, Button, Group, Stack, Text } from '@mantine/core'
+import { Alert, Box, Button, Group, Stack, Text } from '@mantine/core'
 import { useAuctionPricesStore } from '../../shared/store/auctionPricesStore'
 
 type AuctionRefreshToolbarProps = {
@@ -16,7 +16,17 @@ export function AuctionRefreshToolbar({ itemIds }: AuctionRefreshToolbarProps) {
     <Stack gap="xs">
       {error ? (
         <Alert color="red" title="Аукцион" withCloseButton onClose={resetError}>
-          {error}
+          <Box
+            style={{
+              maxHeight: 360,
+              overflowY: 'auto',
+              wordBreak: 'break-word',
+            }}
+          >
+            <Text size="sm" component="pre" style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>
+              {error}
+            </Text>
+          </Box>
         </Alert>
       ) : null}
       <Group gap="md" align="center" wrap="wrap">

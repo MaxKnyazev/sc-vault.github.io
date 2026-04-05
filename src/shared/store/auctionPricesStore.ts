@@ -4,6 +4,33 @@ import type { AuctionAgg24h } from '../api/stalcraftAuction'
 import { aggregateAuctionPurchases24h } from '../api/stalcraftAuction'
 import { getStalcraftAuctionRefreshConcurrency } from '../config/stalcraftApi'
 
+function formatAuctionFailures(
+  failed: { itemId: string; message: string }[],
+  total: number,
+): string {
+  const n = failed.length
+  const header = `Не удалось обновить ${n} из ${total} предметов.`
+  if (n === 0) return header
+
+  const byMessage = new Map<string, string[]>()
+  for (const { itemId, message } of failed) {
+    const list = byMessage.get(message)
+    if (list) list.push(itemId)
+    else byMessage.set(message, [itemId])
+  }
+
+  const blocks: string[] = []
+  for (const [message, ids] of byMessage) {
+    const sorted = [...ids].sort()
+    const maxIds = 40
+    const shown = sorted.slice(0, maxIds)
+    const more = sorted.length > maxIds ? ` … (+${sorted.length - maxIds})` : ''
+    blocks.push(`${message}\n  ID: ${shown.join(', ')}${more}`)
+  }
+
+  return `${header}\n\n${blocks.join('\n\n')}`
+}
+
 type AuctionPricesState = {
   byItemId: Record<string, AuctionAgg24h>
   isRefreshing: boolean
@@ -32,7 +59,7 @@ export const useAuctionPricesStore = create<AuctionPricesState>()(
         })
 
         const nextByItemId = { ...get().byItemId }
-        const failed: string[] = []
+        const failed: { itemId: string; message: string }[] = []
 
         try {
           const concurrency = getStalcraftAuctionRefreshConcurrency()
@@ -46,8 +73,9 @@ export const useAuctionPricesStore = create<AuctionPricesState>()(
               try {
                 const agg = await aggregateAuctionPurchases24h(itemId)
                 nextByItemId[itemId] = agg
-              } catch {
-                failed.push(itemId)
+              } catch (err) {
+                const message = err instanceof Error ? err.message : String(err)
+                failed.push({ itemId, message })
               } finally {
                 done += 1
                 set({
@@ -67,7 +95,7 @@ export const useAuctionPricesStore = create<AuctionPricesState>()(
           set({
             isRefreshing: false,
             progress: null,
-            error: failed.length ? `Не удалось обновить ${failed.length} предметов` : null,
+            error: failed.length ? formatAuctionFailures(failed, unique.length) : null,
           })
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Auction refresh failed'
