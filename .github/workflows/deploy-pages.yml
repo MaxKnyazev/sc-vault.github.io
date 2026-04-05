@@ -28,30 +28,34 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - name: Deploy Cloudflare Worker (прокси eAPI, обход CORS)
-        id: cf_worker
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
-        working-directory: infra/stalcraft-cors-proxy
+      # Нельзя использовать secrets в if: (ошибка валидатора). Проверка — в bash через env.
+      - name: Деплой Cloudflare Worker и/или VITE_STALCRAFT_API_BASE_URL
         env:
           CI: true
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VITE_STALCRAFT_API_BASE_URL_SECRET: ${{ secrets.VITE_STALCRAFT_API_BASE_URL }}
+          STALCRAFT_CORS_ORIGIN: ${{ vars.STALCRAFT_CORS_ORIGIN }}
         run: |
-          npm ci
-          DEPLOY=(npx wrangler deploy)
-          if [ -n "${{ vars.STALCRAFT_CORS_ORIGIN }}" ]; then
-            DEPLOY+=(--var "ALLOWED_ORIGIN:${{ vars.STALCRAFT_CORS_ORIGIN }}")
+          set -euo pipefail
+          if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            cd infra/stalcraft-cors-proxy
+            npm ci
+            DEPLOY=(npx wrangler deploy)
+            if [ -n "${STALCRAFT_CORS_ORIGIN:-}" ]; then
+              DEPLOY+=(--var "ALLOWED_ORIGIN:${STALCRAFT_CORS_ORIGIN}")
+            fi
+            OUT=$("${DEPLOY[@]}" 2>&1) || { echo "$OUT"; exit 1; }
+            echo "$OUT"
+            cd "${GITHUB_WORKSPACE}"
+            URL=$(printf '%s' "$OUT" | node "${GITHUB_WORKSPACE}/scripts/ci/resolve-stalcraft-worker-url.mjs")
+            echo "VITE_STALCRAFT_API_BASE_URL=$URL" >> "${GITHUB_ENV}"
+            echo "Сборка будет использовать прокси: $URL"
+          elif [ -n "${VITE_STALCRAFT_API_BASE_URL_SECRET:-}" ]; then
+            echo "VITE_STALCRAFT_API_BASE_URL=${VITE_STALCRAFT_API_BASE_URL_SECRET}" >> "${GITHUB_ENV}"
+          else
+            echo "Прокси не настроен (нет CLOUDFLARE_API_TOKEN и VITE_STALCRAFT_API_BASE_URL) — сборка без URL прокси."
           fi
-          OUT=$("${DEPLOY[@]}" 2>&1) || { echo "$OUT"; exit 1; }
-          echo "$OUT"
-          URL=$(printf '%s' "$OUT" | node "${GITHUB_WORKSPACE}/scripts/ci/resolve-stalcraft-worker-url.mjs")
-          echo "VITE_STALCRAFT_API_BASE_URL=$URL" >> "$GITHUB_ENV"
-          echo "Сборка будет использовать прокси: $URL"
-
-      - name: API base URL только из секрета (без деплоя воркера в CI)
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN == '' && secrets.VITE_STALCRAFT_API_BASE_URL != '' }}
-        run: |
-          echo "VITE_STALCRAFT_API_BASE_URL=${{ secrets.VITE_STALCRAFT_API_BASE_URL }}" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: npm ci
