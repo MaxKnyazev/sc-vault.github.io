@@ -34,13 +34,16 @@ jobs:
           CI: true
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
           VITE_STALCRAFT_API_BASE_URL_SECRET: ${{ secrets.VITE_STALCRAFT_API_BASE_URL }}
           STALCRAFT_CORS_ORIGIN: ${{ vars.STALCRAFT_CORS_ORIGIN }}
         run: |
           set -euo pipefail
           if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
-            cd infra/stalcraft-cors-proxy
+            cd "${GITHUB_WORKSPACE}/infra/stalcraft-cors-proxy"
             npm ci
+            node "${GITHUB_WORKSPACE}/scripts/ci/ensure-workers-dev-subdomain.mjs"
             DEPLOY=(npx wrangler deploy)
             if [ -n "${STALCRAFT_CORS_ORIGIN:-}" ]; then
               DEPLOY+=(--var "ALLOWED_ORIGIN:${STALCRAFT_CORS_ORIGIN}")

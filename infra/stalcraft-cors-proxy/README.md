@@ -22,6 +22,8 @@
 
 **Если workflow падает после `wrangler deploy`:** в логе ищите шаг «Deploy Cloudflare Worker». URL воркера берётся из вывода wrangler или через API `workers/subdomain`. Убедитесь, что у токена есть доступ к аккаунту; при нескольких аккаунтах задайте **`CLOUDFLARE_ACCOUNT_ID`** или раскомментируйте `account_id` в `wrangler.toml`.
 
+**Ошибка «register a workers.dev subdomain» / интерактивный вопрос в CI:** перед `wrangler deploy` workflow вызывает `scripts/ci/ensure-workers-dev-subdomain.mjs` — при отсутствии поддомена у аккаунта он регистрируется через API `PUT .../workers/subdomain`. Имя по умолчанию — от slug владельца репоз (`github.repository_owner`). Если имя уже занято глобально, в **Repository variables** задайте **`CLOUDFLARE_WORKERS_SUBDOMAIN`** (латиница, цифры, дефис) и перезапустите workflow.
+
 ## Вручную (без CI)
 
 ```bash

@@ -1,6 +1,8 @@
 name = "stalcraft-eapi-proxy"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
+# Публикация на *.workers.dev (поддомен аккаунта регистрируется в CI через API или в Dashboard).
+workers_dev = true
 # Раскомментируйте при нескольких аккаунтах Cloudflare (тот же id, что в Dashboard):
 # account_id = "..."
 
