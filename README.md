@@ -47,7 +47,13 @@ git push -u origin main
    - для user/org pages: `https://<YOUR_USERNAME>.github.io/`
    - для project pages: `https://<YOUR_USERNAME>.github.io/<REPO_NAME>/`
 
-## 6) Важно про Vite `base`
+## 6) Аукцион API на GitHub Pages (CORS)
+
+Запросы с `*.github.io` к `eapi.stalcraft.net` в браузере блокируются CORS. В `npm run dev` это обходит прокси в `vite.config.ts` (`/stalcraft-eapi`).
+
+Для **продакшена** в репозитории есть Cloudflare Worker в [`infra/stalcraft-cors-proxy`](./infra/stalcraft-cors-proxy/README.md). Workflow **сам** деплоит воркер и подставляет URL в сборку, если в GitHub добавлен секрет **`CLOUDFLARE_API_TOKEN`**. Подробные шаги и опции — в README прокси; вручную настраивать `VITE_STALCRAFT_API_BASE_URL` нужно только если не используете автодеплой воркера.
+
+## 7) Важно про Vite `base`
 
 Сейчас в `vite.config.ts` используется стандартный `base: "/"` (подходит для user/org pages, когда репозиторий вида `<username>.github.io`).
 

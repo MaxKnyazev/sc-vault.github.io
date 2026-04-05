@@ -18,6 +18,8 @@ function readBrowserClientSecret(): string | undefined {
 export function getStalcraftApiBaseUrl(): string {
   const fromEnv = readEnvString('VITE_STALCRAFT_API_BASE_URL')
   if (fromEnv) return fromEnv
+  // В dev Vite проксирует /stalcraft-eapi → eapi (обход CORS). В production (GitHub Pages) прямой
+  // origin к eapi блокируется CORS — нужен URL прокси в VITE_STALCRAFT_API_BASE_URL (см. infra/stalcraft-cors-proxy).
   return import.meta.env.DEV ? '/stalcraft-eapi' : 'https://eapi.stalcraft.net'
 }
 

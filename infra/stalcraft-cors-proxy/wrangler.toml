@@ -1,0 +1,7 @@
+name = "stalcraft-eapi-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# Опционально: ограничить CORS одним сайтом (Origin без пути), например:
+# [vars]
+# ALLOWED_ORIGIN = "https://yourname.github.io"

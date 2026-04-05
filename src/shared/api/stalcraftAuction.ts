@@ -80,9 +80,10 @@ export async function fetchAuctionHistoryPage(
       response = await fetch(url.toString(), { method: 'GET', headers, signal })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Network error'
-      throw new Error(
-        `Сеть/API недоступны (${message}). Если это localhost, перезапустите dev-сервер после изменений прокси.`,
-      )
+      const hint = import.meta.env.PROD
+        ? ' На статическом хостинге (GitHub Pages) прямой вызов eapi часто блокируется CORS — укажите URL прокси в VITE_STALCRAFT_API_BASE_URL (см. infra/stalcraft-cors-proxy).'
+        : ' Если это localhost, перезапустите dev-сервер после изменений прокси.'
+      throw new Error(`Сеть/API недоступны (${message}).${hint}`)
     }
 
     const raw = await response.text()
