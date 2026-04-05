@@ -75,6 +75,21 @@ export const useAuctionPricesStore = create<AuctionPricesState>()(
         }
       },
     }),
-    { name: 'sc-vault-auction-prices-12h' },
+    {
+      name: 'sc-vault-auction-prices-12h',
+      // Не сохранять состояние «идёт обновление» — при F5 во время запроса иначе
+      // из localStorage поднимается isRefreshing: true без активного refreshAll.
+      partialize: (state) => ({ byItemId: state.byItemId }),
+      merge: (persistedState, currentState) => {
+        const p = persistedState as Partial<AuctionPricesState> | null
+        if (!p || typeof p !== 'object') return currentState
+        return {
+          ...currentState,
+          ...p,
+          isRefreshing: false,
+          progress: null,
+        }
+      },
+    },
   ),
 )

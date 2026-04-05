@@ -59,7 +59,7 @@ export async function fetchAuctionHistoryPage(
   const clientSecret = getStalcraftApiClientSecret()
   if (!token && !(clientId && clientSecret)) {
     throw new Error(
-      'Не заданы креды STALCRAFT API в .env.local. Укажите либо VITE_STALCRAFT_API_TOKEN, либо пару VITE_STALCRAFT_API_CLIENT_ID + VITE_STALCRAFT_API_CLIENT_SECRET.',
+      'Не заданы креды STALCRAFT API: укажите в левой панели Client ID и Client Secret, либо в .env — VITE_STALCRAFT_API_TOKEN или пару VITE_STALCRAFT_API_CLIENT_ID + VITE_STALCRAFT_API_CLIENT_SECRET.',
     )
   }
 

@@ -1,6 +1,18 @@
+import { useStalcraftCredentialsStore } from '../store/stalcraftCredentialsStore'
+
 function readEnvString(key: string): string | undefined {
   const value = import.meta.env[key as keyof ImportMetaEnv]
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+}
+
+function readBrowserClientId(): string | undefined {
+  const v = useStalcraftCredentialsStore.getState().clientId
+  return typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined
+}
+
+function readBrowserClientSecret(): string | undefined {
+  const v = useStalcraftCredentialsStore.getState().clientSecret
+  return typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined
 }
 
 export function getStalcraftApiBaseUrl(): string {
@@ -18,11 +30,11 @@ export function getStalcraftApiToken(): string | undefined {
 }
 
 export function getStalcraftApiClientId(): string | undefined {
-  return readEnvString('VITE_STALCRAFT_API_CLIENT_ID')
+  return readBrowserClientId() ?? readEnvString('VITE_STALCRAFT_API_CLIENT_ID')
 }
 
 export function getStalcraftApiClientSecret(): string | undefined {
-  return readEnvString('VITE_STALCRAFT_API_CLIENT_SECRET')
+  return readBrowserClientSecret() ?? readEnvString('VITE_STALCRAFT_API_CLIENT_SECRET')
 }
 
 /** Parallel item fetches during «Обновить цены аукциона». Clamped 1–16, default 6. */

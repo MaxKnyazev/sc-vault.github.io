@@ -11,6 +11,7 @@ import {
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { Link, Outlet, useLocation } from 'react-router-dom'
+import { StalcraftCredentialsNavFields } from '../../components/stalcraft-credentials-nav/StalcraftCredentialsNavFields'
 import { ItemDetailsModal } from '../item-details-modal/ItemDetailsModal'
 
 export function AppShellLayout() {
@@ -98,6 +99,8 @@ export function AppShellLayout() {
             }}
           />
           </Stack>
+
+          <StalcraftCredentialsNavFields />
         </Stack>
       </AppShell.Navbar>
 
