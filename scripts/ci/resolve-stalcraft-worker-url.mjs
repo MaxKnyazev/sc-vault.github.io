@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readCloudflareApiJson, normalizeAccountId } from './read-cloudflare-api-json.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = join(__dirname, '../..')
@@ -56,11 +57,12 @@ function getAccountIdFromWhoami() {
 
 async function getUrlFromCloudflareApi(accountId, workerName) {
   const token = process.env.CLOUDFLARE_API_TOKEN
+  const id = normalizeAccountId(accountId)
   const res = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`,
+    `https://api.cloudflare.com/client/v4/accounts/${id}/workers/subdomain`,
     { headers: { Authorization: `Bearer ${token}` } },
   )
-  const json = await res.json()
+  const json = await readCloudflareApiJson(res)
   if (!json.success) {
     throw new Error(`API workers/subdomain HTTP ${res.status}: ${JSON.stringify(json.errors ?? json)}`)
   }
@@ -80,11 +82,13 @@ if (url) {
 }
 
 const { workerName, accountIdFromToml } = readWranglerTomlFields()
-let accountId =
-  process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || accountIdFromToml || undefined
+let accountId = normalizeAccountId(
+  process.env.CLOUDFLARE_ACCOUNT_ID || accountIdFromToml || '',
+)
 if (!accountId) {
   accountId = getAccountIdFromWhoami()
 }
+accountId = normalizeAccountId(accountId)
 
 try {
   url = await getUrlFromCloudflareApi(accountId, workerName)

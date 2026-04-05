@@ -24,6 +24,8 @@
 
 **Ошибка «register a workers.dev subdomain» / интерактивный вопрос в CI:** перед `wrangler deploy` workflow вызывает `scripts/ci/ensure-workers-dev-subdomain.mjs` — при отсутствии поддомена у аккаунта он регистрируется через API `PUT .../workers/subdomain`. Имя по умолчанию — от slug владельца репоз (`github.repository_owner`). Если имя уже занято глобально, в **Repository variables** задайте **`CLOUDFLARE_WORKERS_SUBDOMAIN`** (латиница, цифры, дефис) и перезапустите workflow.
 
+**Ошибка `Unexpected token '<'` / ответ не JSON:** в секрете **`CLOUDFLARE_ACCOUNT_ID`** должен быть только **32-символьный hex** Account ID (как в Dashboard справа внизу), без пробелов и лишнего текста. Неверный ID часто приводит к HTML-странице вместо JSON от API.
+
 ## Вручную (без CI)
 
 ```bash

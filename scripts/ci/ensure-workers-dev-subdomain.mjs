@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readCloudflareApiJson, normalizeAccountId } from './read-cloudflare-api-json.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = join(__dirname, '../..')
@@ -60,7 +61,7 @@ async function getSubdomain(accountId, token) {
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`,
     { headers: { Authorization: `Bearer ${token}` } },
   )
-  const json = await res.json()
+  const json = await readCloudflareApiJson(res)
   if (json.success && json.result && typeof json.result.subdomain === 'string' && json.result.subdomain.length > 0) {
     return json.result.subdomain
   }
@@ -82,7 +83,7 @@ async function putSubdomain(accountId, token, subdomain) {
       body: JSON.stringify({ subdomain }),
     },
   )
-  const json = await res.json()
+  const json = await readCloudflareApiJson(res)
   if (!json.success) {
     throw new Error(`PUT workers/subdomain: HTTP ${res.status} ${JSON.stringify(json.errors ?? json)}`)
   }
@@ -96,11 +97,13 @@ async function main() {
     return
   }
 
-  let accountId =
-    process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || readAccountIdFromToml() || null
+  let accountId = normalizeAccountId(
+    process.env.CLOUDFLARE_ACCOUNT_ID || readAccountIdFromToml() || '',
+  )
   if (!accountId) {
     accountId = getAccountIdFromWhoami()
   }
+  accountId = normalizeAccountId(accountId)
 
   const existing = await getSubdomain(accountId, token)
   if (existing) {
