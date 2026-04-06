@@ -1,69 +1,43 @@
-import { Alert, Loader, Modal, Stack, Text } from '@mantine/core'
+import { Button, Group, Modal, Stack, Text, TextInput } from '@mantine/core'
 import { useEffect, useMemo, useState } from 'react'
+import { ItemBadge } from '../../components/item-badge/ItemBadge'
+import { RecipeCard } from '../../components/recipe-card/RecipeCard'
 import { useHideoutStore } from '../../entities/hideout/store'
-import { appConfig, type Realm } from '../../shared/config/app'
-import { getLocalizedLine } from '../../shared/lib/getLocalizedLine'
+import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
+import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 import { useItemDetailsModalStore } from '../../shared/store/itemDetailsModalStore'
-import { getItemName } from '../../entities/item/lib'
+import { useAuctionPricesStore } from '../../shared/store/auctionPricesStore'
+import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
 import { getQualityModalGlowBoxShadow } from '../../shared/lib/getQualityGlowColor'
-
-type ItemDetailsResponse = {
-  id: string
-  category?: string
-  color?: string
-  status?: { state?: string }
-  infoBlocks?: unknown[]
-}
-
-function getItemDataUrl(dataPath: string, realm: Realm): string {
-  return `${appConfig.githubRawBaseUrl}/${realm}${dataPath}`
-}
 
 export function ItemDetailsModal() {
   const { opened, itemId, close } = useItemDetailsModalStore()
   const { itemsById, recipes, realm } = useHideoutStore()
-  const [isLoading, setIsLoading] = useState(false)
-  const [detailsError, setDetailsError] = useState<string | null>(null)
-  const [details, setDetails] = useState<ItemDetailsResponse | null>(null)
+  const stat = useAuctionPricesStore((s) => (itemId ? s.byItemId[itemId] : undefined))
+  const buyPrice = useIngredientPricesStore((s) => (itemId ? s.buyPricesByItemId[itemId] ?? '' : ''))
+  const setBuyPrice = useIngredientPricesStore((s) => s.setBuyPrice)
 
   const item = itemId ? itemsById[itemId] : undefined
   const itemName = getItemName(item?.name?.lines)
+  const [draftBuyPrice, setDraftBuyPrice] = useState('')
+  const [showCrafts, setShowCrafts] = useState(false)
 
   const craftRecipes = useMemo(() => {
     if (!itemId) return []
     return recipes.filter((recipe) => recipe.result.some((entry) => entry.item === itemId))
   }, [itemId, recipes])
 
-  const qualityForGlow = item?.color ?? details?.color
+  const iconUrl = item ? buildItemIconUrl(item.icon, realm) : undefined
+  const qualityForGlow = item?.color
   const modalGlow = useMemo(() => getQualityModalGlowBoxShadow(qualityForGlow), [qualityForGlow])
 
   useEffect(() => {
-    if (!opened || !itemId || !item?.data) {
-      setDetails(null)
-      setDetailsError(null)
-      return
-    }
+    setDraftBuyPrice(buyPrice)
+  }, [buyPrice, itemId, opened])
 
-    const controller = new AbortController()
-    const fetchDetails = async () => {
-      setIsLoading(true)
-      setDetailsError(null)
-      try {
-        const response = await fetch(getItemDataUrl(item.data, realm), { signal: controller.signal })
-        if (!response.ok) throw new Error(`Failed to load item details: ${response.status}`)
-        const payload = (await response.json()) as ItemDetailsResponse
-        setDetails(payload)
-      } catch (error) {
-        if (controller.signal.aborted) return
-        setDetailsError(error instanceof Error ? error.message : 'Unknown error')
-      } finally {
-        if (!controller.signal.aborted) setIsLoading(false)
-      }
-    }
-
-    void fetchDetails()
-    return () => controller.abort()
-  }, [opened, itemId, item?.data, realm])
+  useEffect(() => {
+    if (!opened) setShowCrafts(false)
+  }, [opened, itemId])
 
   return (
     <Modal
@@ -82,31 +56,79 @@ export function ItemDetailsModal() {
       <Stack gap="sm">
         {itemId ? (
           <>
-            <Text size="sm">ID: {itemId}</Text>
-            {details?.category ? <Text size="sm">Категория: {details.category}</Text> : null}
-            {details?.status?.state ? <Text size="sm">Статус: {details.status.state}</Text> : null}
-            <Text size="sm" c="dimmed">
-              Доступных крафтов: {craftRecipes.length}
-            </Text>
-            {craftRecipes.map((recipe, index) => (
-              <Stack key={`${recipe.bench}-${index}`} gap={2} p="xs" bd="1px solid var(--mantine-color-default-border)">
-                <Text size="sm" fw={600}>
-                  {getLocalizedLine(recipe.category.lines)}
-                  {recipe.subcategory?.lines ? ` / ${getLocalizedLine(recipe.subcategory.lines)}` : ''}
+            <ItemBadge
+              itemId={itemId}
+              name={itemName || itemId}
+              iconUrl={iconUrl}
+              qualityColor={item?.color}
+              size="result"
+            />
+
+            {stat ? (
+              stat.avgPerUnit !== null ? (
+                <Text size="sm" c="dimmed">
+                  Средняя цена аукциона (12ч): {formatAuctionRub(stat.avgPerUnit)} ₽/шт
                 </Text>
-                <Text size="xs" c="dimmed">
-                  Результат: {recipe.result.map((entry) => `${entry.item} x${entry.amount}`).join(', ')}
+              ) : (
+                <Text size="sm" c="dimmed">
+                  Средняя цена аукциона (12ч): нет сделок
                 </Text>
-                <Text size="xs" c="dimmed">
-                  Ингредиенты: {recipe.ingredients.map((entry) => `${entry.item} x${entry.amount}`).join(', ')}
-                </Text>
-              </Stack>
-            ))}
+              )
+            ) : null}
+
+            <Stack gap={6}>
+              <Text size="sm" c="dimmed">
+                Цена скупа
+              </Text>
+              <Group wrap="nowrap" align="flex-end">
+                <TextInput
+                  placeholder="Цена скупа за 1 ед."
+                  value={draftBuyPrice}
+                  onChange={(event) => setDraftBuyPrice(event.currentTarget.value.replace(/[^\d]/g, ''))}
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  variant="default"
+                  color="gray"
+                  onClick={() => {
+                    if (!itemId) return
+                    setBuyPrice(itemId, draftBuyPrice.replace(/[^\d]/g, ''))
+                  }}
+                >
+                  Сохранить
+                </Button>
+              </Group>
+            </Stack>
+
+            {craftRecipes.length > 0 ? (
+              <>
+                <Button variant="light" size="xs" onClick={() => setShowCrafts((s) => !s)}>
+                  {showCrafts ? `Скрыть крафты (${craftRecipes.length})` : `Показать крафты (${craftRecipes.length})`}
+                </Button>
+                {showCrafts ? (
+                  <Stack gap="sm">
+                    {craftRecipes.map((recipe, index) => (
+                      <RecipeCard
+                        key={`${recipe.bench}-${index}`}
+                        recipe={recipe}
+                        itemsById={itemsById}
+                        realm={realm}
+                        hideResultSection
+                        showResultTextOnly
+                        showCraftToggle={false}
+                        defaultCraftOpen
+                      />
+                    ))}
+                  </Stack>
+                ) : null}
+              </>
+            ) : (
+              <Text size="sm" c="dimmed">
+                Этот предмет не крафтится.
+              </Text>
+            )}
           </>
         ) : null}
-
-        {isLoading ? <Loader size="sm" /> : null}
-        {detailsError ? <Alert color="red">{detailsError}</Alert> : null}
       </Stack>
     </Modal>
   )

@@ -1,4 +1,5 @@
-import { ActionIcon, Group, Stack, Text, useComputedColorScheme } from '@mantine/core'
+import { ActionIcon, Button, Group, Stack, Text, useComputedColorScheme } from '@mantine/core'
+import { useState } from 'react'
 import { AuctionPrice24hLine } from '../auction-price-24h/AuctionPrice24hLine'
 import { ItemBadge } from '../item-badge/ItemBadge'
 import type { HideoutRecipe } from '../../entities/hideout/types'
@@ -7,7 +8,6 @@ import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import type { Realm } from '../../shared/config/app'
 import { getLocalizedLine } from '../../shared/lib/getLocalizedLine'
 import { useFavoritesStore } from '../../shared/store/favoritesStore'
-import { calculateLevelBonus } from '../../entities/hideout/bonus'
 
 function createEnergyIconSvg(fillColor: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -21,6 +21,10 @@ type RecipeCardProps = {
   recipe: HideoutRecipe
   itemsById: Record<string, ListingItemWithId>
   realm: Realm
+  hideResultSection?: boolean
+  showResultTextOnly?: boolean
+  showCraftToggle?: boolean
+  defaultCraftOpen?: boolean
 }
 
 function getItemPresentation(
@@ -37,25 +41,24 @@ function getItemPresentation(
   }
 }
 
-export function RecipeCard({ recipe, itemsById, realm }: RecipeCardProps) {
+export function RecipeCard({
+  recipe,
+  itemsById,
+  realm,
+  hideResultSection = false,
+  showResultTextOnly = false,
+  showCraftToggle = true,
+  defaultCraftOpen = false,
+}: RecipeCardProps) {
   const { isFavorite, toggleFavorite } = useFavoritesStore()
   const colorScheme = useComputedColorScheme('dark')
   const primaryResultItemId = recipe.result[0]?.item
-  const bonus = calculateLevelBonus(recipe)
+  const [isCraftOpen, setIsCraftOpen] = useState(defaultCraftOpen)
   const energyIconSvg = createEnergyIconSvg(colorScheme === 'light' ? '#4b5563' : '#ffffff')
 
   const resultItems = recipe.result.map((entry) => {
     const view = getItemPresentation(entry.item, itemsById, realm)
     return { ...entry, ...view }
-  })
-
-  const resultItemsWithBonus = recipe.result.map((entry) => {
-    const view = getItemPresentation(entry.item, itemsById, realm)
-    return {
-      ...entry,
-      ...view,
-      amountWithBonus: Number((entry.amount + bonus.expectedBonusUnits).toFixed(2)),
-    }
   })
 
   const ingredientItems = recipe.ingredients.map((entry) => {
@@ -95,57 +98,13 @@ export function RecipeCard({ recipe, itemsById, realm }: RecipeCardProps) {
         </Stack>
       </Group>
 
-      <Stack gap={6}>
-        <Text size="xs" c="dimmed">
-          Результат
-        </Text>
-        {resultItems.map((item) => (
-          <Stack key={`result-${item.item}`} gap={4}>
-            <ItemBadge
-              itemId={item.itemId}
-              showFavoriteButton={false}
-              name={item.name}
-              iconUrl={item.iconUrl}
-              amount={item.amount}
-              qualityColor={item.qualityColor}
-              size="result"
-            />
-            <AuctionPrice24hLine itemId={item.itemId} />
-          </Stack>
-        ))}
-      </Stack>
-
-      <Stack gap={6}>
-        <Text size="xs" c="dimmed">
-          Итог с бонусом
-        </Text>
-        <Text size="xs" c="dimmed">
-          {(bonus.playerLevel - bonus.requiredLevel)} x {bonus.craftBoostFactor} = {bonus.bonusPercent}%
-        </Text>
-        <Text size="xs" c="dimmed">
-          +{bonus.guaranteedBonusUnits} гарантировано, +{bonus.extraBonusChancePercent}% шанс еще +1
-        </Text>
-        {resultItemsWithBonus.map((item) => (
-          <ItemBadge
-            key={`result-bonus-${item.item}`}
-            itemId={item.itemId}
-            showFavoriteButton={false}
-            name={item.name}
-            iconUrl={item.iconUrl}
-            amount={item.amountWithBonus}
-            qualityColor={item.qualityColor}
-            size="result"
-          />
-        ))}
-      </Stack>
-
-      <Stack gap={6}>
-        <Text size="xs" c="dimmed">
-          Ингредиенты
-        </Text>
-        <Stack gap="xs">
-          {ingredientItems.map((item) => (
-            <Stack key={`ingredient-${item.item}`} gap={4}>
+      {!hideResultSection ? (
+        <Stack gap={6}>
+          <Text size="xs" c="dimmed">
+            Результат
+          </Text>
+          {resultItems.map((item) => (
+            <Stack key={`result-${item.item}`} gap={4}>
               <ItemBadge
                 itemId={item.itemId}
                 showFavoriteButton={false}
@@ -153,21 +112,62 @@ export function RecipeCard({ recipe, itemsById, realm }: RecipeCardProps) {
                 iconUrl={item.iconUrl}
                 amount={item.amount}
                 qualityColor={item.qualityColor}
-                size="ingredient"
+                size="result"
               />
               <AuctionPrice24hLine itemId={item.itemId} />
             </Stack>
           ))}
-          <ItemBadge
-            name="Энергия"
-            amount={recipe.energy}
-            iconUrl={energyIconSvg}
-            qualityColor="DEFAULT"
-            size="ingredient"
-            disableGlow
-          />
         </Stack>
-      </Stack>
+      ) : showResultTextOnly ? (
+        <Stack gap={4}>
+          <Text size="xs" c="dimmed">
+            Результат
+          </Text>
+          {resultItems.map((item) => (
+            <Text key={`result-text-${item.item}`} size="sm" fw={600}>
+              {item.name} x{item.amount}
+            </Text>
+          ))}
+        </Stack>
+      ) : null}
+
+      {showCraftToggle ? (
+        <Button variant="light" size="xs" onClick={() => setIsCraftOpen((prev) => !prev)}>
+          {isCraftOpen ? 'Скрыть крафт' : 'Показать крафт'}
+        </Button>
+      ) : null}
+
+      {isCraftOpen || !showCraftToggle ? (
+        <Stack gap={6}>
+          <Text size="xs" c="dimmed">
+            Ингредиенты
+          </Text>
+          <Stack gap="xs">
+            {ingredientItems.map((item) => (
+              <Stack key={`ingredient-${item.item}`} gap={4}>
+                <ItemBadge
+                  itemId={item.itemId}
+                  showFavoriteButton={false}
+                  name={item.name}
+                  iconUrl={item.iconUrl}
+                  amount={item.amount}
+                  qualityColor={item.qualityColor}
+                  size="ingredient"
+                />
+                <AuctionPrice24hLine itemId={item.itemId} />
+              </Stack>
+            ))}
+            <ItemBadge
+              name="Энергия"
+              amount={recipe.energy}
+              iconUrl={energyIconSvg}
+              qualityColor="DEFAULT"
+              size="ingredient"
+              disableGlow
+            />
+          </Stack>
+        </Stack>
+      ) : null}
     </Stack>
   )
 }

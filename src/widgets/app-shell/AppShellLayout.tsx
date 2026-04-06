@@ -41,7 +41,7 @@ export function AppShellLayout() {
       }}
     >
       <AppShell.Navbar p="md">
-        <Stack gap="md">
+        <Stack gap="md" h="100%">
           <Group justify="space-between" align="center" wrap="nowrap">
             <Text fw={700}>SC Vault</Text>
             <ActionIcon
@@ -100,7 +100,9 @@ export function AppShellLayout() {
           />
           </Stack>
 
-          <StalcraftCredentialsNavFields />
+          <Stack gap={0} style={{ marginTop: 'auto' }}>
+            <StalcraftCredentialsNavFields />
+          </Stack>
         </Stack>
       </AppShell.Navbar>
 
