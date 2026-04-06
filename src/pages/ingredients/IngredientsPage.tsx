@@ -1,5 +1,6 @@
 import {
   Alert,
+  Box,
   Button,
   Group,
   Loader,
@@ -178,8 +179,9 @@ export function IngredientsPage() {
                 </Group>
               </Stack>
 
-              <Group justify="center" mb="md">
+              <Box mb="md" px={12}>
                 <Stack
+                  className="energy-ingredient-card"
                   gap={8}
                   p="md"
                   bd="1px solid var(--mantine-color-default-border)"
@@ -216,7 +218,7 @@ export function IngredientsPage() {
                     </Button>
                   </Group>
                 </Stack>
-              </Group>
+              </Box>
 
               <SimpleGrid
                 cols={{ base: 1, sm: 2, md: 3, xl: 4 }}

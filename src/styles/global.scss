@@ -41,6 +41,32 @@ body {
   background: rgba(175, 175, 175, 0.55);
 }
 
+@media (max-width: 48em) {
+  .mantine-AppShell-navbar {
+    padding-top: 44px !important;
+  }
+
+  .mantine-AppShell-main {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-top: 44px !important;
+    padding-bottom: 0 !important;
+    background: var(--mantine-color-body) !important;
+    min-height: 100dvh;
+  }
+
+  .section-card {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: var(--mantine-color-body) !important;
+    padding: 12px !important;
+  }
+
+  .energy-ingredient-card {
+    max-width: none !important;
+  }
+}
+
 [data-mantine-color-scheme="light"] {
   --mantine-color-text: #434c5a;
   --mantine-color-dimmed: #7b8493;

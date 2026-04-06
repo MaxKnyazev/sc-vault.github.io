@@ -1,4 +1,4 @@
-import { ActionIcon, Box, Button, Group, Modal, Stack, Text, TextInput } from '@mantine/core'
+import { ActionIcon, Box, Button, Group, Modal, ScrollArea, Stack, Text, TextInput } from '@mantine/core'
 import { useEffect, useMemo, useState } from 'react'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { RecipeCard } from '../../components/recipe-card/RecipeCard'
@@ -56,24 +56,21 @@ export function ItemDetailsModal() {
       withCloseButton={false}
       centered
       size="lg"
-      lockScroll={false}
-      classNames={{
-        body: 'item-details-modal-body',
+      lockScroll
+      removeScrollProps={{
+        removeScrollBar: false,
       }}
       styles={{
         content: {
           boxShadow: modalGlow,
           overflow: 'visible',
         },
-        body: {
-          maxHeight: 'calc(100vh - 120px)',
-          overflowY: 'auto',
-        },
       }}
     >
-      <Stack gap="sm">
-        {itemId ? (
-          <>
+      <ScrollArea.Autosize mah="calc(100vh - 140px)" className="item-details-modal-body">
+        <Stack gap="sm">
+          {itemId ? (
+            <>
             <Group justify="space-between" align="flex-start" wrap="nowrap">
               <Box style={{ flex: 1, minWidth: 0 }}>
                 <ItemBadge
@@ -207,9 +204,10 @@ export function ItemDetailsModal() {
                 Этот предмет не используется в других крафтах.
               </Text>
             )}
-          </>
-        ) : null}
-      </Stack>
+            </>
+          ) : null}
+        </Stack>
+      </ScrollArea.Autosize>
     </Modal>
   )
 }

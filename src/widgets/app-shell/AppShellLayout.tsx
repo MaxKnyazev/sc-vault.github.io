@@ -10,16 +10,34 @@ import {
   useMantineColorScheme,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
+import { useEffect } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { StalcraftCredentialsNavFields } from '../../components/stalcraft-credentials-nav/StalcraftCredentialsNavFields'
 import { ItemDetailsModal } from '../item-details-modal/ItemDetailsModal'
 
 export function AppShellLayout() {
-  const [opened, { toggle }] = useDisclosure()
+  const [opened, { toggle, close }] = useDisclosure()
   const { toggleColorScheme } = useMantineColorScheme()
   const computedColorScheme = useComputedColorScheme('dark')
   const isDark = computedColorScheme === 'dark'
   const location = useLocation()
+
+  useEffect(() => {
+    if (!opened) {
+      document.body.style.overflow = ''
+      return
+    }
+
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [opened])
+
+  useEffect(() => {
+    close()
+  }, [close, location.pathname])
+
   const getNavItemStyle = (active: boolean) =>
     ({
       borderRadius: 10,
@@ -59,6 +77,7 @@ export function AppShellLayout() {
           <NavLink
             component={Link}
             to="/"
+            onClick={close}
             label="Главная"
             active={location.pathname === '/'}
             variant="subtle"
@@ -73,6 +92,7 @@ export function AppShellLayout() {
           <NavLink
             component={Link}
             to="/crafts"
+            onClick={close}
             label="Крафты"
             active={location.pathname.startsWith('/crafts')}
             variant="subtle"
@@ -87,6 +107,7 @@ export function AppShellLayout() {
           <NavLink
             component={Link}
             to="/ingredients"
+            onClick={close}
             label="Ингредиенты"
             active={location.pathname.startsWith('/ingredients')}
             variant="subtle"
