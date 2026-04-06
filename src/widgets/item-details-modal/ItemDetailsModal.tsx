@@ -1,10 +1,11 @@
-import { Button, Group, Modal, Stack, Text, TextInput } from '@mantine/core'
+import { ActionIcon, Box, Button, Group, Modal, Stack, Text, TextInput } from '@mantine/core'
 import { useEffect, useMemo, useState } from 'react'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { RecipeCard } from '../../components/recipe-card/RecipeCard'
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
+import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
 import { useItemDetailsModalStore } from '../../shared/store/itemDetailsModalStore'
 import { useAuctionPricesStore } from '../../shared/store/auctionPricesStore'
 import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
@@ -21,10 +22,15 @@ export function ItemDetailsModal() {
   const itemName = getItemName(item?.name?.lines)
   const [draftBuyPrice, setDraftBuyPrice] = useState('')
   const [showCrafts, setShowCrafts] = useState(false)
+  const [showUsedInCrafts, setShowUsedInCrafts] = useState(false)
 
   const craftRecipes = useMemo(() => {
     if (!itemId) return []
     return recipes.filter((recipe) => recipe.result.some((entry) => entry.item === itemId))
+  }, [itemId, recipes])
+  const usedInRecipes = useMemo(() => {
+    if (!itemId) return []
+    return recipes.filter((recipe) => recipe.ingredients.some((entry) => entry.item === itemId))
   }, [itemId, recipes])
 
   const iconUrl = item ? buildItemIconUrl(item.icon, realm) : undefined
@@ -36,33 +42,59 @@ export function ItemDetailsModal() {
   }, [buyPrice, itemId, opened])
 
   useEffect(() => {
-    if (!opened) setShowCrafts(false)
+    if (!opened) {
+      setShowCrafts(false)
+      setShowUsedInCrafts(false)
+    }
   }, [opened, itemId])
 
   return (
     <Modal
       opened={opened}
       onClose={close}
-      title={itemName || 'Информация о предмете'}
+      title={null}
+      withCloseButton={false}
       centered
       size="lg"
       lockScroll={false}
+      classNames={{
+        body: 'item-details-modal-body',
+      }}
       styles={{
         content: {
           boxShadow: modalGlow,
+          overflow: 'visible',
+        },
+        body: {
+          maxHeight: 'calc(100vh - 120px)',
+          overflowY: 'auto',
         },
       }}
     >
       <Stack gap="sm">
         {itemId ? (
           <>
-            <ItemBadge
-              itemId={itemId}
-              name={itemName || itemId}
-              iconUrl={iconUrl}
-              qualityColor={item?.color}
-              size="result"
-            />
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <ItemBadge
+                  itemId={itemId}
+                  name={itemName || itemId}
+                  iconUrl={iconUrl}
+                  qualityColor={item?.color}
+                  size="result"
+                />
+              </Box>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="lg"
+                onClick={close}
+                aria-label="Закрыть"
+                style={{ marginTop: 2, marginLeft: 4 }}
+              >
+                ✕
+              </ActionIcon>
+            </Group>
 
             {stat ? (
               stat.avgPerUnit !== null ? (
@@ -113,6 +145,8 @@ export function ItemDetailsModal() {
                         recipe={recipe}
                         itemsById={itemsById}
                         realm={realm}
+                        recipeFavoriteId={getRecipeFavoriteId(recipe)}
+                        hideRecipeTitle
                         hideResultSection
                         showResultTextOnly
                         showCraftToggle={false}
@@ -125,6 +159,52 @@ export function ItemDetailsModal() {
             ) : (
               <Text size="sm" c="dimmed">
                 Этот предмет не крафтится.
+              </Text>
+            )}
+
+            {usedInRecipes.length > 0 ? (
+              <>
+                <Button variant="light" size="xs" onClick={() => setShowUsedInCrafts((s) => !s)}>
+                  {showUsedInCrafts
+                    ? `Скрыть "Для чего используется" (${usedInRecipes.length})`
+                    : `Для чего используется (${usedInRecipes.length})`}
+                </Button>
+                {showUsedInCrafts ? (
+                  <Stack gap="sm">
+                    {usedInRecipes.map((recipe, index) => (
+                      <Stack
+                        key={`used-in-${recipe.bench}-${index}`}
+                        gap={6}
+                        p="md"
+                        bd="1px solid var(--mantine-color-default-border)"
+                        style={{ borderRadius: 8 }}
+                      >
+                        <Text size="xs" c="dimmed">
+                          Результат крафта
+                        </Text>
+                        {recipe.result.map((entry) => {
+                          const resultItem = itemsById[entry.item]
+                          return (
+                            <ItemBadge
+                              key={`used-in-result-${entry.item}-${entry.amount}`}
+                              itemId={entry.item}
+                              name={getItemName(resultItem?.name?.lines) || entry.item}
+                              iconUrl={resultItem ? buildItemIconUrl(resultItem.icon, realm) : undefined}
+                              qualityColor={resultItem?.color}
+                              amount={entry.amount}
+                              size="ingredient"
+                              showFavoriteButton={false}
+                            />
+                          )
+                        })}
+                      </Stack>
+                    ))}
+                  </Stack>
+                ) : null}
+              </>
+            ) : (
+              <Text size="sm" c="dimmed">
+                Этот предмет не используется в других крафтах.
               </Text>
             )}
           </>

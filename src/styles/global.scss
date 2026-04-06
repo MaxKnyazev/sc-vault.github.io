@@ -5,14 +5,40 @@ body,
   min-height: 100%;
 }
 
-html,
+html {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
 body {
-  overflow-y: auto;
+  overflow-y: visible;
 }
 
 body {
   font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background: #0f1115;
+}
+
+.item-details-modal-body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(160, 160, 160, 0.45) transparent;
+}
+
+.item-details-modal-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.item-details-modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.item-details-modal-body::-webkit-scrollbar-thumb {
+  background: rgba(160, 160, 160, 0.45);
+  border-radius: 999px;
+}
+
+.item-details-modal-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(175, 175, 175, 0.55);
 }
 
 [data-mantine-color-scheme="light"] {

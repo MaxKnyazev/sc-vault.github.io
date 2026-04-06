@@ -15,13 +15,14 @@ import { AuctionRefreshToolbar } from '../../components/auction-refresh-toolbar/
 import { SectionCard } from '../../components/section-card/SectionCard'
 import { RecipeCard } from '../../components/recipe-card/RecipeCard'
 import { collectHideoutItemIds } from '../../shared/lib/collectHideoutItemIds'
+import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
 import { getLocalizedLine } from '../../shared/lib/getLocalizedLine'
 import { getItemName } from '../../entities/item/lib'
 import { useFavoritesStore } from '../../shared/store/favoritesStore'
 
 export function RecipesOverview() {
   const { recipes, itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
-  const favoriteItemIds = useFavoritesStore((state) => state.favoriteItemIds)
+  const favoriteCraftIds = useFavoritesStore((state) => state.favoriteCraftIds)
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState<'all' | 'favorites' | string>('all')
 
@@ -39,6 +40,7 @@ export function RecipesOverview() {
     const scoredRecipes = recipes
       .map((recipe) => {
         let matchPriority: number | null = null
+        const recipeFavoriteId = getRecipeFavoriteId(recipe)
 
         const resultNames = recipe.result
           .map((entry) => {
@@ -64,11 +66,11 @@ export function RecipesOverview() {
           matchPriority = 1
         }
 
-        return { recipe, matchPriority }
+        return { recipe, matchPriority, recipeFavoriteId }
       })
       .filter((entry) => entry.matchPriority !== null)
 
-    const filtered = scoredRecipes.filter(({ recipe }) => {
+    const filtered = scoredRecipes.filter(({ recipe, recipeFavoriteId }) => {
       const categoryName = getLocalizedLine(recipe.category.lines) || 'Без категории'
       if (
         activeCategory !== 'all' &&
@@ -79,17 +81,13 @@ export function RecipesOverview() {
       }
 
       if (activeCategory === 'favorites') {
-        const resultHasFavorite = recipe.result.some((entry) => favoriteItemIds.includes(entry.item))
-        const ingredientHasFavorite = recipe.ingredients.some((entry) =>
-          favoriteItemIds.includes(entry.item),
-        )
-        if (!resultHasFavorite && !ingredientHasFavorite) return false
+        if (!favoriteCraftIds.includes(recipeFavoriteId)) return false
       }
 
       return true
     })
 
-    return filtered.reduce<Record<string, typeof recipes>>((acc, entry) => {
+    return filtered.reduce<Record<string, typeof filtered>>((acc, entry) => {
       const { recipe, matchPriority } = entry
       const categoryName = getLocalizedLine(recipe.category.lines) || 'Без категории'
 
@@ -98,13 +96,13 @@ export function RecipesOverview() {
       }
 
       if (matchPriority === 0) {
-        acc[categoryName].unshift(recipe)
+        acc[categoryName].unshift(entry)
       } else {
-        acc[categoryName].push(recipe)
+        acc[categoryName].push(entry)
       }
       return acc
     }, {})
-  }, [activeCategory, favoriteItemIds, itemsById, recipes, search])
+  }, [activeCategory, favoriteCraftIds, itemsById, recipes, search])
 
   const categoryEntries = useMemo(() => Object.entries(groupedRecipes), [groupedRecipes])
   const defaultOpenedCategories = useMemo(
@@ -209,12 +207,13 @@ export function RecipesOverview() {
                   </Accordion.Control>
                   <Accordion.Panel>
                     <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="sm">
-                      {categoryRecipes.map((recipe, index) => (
+                      {categoryRecipes.map(({ recipe, recipeFavoriteId }, index) => (
                         <RecipeCard
                           key={`${categoryName}-${recipe.bench}-${index}`}
                           recipe={recipe}
                           itemsById={itemsById}
                           realm={realm}
+                          recipeFavoriteId={recipeFavoriteId}
                         />
                       ))}
                     </SimpleGrid>

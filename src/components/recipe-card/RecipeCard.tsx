@@ -21,6 +21,8 @@ type RecipeCardProps = {
   recipe: HideoutRecipe
   itemsById: Record<string, ListingItemWithId>
   realm: Realm
+  recipeFavoriteId?: string
+  hideRecipeTitle?: boolean
   hideResultSection?: boolean
   showResultTextOnly?: boolean
   showCraftToggle?: boolean
@@ -45,12 +47,14 @@ export function RecipeCard({
   recipe,
   itemsById,
   realm,
+  recipeFavoriteId,
+  hideRecipeTitle = false,
   hideResultSection = false,
   showResultTextOnly = false,
   showCraftToggle = true,
   defaultCraftOpen = false,
 }: RecipeCardProps) {
-  const { isFavorite, toggleFavorite } = useFavoritesStore()
+  const { isFavoriteCraft, toggleFavoriteCraft } = useFavoritesStore()
   const colorScheme = useComputedColorScheme('dark')
   const primaryResultItemId = recipe.result[0]?.item
   const [isCraftOpen, setIsCraftOpen] = useState(defaultCraftOpen)
@@ -73,30 +77,32 @@ export function RecipeCard({
       bd="1px solid var(--mantine-color-default-border)"
       style={{ borderRadius: 8, position: 'relative' }}
     >
-      {primaryResultItemId ? (
+      {recipeFavoriteId && primaryResultItemId ? (
         <ActionIcon
           size={36}
           variant="subtle"
-          color={isFavorite(primaryResultItemId) ? 'yellow' : 'gray'}
+          color={isFavoriteCraft(recipeFavoriteId) ? 'yellow' : 'gray'}
           onClick={(event) => {
             event.stopPropagation()
-            toggleFavorite(primaryResultItemId)
+            toggleFavoriteCraft(recipeFavoriteId)
           }}
           style={{ position: 'absolute', top: 6, right: 6, zIndex: 2 }}
           aria-label="Добавить крафт в избранное"
         >
-          {isFavorite(primaryResultItemId) ? '★' : '☆'}
+          {isFavoriteCraft(recipeFavoriteId) ? '★' : '☆'}
         </ActionIcon>
       ) : null}
 
-      <Group justify="space-between" align="flex-start" wrap="nowrap">
-        <Stack gap={2} style={{ minWidth: 0 }}>
-          <Text size="sm" fw={600} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
-            {getLocalizedLine(recipe.category.lines)}
-            {recipe.subcategory?.lines ? ` / ${getLocalizedLine(recipe.subcategory.lines)}` : ''}
-          </Text>
-        </Stack>
-      </Group>
+      {!hideRecipeTitle ? (
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <Stack gap={2} style={{ minWidth: 0 }}>
+            <Text size="sm" fw={600} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+              {getLocalizedLine(recipe.category.lines)}
+              {recipe.subcategory?.lines ? ` / ${getLocalizedLine(recipe.subcategory.lines)}` : ''}
+            </Text>
+          </Stack>
+        </Group>
+      ) : null}
 
       {!hideResultSection ? (
         <Stack gap={6}>
@@ -120,9 +126,6 @@ export function RecipeCard({
         </Stack>
       ) : showResultTextOnly ? (
         <Stack gap={4}>
-          <Text size="xs" c="dimmed">
-            Результат
-          </Text>
           {resultItems.map((item) => (
             <Text key={`result-text-${item.item}`} size="sm" fw={600}>
               {item.name} x{item.amount}
