@@ -131,7 +131,7 @@ export function ItemDetailsModal() {
 
             {craftRecipes.length > 0 ? (
               <>
-                <Button variant="light" size="xs" onClick={() => setShowCrafts((s) => !s)}>
+                <Button variant="default" color="gray" size="xs" onClick={() => setShowCrafts((s) => !s)}>
                   {showCrafts ? `Скрыть крафты (${craftRecipes.length})` : `Показать крафты (${craftRecipes.length})`}
                 </Button>
                 {showCrafts ? (
@@ -161,7 +161,12 @@ export function ItemDetailsModal() {
 
             {usedInRecipes.length > 0 ? (
               <>
-                <Button variant="light" size="xs" onClick={() => setShowUsedInCrafts((s) => !s)}>
+                <Button
+                  variant="default"
+                  color="gray"
+                  size="xs"
+                  onClick={() => setShowUsedInCrafts((s) => !s)}
+                >
                   {showUsedInCrafts
                     ? `Скрыть "Для чего используется" (${usedInRecipes.length})`
                     : `Для чего используется (${usedInRecipes.length})`}

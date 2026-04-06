@@ -135,7 +135,12 @@ export function RecipeCard({
       ) : null}
 
       {showCraftToggle ? (
-        <Button variant="light" size="xs" onClick={() => setIsCraftOpen((prev) => !prev)}>
+        <Button
+          variant="default"
+          color="gray"
+          size="xs"
+          onClick={() => setIsCraftOpen((prev) => !prev)}
+        >
           {isCraftOpen ? 'Скрыть крафт' : 'Показать крафт'}
         </Button>
       ) : null}
