@@ -48,6 +48,7 @@ jobs:
           rm -rf .deploy/backend
           mkdir -p .deploy/backend
           cp backend-shared/public/index.php .deploy/backend/index.php
+          cp backend-shared/public/.htaccess .deploy/backend/.htaccess
           cp backend-shared/config.php .deploy/backend/config.php
           cp backend-shared/config.example.php .deploy/backend/config.example.php
           cp -R backend-shared/src .deploy/backend/src

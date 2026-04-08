@@ -16,7 +16,7 @@ return [
     'db_name' => $readEnv('DB_NAME', 'u3475945_sctool_api'),
     'db_user' => $readEnv('DB_USER', 'u3475945_sctool_api_user'),
     'db_pass' => $readEnv('DB_PASS', 'Ahfth3120++'),
-    'app_allowed_origin' => $readEnv('APP_ALLOWED_ORIGIN', $defaults['app_allowed_origin']),
+    'app_allowed_origin' => $readEnv('APP_ALLOWED_ORIGIN', 'https://sctool.ru'),
     'auth_token_ttl_seconds' => (int)$readEnv(
         'AUTH_TOKEN_TTL_SECONDS',
         (string)$defaults['auth_token_ttl_seconds']
