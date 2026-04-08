@@ -8,7 +8,12 @@
     "build": "tsc -b && vite build",
     "postbuild": "node scripts/copy-404.mjs",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "backend:local:setup": "powershell -ExecutionPolicy Bypass -File scripts/backend-local-setup.ps1",
+    "backend:local:serve": "powershell -ExecutionPolicy Bypass -File scripts/backend-local-serve.ps1",
+    "backend:local:cron": "powershell -ExecutionPolicy Bypass -File scripts/backend-local-cron.ps1",
+    "backend:local:ids": "node scripts/generate-auction-item-ids.mjs",
+    "backend:shared:pack": "powershell -ExecutionPolicy Bypass -File scripts/build-backend-shared-archive.ps1"
   },
   "dependencies": {
     "@mantine/core": "^9.0.0",

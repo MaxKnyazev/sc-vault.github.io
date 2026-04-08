@@ -1,5 +1,5 @@
 import { ActionIcon, Box, Button, Group, Modal, ScrollArea, Stack, Text, TextInput } from '@mantine/core'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { RecipeCard } from '../../components/recipe-card/RecipeCard'
 import { useHideoutStore } from '../../entities/hideout/store'
@@ -20,7 +20,7 @@ export function ItemDetailsModal() {
 
   const item = itemId ? itemsById[itemId] : undefined
   const itemName = getItemName(item?.name?.lines)
-  const [draftBuyPrice, setDraftBuyPrice] = useState('')
+  const [draftBuyPrice, setDraftBuyPrice] = useState<string | undefined>(undefined)
   const [showCrafts, setShowCrafts] = useState(false)
   const [showUsedInCrafts, setShowUsedInCrafts] = useState(false)
 
@@ -37,21 +37,17 @@ export function ItemDetailsModal() {
   const qualityForGlow = item?.color
   const modalGlow = useMemo(() => getQualityModalGlowBoxShadow(qualityForGlow), [qualityForGlow])
 
-  useEffect(() => {
-    setDraftBuyPrice(buyPrice)
-  }, [buyPrice, itemId, opened])
-
-  useEffect(() => {
-    if (!opened) {
-      setShowCrafts(false)
-      setShowUsedInCrafts(false)
-    }
-  }, [opened, itemId])
+  const closeModal = () => {
+    setShowCrafts(false)
+    setShowUsedInCrafts(false)
+    setDraftBuyPrice(undefined)
+    close()
+  }
 
   return (
     <Modal
       opened={opened}
-      onClose={close}
+      onClose={closeModal}
       title={null}
       withCloseButton={false}
       centered
@@ -85,7 +81,7 @@ export function ItemDetailsModal() {
                 variant="subtle"
                 color="gray"
                 size="lg"
-                onClick={close}
+                onClick={closeModal}
                 aria-label="Закрыть"
                 style={{ marginTop: 2, marginLeft: 4 }}
               >
@@ -112,8 +108,10 @@ export function ItemDetailsModal() {
               <Group wrap="nowrap" align="flex-end">
                 <TextInput
                   placeholder="Цена скупа за 1 ед."
-                  value={draftBuyPrice}
-                  onChange={(event) => setDraftBuyPrice(event.currentTarget.value.replace(/[^\d]/g, ''))}
+                  value={draftBuyPrice ?? buyPrice}
+                  onChange={(event) =>
+                    setDraftBuyPrice(event.currentTarget.value.replace(/[^\d]/g, ''))
+                  }
                   style={{ flex: 1 }}
                 />
                 <Button
@@ -121,7 +119,9 @@ export function ItemDetailsModal() {
                   color="gray"
                   onClick={() => {
                     if (!itemId) return
-                    setBuyPrice(itemId, draftBuyPrice.replace(/[^\d]/g, ''))
+                    const value = (draftBuyPrice ?? buyPrice).replace(/[^\d]/g, '')
+                    setBuyPrice(itemId, value)
+                    setDraftBuyPrice(value)
                   }}
                 >
                   Сохранить

@@ -34,7 +34,8 @@ export function IngredientsPage() {
   const colorScheme = useComputedColorScheme('dark')
   const { recipes, itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
   const favoriteItemIds = useFavoritesStore((state) => state.favoriteItemIds)
-  const { buyPricesByItemId, setBuyPrice, energyPrice, setEnergyPrice } = useIngredientPricesStore()
+  const { buyPricesByItemId, setBuyPrice, loadRemoteBuyPrices, energyPrice, setEnergyPrice } =
+    useIngredientPricesStore()
   const [draftEnergyPrice, setDraftEnergyPrice] = useState('')
   const [search, setSearch] = useState('')
   const [activeFilter, setActiveFilter] = useState<'all' | 'base' | 'favorites'>('all')
@@ -44,6 +45,10 @@ export function IngredientsPage() {
   useEffect(() => {
     void fetchRecipes()
   }, [fetchRecipes])
+
+  useEffect(() => {
+    void loadRemoteBuyPrices()
+  }, [loadRemoteBuyPrices])
 
   useEffect(() => {
     setDraftBuyPricesByItemId(buyPricesByItemId)

@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AuctionAgg24h } from '../api/stalcraftAuction'
 import { aggregateAuctionPurchases24h } from '../api/stalcraftAuction'
+import { fetchBackendAuctionStats } from '../api/backendApi'
+import { getBackendApiBaseUrl } from '../config/backendApi'
 import { getStalcraftAuctionRefreshConcurrency } from '../config/stalcraftApi'
 
 function formatAuctionFailures(
@@ -37,6 +39,7 @@ type AuctionPricesState = {
   error: string | null
   progress: { done: number; total: number } | null
   refreshAll: (itemIds: string[]) => Promise<void>
+  clearCache: () => void
   resetError: () => void
 }
 
@@ -47,6 +50,9 @@ export const useAuctionPricesStore = create<AuctionPricesState>()(
       isRefreshing: false,
       error: null,
       progress: null,
+      clearCache: () => {
+        set({ byItemId: {}, error: null, progress: null, isRefreshing: false })
+      },
       resetError: () => set({ error: null }),
       refreshAll: async (itemIds) => {
         const unique = [...new Set(itemIds)].filter(Boolean).sort()
@@ -62,6 +68,35 @@ export const useAuctionPricesStore = create<AuctionPricesState>()(
         const failed: { itemId: string; message: string }[] = []
 
         try {
+          // Preferred path: one bulk request to backend API.
+          if (getBackendApiBaseUrl()) {
+            try {
+              const stats = await fetchBackendAuctionStats(unique)
+              for (const id of unique) {
+                const row = stats[id]
+                if (row) nextByItemId[id] = row
+              }
+              set({
+                byItemId: { ...nextByItemId },
+                isRefreshing: false,
+                progress: null,
+                error: null,
+              })
+              return
+            } catch (err) {
+              const message =
+                err instanceof Error
+                  ? `Backend API: ${err.message}`
+                  : 'Backend API: auction stats unavailable'
+              set({
+                isRefreshing: false,
+                progress: null,
+                error: message,
+              })
+              return
+            }
+          }
+
           const concurrency = getStalcraftAuctionRefreshConcurrency()
           const queue = [...unique]
           let done = 0

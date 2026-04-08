@@ -1,0 +1,103 @@
+name: Deploy to REG.RU
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-regru
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+      FRONTEND_REMOTE_DIR: ${{ vars.REGRU_FRONTEND_REMOTE_DIR }}
+      BACKEND_REMOTE_DIR: ${{ vars.REGRU_BACKEND_REMOTE_DIR }}
+      DEPLOY_BACKEND: ${{ vars.REGRU_DEPLOY_BACKEND }}
+      VITE_BACKEND_API_BASE_URL: ${{ vars.VITE_BACKEND_API_BASE_URL }}
+      VITE_STALCRAFT_API_BASE_URL: ${{ vars.VITE_STALCRAFT_API_BASE_URL }}
+      VITE_STALCRAFT_AUCTION_REGION: ${{ vars.VITE_STALCRAFT_AUCTION_REGION }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Prepare backend deploy folder
+        if: ${{ env.DEPLOY_BACKEND == 'true' }}
+        run: |
+          set -euo pipefail
+          rm -rf .deploy/backend
+          mkdir -p .deploy/backend
+          cp backend-shared/public/index.php .deploy/backend/index.php
+          cp backend-shared/config.php .deploy/backend/config.php
+          cp backend-shared/config.example.php .deploy/backend/config.example.php
+          cp -R backend-shared/src .deploy/backend/src
+          cp -R backend-shared/cron .deploy/backend/cron
+          cp -R backend-shared/migrations .deploy/backend/migrations
+          cp -R backend-shared/docs .deploy/backend/docs
+
+      - name: Install lftp
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lftp
+
+      - name: Deploy frontend via SFTP
+        run: |
+          set -euo pipefail
+          if [ -z "${FRONTEND_REMOTE_DIR:-}" ]; then
+            echo "Repository variable REGRU_FRONTEND_REMOTE_DIR is not set"
+            exit 1
+          fi
+          lftp -e "
+            set sftp:auto-confirm yes;
+            set net:max-retries 2;
+            set net:timeout 20;
+            open -u ${REGRU_SFTP_USERNAME},${REGRU_SFTP_PASSWORD} sftp://${REGRU_SFTP_HOST}:${REGRU_SFTP_PORT};
+            mirror --reverse --delete --verbose dist/ ${FRONTEND_REMOTE_DIR}/;
+            bye
+          "
+        env:
+          REGRU_SFTP_HOST: ${{ secrets.REGRU_SFTP_HOST }}
+          REGRU_SFTP_PORT: ${{ secrets.REGRU_SFTP_PORT }}
+          REGRU_SFTP_USERNAME: ${{ secrets.REGRU_SFTP_USERNAME }}
+          REGRU_SFTP_PASSWORD: ${{ secrets.REGRU_SFTP_PASSWORD }}
+
+      - name: Deploy backend via SFTP
+        if: ${{ env.DEPLOY_BACKEND == 'true' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BACKEND_REMOTE_DIR:-}" ]; then
+            echo "Repository variable REGRU_BACKEND_REMOTE_DIR is not set"
+            exit 1
+          fi
+          lftp -e "
+            set sftp:auto-confirm yes;
+            set net:max-retries 2;
+            set net:timeout 20;
+            open -u ${REGRU_SFTP_USERNAME},${REGRU_SFTP_PASSWORD} sftp://${REGRU_SFTP_HOST}:${REGRU_SFTP_PORT};
+            mirror --reverse --delete --verbose .deploy/backend/ ${BACKEND_REMOTE_DIR}/;
+            bye
+          "
+        env:
+          REGRU_SFTP_HOST: ${{ secrets.REGRU_SFTP_HOST }}
+          REGRU_SFTP_PORT: ${{ secrets.REGRU_SFTP_PORT }}
+          REGRU_SFTP_USERNAME: ${{ secrets.REGRU_SFTP_USERNAME }}
+          REGRU_SFTP_PASSWORD: ${{ secrets.REGRU_SFTP_PASSWORD }}

@@ -7,6 +7,7 @@ type AuctionRefreshToolbarProps = {
 
 export function AuctionRefreshToolbar({ itemIds }: AuctionRefreshToolbarProps) {
   const refreshAll = useAuctionPricesStore((s) => s.refreshAll)
+  const clearCache = useAuctionPricesStore((s) => s.clearCache)
   const isRefreshing = useAuctionPricesStore((s) => s.isRefreshing)
   const progress = useAuctionPricesStore((s) => s.progress)
   const error = useAuctionPricesStore((s) => s.error)
@@ -37,6 +38,14 @@ export function AuctionRefreshToolbar({ itemIds }: AuctionRefreshToolbarProps) {
           }}
         >
           Обновить цены аукциона (12ч)
+        </Button>
+        <Button
+          loading={isRefreshing}
+          onClick={() => {
+            clearCache()
+          }}
+        >
+          Сбросить кэш
         </Button>
         {progress ? (
           <Text size="sm" c="dimmed">
