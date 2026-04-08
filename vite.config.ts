@@ -13,9 +13,10 @@ const pagesBasePath =
       ? '/'
       : `/${repositoryName}/`
     : '/'
+const configuredBasePath = (process.env.VITE_BASE_PATH ?? '').trim()
 
 export default defineConfig({
-  base: pagesBasePath,
+  base: configuredBasePath !== '' ? configuredBasePath : pagesBasePath,
   plugins: [react()],
   server: {
     proxy: {
