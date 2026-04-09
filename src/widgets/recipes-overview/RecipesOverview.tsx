@@ -219,6 +219,7 @@ export function RecipesOverview() {
                         <RecipeCard
                           key={`${categoryName}-${recipe.bench}-${index}`}
                           recipe={applyRecipeResultOverride(recipe, recipeOverridesById)}
+                          defaultResultAmount={recipe.result[0]?.amount}
                           itemsById={itemsById}
                           realm={realm}
                           recipeFavoriteId={recipeFavoriteId}

@@ -24,6 +24,7 @@ type RecipeCardProps = {
   recipe: HideoutRecipe
   itemsById: Record<string, ListingItemWithId>
   realm: Realm
+  defaultResultAmount?: number
   recipeFavoriteId?: string
   hideRecipeTitle?: boolean
   hideResultSection?: boolean
@@ -51,6 +52,7 @@ export function RecipeCard({
   recipe,
   itemsById,
   realm,
+  defaultResultAmount,
   recipeFavoriteId,
   hideRecipeTitle = false,
   hideResultSection = false,
@@ -62,14 +64,15 @@ export function RecipeCard({
   const { isFavoriteCraft, toggleFavoriteCraft } = useFavoritesStore()
   const user = useAuthStore((s) => s.user)
   const saveOneOverride = useRecipeOverridesStore((s) => s.saveOne)
-  const isSavingOverride = useRecipeOverridesStore((s) => s.isSaving)
   const colorScheme = useComputedColorScheme('dark')
   const primaryResultItemId = recipe.result[0]?.item
   const primaryResultAmount = recipe.result[0]?.amount
+  const baseDefaultAmount = defaultResultAmount ?? primaryResultAmount ?? 1
   const recipeId = recipeFavoriteId || getRecipeFavoriteId(recipe)
   const [isCraftOpen, setIsCraftOpen] = useState(defaultCraftOpen)
   const [isEditingAmount, setIsEditingAmount] = useState(false)
   const [draftAmount, setDraftAmount] = useState<string>(primaryResultAmount ? String(primaryResultAmount) : '')
+  const [isSavingLocal, setIsSavingLocal] = useState(false)
   const energyIconSvg = createEnergyIconSvg(colorScheme === 'light' ? '#4b5563' : '#ffffff')
   const canEditOverride =
     showAdminOverrideControls &&
@@ -81,6 +84,7 @@ export function RecipeCard({
   useEffect(() => {
     setDraftAmount(primaryResultAmount ? String(primaryResultAmount) : '')
     setIsEditingAmount(false)
+    setIsSavingLocal(false)
   }, [primaryResultAmount, recipeId])
 
   const resultItems = recipe.result.map((entry) => {
@@ -202,18 +206,23 @@ export function RecipeCard({
 
       {canEditOverride ? (
         <Group wrap="nowrap" align="flex-end">
-          <TextInput
-            label="Количество результата"
-            value={draftAmount}
-            onChange={(event) => setDraftAmount(event.currentTarget.value.replace(/[^\d]/g, ''))}
-            disabled={!isEditingAmount}
-            style={{ flex: 1 }}
-          />
+          <Stack gap={4} style={{ flex: 1 }}>
+            <TextInput
+              label="Количество результата"
+              value={draftAmount}
+              onChange={(event) => setDraftAmount(event.currentTarget.value.replace(/[^\d]/g, ''))}
+              disabled={!isEditingAmount || isSavingLocal}
+              style={{ flex: 1 }}
+            />
+            <Text size="xs" c="dimmed">
+              Дефолтное значение: {baseDefaultAmount}, изменено на {primaryResultAmount ?? baseDefaultAmount}
+            </Text>
+          </Stack>
           <Button
-            size="xs"
+            style={{ minWidth: 168, height: 36 }}
             variant="default"
             color="gray"
-            loading={isSavingOverride}
+            loading={isSavingLocal}
             onClick={async () => {
               if (!isEditingAmount) {
                 setIsEditingAmount(true)
@@ -222,13 +231,18 @@ export function RecipeCard({
               if (!primaryResultItemId) return
               const parsedAmount = Number.parseInt(draftAmount, 10)
               const safeAmount = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 1
-              await saveOneOverride({
-                recipeId,
-                resultItemId: primaryResultItemId,
-                baseAmount: safeAmount,
-                bonusAmount: null,
-              })
-              setIsEditingAmount(false)
+              setIsSavingLocal(true)
+              try {
+                await saveOneOverride({
+                  recipeId,
+                  resultItemId: primaryResultItemId,
+                  baseAmount: safeAmount,
+                  bonusAmount: null,
+                })
+                setIsEditingAmount(false)
+              } finally {
+                setIsSavingLocal(false)
+              }
             }}
           >
             {isEditingAmount ? 'Сохранить' : 'Изменить количество'}
