@@ -27,7 +27,13 @@ function require_method(string $method): void
 
 function bearer_token_from_headers(): ?string
 {
-    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+    if ($header === '' && function_exists('apache_request_headers')) {
+        $headers = apache_request_headers();
+        if (is_array($headers)) {
+            $header = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+        }
+    }
     if (stripos($header, 'Bearer ') !== 0) {
         return null;
     }

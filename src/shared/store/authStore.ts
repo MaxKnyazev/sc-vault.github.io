@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import {
+  BackendApiError,
   fetchBackendMe,
   loginBackendUser,
   logoutBackendUser,
@@ -68,8 +69,15 @@ export const useAuthStore = create<AuthStore>()(
           const user = await fetchBackendMe(token)
           writeTokenToStorage(token)
           set({ token, user, isAuthResolved: true, error: null })
-        } catch {
-          set({ token: null, user: null, isAuthResolved: true, error: null })
+        } catch (err) {
+          // Keep session on transient network/CORS errors.
+          // Drop session only when backend explicitly rejects token.
+          if (err instanceof BackendApiError && (err.status === 401 || err.status === 403)) {
+            writeTokenToStorage(null)
+            set({ token: null, user: null, isAuthResolved: true, error: null })
+            return
+          }
+          set({ isAuthResolved: true })
         }
       },
       login: async (nickname, password) => {

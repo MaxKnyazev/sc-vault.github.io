@@ -35,6 +35,16 @@ type AuthResponse = {
   user?: AuthUser
 }
 
+export class BackendApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'BackendApiError'
+    this.status = status
+  }
+}
+
 function buildApiUrl(path: string): string {
   const base = getBackendApiBaseUrl()
   if (!base) throw new Error('Не задан VITE_BACKEND_API_BASE_URL')
@@ -49,7 +59,7 @@ async function parseJsonOrThrow<T>(response: Response): Promise<T> {
   }
   if (!response.ok) {
     const msg = typeof data === 'object' && data && 'error' in data ? String((data as { error: unknown }).error) : `Backend API ${response.status}`
-    throw new Error(msg)
+    throw new BackendApiError(msg, response.status)
   }
   return data as T
 }
