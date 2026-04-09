@@ -9,6 +9,18 @@ type UserBuyPricesResponse = {
   prices?: Record<string, { value?: string }>
 }
 
+export type RecipeResultOverride = {
+  recipeId: string
+  resultItemId: string
+  baseAmount: number | null
+  bonusAmount: number | null
+  updatedAt?: string
+}
+
+type RecipeResultOverridesResponse = {
+  items?: Record<string, RecipeResultOverride>
+}
+
 export type UserRole = 'blocked' | 'user' | 'admin'
 
 export type AuthUser = {
@@ -136,5 +148,53 @@ export async function logoutBackendUser(token: string): Promise<void> {
     },
   })
   await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function fetchRecipeResultOverrides(): Promise<Record<string, RecipeResultOverride>> {
+  const url = buildApiUrl('/recipe-overrides')
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  })
+  const payload = await parseJsonOrThrow<RecipeResultOverridesResponse>(response)
+  return payload.items ?? {}
+}
+
+export async function saveRecipeResultOverride(
+  override: Omit<RecipeResultOverride, 'updatedAt'>,
+): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация администратора')
+
+  const url = buildApiUrl('/admin/recipe-overrides')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(override),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function bulkSaveRecipeResultOverrides(
+  items: Array<Omit<RecipeResultOverride, 'updatedAt'>>,
+): Promise<number> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация администратора')
+  const url = buildApiUrl('/admin/recipe-overrides/bulk')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ items }),
+  })
+  const payload = await parseJsonOrThrow<{ updated?: number }>(response)
+  return payload.updated ?? 0
 }
 

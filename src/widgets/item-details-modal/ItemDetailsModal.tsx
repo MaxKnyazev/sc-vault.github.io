@@ -1,5 +1,5 @@
 import { ActionIcon, Box, Button, Group, Modal, ScrollArea, Stack, Text, TextInput } from '@mantine/core'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { RecipeCard } from '../../components/recipe-card/RecipeCard'
 import { useHideoutStore } from '../../entities/hideout/store'
@@ -10,6 +10,8 @@ import { useItemDetailsModalStore } from '../../shared/store/itemDetailsModalSto
 import { useAuctionPricesStore } from '../../shared/store/auctionPricesStore'
 import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
 import { getQualityModalGlowBoxShadow } from '../../shared/lib/getQualityGlowColor'
+import { useRecipeOverridesStore } from '../../shared/store/recipeOverridesStore'
+import { applyRecipeResultOverride } from '../../shared/lib/applyRecipeResultOverride'
 
 export function ItemDetailsModal() {
   const { opened, itemId, close } = useItemDetailsModalStore()
@@ -23,6 +25,12 @@ export function ItemDetailsModal() {
   const [draftBuyPrice, setDraftBuyPrice] = useState<string | undefined>(undefined)
   const [showCrafts, setShowCrafts] = useState(false)
   const [showUsedInCrafts, setShowUsedInCrafts] = useState(false)
+  const recipeOverridesById = useRecipeOverridesStore((s) => s.byRecipeId)
+  const loadOverrides = useRecipeOverridesStore((s) => s.loadOverrides)
+
+  useEffect(() => {
+    void loadOverrides()
+  }, [loadOverrides])
 
   const craftRecipes = useMemo(() => {
     if (!itemId) return []
@@ -139,7 +147,7 @@ export function ItemDetailsModal() {
                     {craftRecipes.map((recipe, index) => (
                       <RecipeCard
                         key={`${recipe.bench}-${index}`}
-                        recipe={recipe}
+                        recipe={applyRecipeResultOverride(recipe, recipeOverridesById)}
                         itemsById={itemsById}
                         realm={realm}
                         recipeFavoriteId={getRecipeFavoriteId(recipe)}
@@ -184,7 +192,7 @@ export function ItemDetailsModal() {
                         <Text size="xs" c="dimmed">
                           Результат крафта
                         </Text>
-                        {recipe.result.map((entry) => {
+                        {applyRecipeResultOverride(recipe, recipeOverridesById).result.map((entry) => {
                           const resultItem = itemsById[entry.item]
                           return (
                             <ItemBadge

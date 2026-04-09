@@ -19,16 +19,24 @@ import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
 import { getLocalizedLine } from '../../shared/lib/getLocalizedLine'
 import { getItemName } from '../../entities/item/lib'
 import { useFavoritesStore } from '../../shared/store/favoritesStore'
+import { useRecipeOverridesStore } from '../../shared/store/recipeOverridesStore'
+import { applyRecipeResultOverride } from '../../shared/lib/applyRecipeResultOverride'
 
 export function RecipesOverview() {
   const { recipes, itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
   const favoriteCraftIds = useFavoritesStore((state) => state.favoriteCraftIds)
+  const recipeOverridesById = useRecipeOverridesStore((s) => s.byRecipeId)
+  const loadOverrides = useRecipeOverridesStore((s) => s.loadOverrides)
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState<'all' | 'favorites' | string>('all')
 
   useEffect(() => {
     void fetchRecipes()
   }, [fetchRecipes])
+
+  useEffect(() => {
+    void loadOverrides()
+  }, [loadOverrides])
 
   const allCategories = useMemo(() => {
     return [...new Set(recipes.map((recipe) => getLocalizedLine(recipe.category.lines) || 'Без категории'))]
@@ -210,7 +218,7 @@ export function RecipesOverview() {
                       {categoryRecipes.map(({ recipe, recipeFavoriteId }, index) => (
                         <RecipeCard
                           key={`${categoryName}-${recipe.bench}-${index}`}
-                          recipe={recipe}
+                          recipe={applyRecipeResultOverride(recipe, recipeOverridesById)}
                           itemsById={itemsById}
                           realm={realm}
                           recipeFavoriteId={recipeFavoriteId}

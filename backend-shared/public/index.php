@@ -22,6 +22,7 @@ require $baseDir . '/src/Http.php';
 require $baseDir . '/src/Auth.php';
 require $baseDir . '/src/Auction.php';
 require $baseDir . '/src/UserBuyPrices.php';
+require $baseDir . '/src/RecipeOverrides.php';
 
 header('Access-Control-Allow-Origin: ' . $config['app_allowed_origin']);
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
@@ -204,6 +205,83 @@ if ($path === '/auction/stats') {
     $ids = array_values(array_filter(array_unique(array_map('trim', explode(',', $idsRaw)))));
     $items = get_auction_stats($db, $ids, '12h');
     send_json(200, ['items' => $items]);
+    exit;
+}
+
+if ($path === '/recipe-overrides') {
+    require_method('GET');
+    $items = get_recipe_result_overrides($db);
+    send_json(200, ['items' => $items]);
+    exit;
+}
+
+if ($path === '/admin/recipe-overrides') {
+    require_method('POST');
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    if (!role_at_least($user, 'admin')) {
+        send_json(403, ['error' => 'Недостаточно прав']);
+        exit;
+    }
+    $body = read_json_body();
+    $recipeId = (string)($body['recipeId'] ?? '');
+    $resultItemId = (string)($body['resultItemId'] ?? '');
+    $baseAmount = parse_positive_int_or_null($body['baseAmount'] ?? null);
+    $bonusAmount = parse_positive_int_or_null($body['bonusAmount'] ?? null);
+    try {
+        upsert_recipe_result_override(
+            $db,
+            (int)$user['id'],
+            $recipeId,
+            $resultItemId,
+            $baseAmount,
+            $bonusAmount
+        );
+    } catch (Throwable $e) {
+        send_json(400, ['error' => $e->getMessage()]);
+        exit;
+    }
+    send_json(200, ['ok' => true]);
+    exit;
+}
+
+if ($path === '/admin/recipe-overrides/bulk') {
+    require_method('POST');
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    if (!role_at_least($user, 'admin')) {
+        send_json(403, ['error' => 'Недостаточно прав']);
+        exit;
+    }
+    $body = read_json_body();
+    $items = $body['items'] ?? null;
+    if (!is_array($items)) {
+        send_json(400, ['error' => 'items must be array']);
+        exit;
+    }
+    try {
+        $count = bulk_upsert_recipe_result_overrides($db, (int)$user['id'], $items);
+    } catch (Throwable $e) {
+        send_json(400, ['error' => $e->getMessage()]);
+        exit;
+    }
+    send_json(200, ['ok' => true, 'updated' => $count]);
     exit;
 }
 
