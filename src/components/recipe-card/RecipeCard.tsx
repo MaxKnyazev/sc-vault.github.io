@@ -1,5 +1,5 @@
-import { ActionIcon, Button, Group, Stack, Text, useComputedColorScheme } from '@mantine/core'
-import { useState } from 'react'
+import { ActionIcon, Button, Group, Stack, Text, TextInput, useComputedColorScheme } from '@mantine/core'
+import { useEffect, useState } from 'react'
 import { AuctionPrice24hLine } from '../auction-price-24h/AuctionPrice24hLine'
 import { ItemBadge } from '../item-badge/ItemBadge'
 import type { HideoutRecipe } from '../../entities/hideout/types'
@@ -8,6 +8,9 @@ import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import type { Realm } from '../../shared/config/app'
 import { getLocalizedLine } from '../../shared/lib/getLocalizedLine'
 import { useFavoritesStore } from '../../shared/store/favoritesStore'
+import { useAuthStore } from '../../shared/store/authStore'
+import { useRecipeOverridesStore } from '../../shared/store/recipeOverridesStore'
+import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
 
 function createEnergyIconSvg(fillColor: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -27,6 +30,7 @@ type RecipeCardProps = {
   showResultTextOnly?: boolean
   showCraftToggle?: boolean
   defaultCraftOpen?: boolean
+  showAdminOverrideControls?: boolean
 }
 
 function getItemPresentation(
@@ -53,12 +57,31 @@ export function RecipeCard({
   showResultTextOnly = false,
   showCraftToggle = true,
   defaultCraftOpen = false,
+  showAdminOverrideControls = false,
 }: RecipeCardProps) {
   const { isFavoriteCraft, toggleFavoriteCraft } = useFavoritesStore()
+  const user = useAuthStore((s) => s.user)
+  const saveOneOverride = useRecipeOverridesStore((s) => s.saveOne)
+  const isSavingOverride = useRecipeOverridesStore((s) => s.isSaving)
   const colorScheme = useComputedColorScheme('dark')
   const primaryResultItemId = recipe.result[0]?.item
+  const primaryResultAmount = recipe.result[0]?.amount
+  const recipeId = recipeFavoriteId || getRecipeFavoriteId(recipe)
   const [isCraftOpen, setIsCraftOpen] = useState(defaultCraftOpen)
+  const [isEditingAmount, setIsEditingAmount] = useState(false)
+  const [draftAmount, setDraftAmount] = useState<string>(primaryResultAmount ? String(primaryResultAmount) : '')
   const energyIconSvg = createEnergyIconSvg(colorScheme === 'light' ? '#4b5563' : '#ffffff')
+  const canEditOverride =
+    showAdminOverrideControls &&
+    user?.role === 'admin' &&
+    !hideResultSection &&
+    !showResultTextOnly &&
+    Boolean(primaryResultItemId)
+
+  useEffect(() => {
+    setDraftAmount(primaryResultAmount ? String(primaryResultAmount) : '')
+    setIsEditingAmount(false)
+  }, [primaryResultAmount, recipeId])
 
   const resultItems = recipe.result.map((entry) => {
     const view = getItemPresentation(entry.item, itemsById, realm)
@@ -175,6 +198,42 @@ export function RecipeCard({
             />
           </Stack>
         </Stack>
+      ) : null}
+
+      {canEditOverride ? (
+        <Group wrap="nowrap" align="flex-end">
+          <TextInput
+            label="Количество результата"
+            value={draftAmount}
+            onChange={(event) => setDraftAmount(event.currentTarget.value.replace(/[^\d]/g, ''))}
+            disabled={!isEditingAmount}
+            style={{ flex: 1 }}
+          />
+          <Button
+            size="xs"
+            variant="default"
+            color="gray"
+            loading={isSavingOverride}
+            onClick={async () => {
+              if (!isEditingAmount) {
+                setIsEditingAmount(true)
+                return
+              }
+              if (!primaryResultItemId) return
+              const parsedAmount = Number.parseInt(draftAmount, 10)
+              const safeAmount = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 1
+              await saveOneOverride({
+                recipeId,
+                resultItemId: primaryResultItemId,
+                baseAmount: safeAmount,
+                bonusAmount: null,
+              })
+              setIsEditingAmount(false)
+            }}
+          >
+            {isEditingAmount ? 'Сохранить' : 'Изменить количество'}
+          </Button>
+        </Group>
       ) : null}
     </Stack>
   )

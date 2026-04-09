@@ -222,6 +222,7 @@ export function RecipesOverview() {
                           itemsById={itemsById}
                           realm={realm}
                           recipeFavoriteId={recipeFavoriteId}
+                          showAdminOverrideControls
                         />
                       ))}
                     </SimpleGrid>
