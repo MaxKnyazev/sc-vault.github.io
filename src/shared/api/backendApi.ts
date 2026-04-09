@@ -82,6 +82,7 @@ export async function fetchBackendUserBuyPrices(): Promise<Record<string, string
     headers: {
       Accept: 'application/json',
       Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
     },
   })
   const payload = await parseJsonOrThrow<UserBuyPricesResponse>(response)
@@ -102,6 +103,7 @@ export async function saveBackendUserBuyPrice(itemId: string, value: string): Pr
       'Content-Type': 'application/json',
       Accept: 'application/json',
       Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
     },
     body: JSON.stringify({ itemId, value }),
   })
@@ -141,6 +143,7 @@ export async function fetchBackendMe(token: string): Promise<AuthUser> {
     headers: {
       Accept: 'application/json',
       Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
     },
   })
   const payload = await parseJsonOrThrow<{ user?: AuthUser }>(response)
@@ -155,6 +158,7 @@ export async function logoutBackendUser(token: string): Promise<void> {
     headers: {
       Accept: 'application/json',
       Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
     },
   })
   await parseJsonOrThrow<{ ok?: boolean }>(response)
@@ -183,6 +187,7 @@ export async function saveRecipeResultOverride(
       'Content-Type': 'application/json',
       Accept: 'application/json',
       Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
     },
     body: JSON.stringify(override),
   })
@@ -201,6 +206,7 @@ export async function bulkSaveRecipeResultOverrides(
       'Content-Type': 'application/json',
       Accept: 'application/json',
       Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
     },
     body: JSON.stringify({ items }),
   })

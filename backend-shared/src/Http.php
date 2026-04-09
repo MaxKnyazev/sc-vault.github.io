@@ -27,11 +27,22 @@ function require_method(string $method): void
 
 function bearer_token_from_headers(): ?string
 {
+    $xToken = trim((string)($_SERVER['HTTP_X_AUTH_TOKEN'] ?? ''));
+    if ($xToken !== '') {
+        return $xToken;
+    }
+
     $header = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
     if ($header === '' && function_exists('apache_request_headers')) {
         $headers = apache_request_headers();
         if (is_array($headers)) {
             $header = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+            if ($header === '') {
+                $xToken = trim((string)($headers['X-Auth-Token'] ?? $headers['x-auth-token'] ?? ''));
+                if ($xToken !== '') {
+                    return $xToken;
+                }
+            }
         }
     }
     if (stripos($header, 'Bearer ') !== 0) {

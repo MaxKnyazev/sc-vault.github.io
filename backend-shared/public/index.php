@@ -42,7 +42,7 @@ function resolve_allowed_origin_header(array $config): string
 
 header('Vary: Origin');
 header('Access-Control-Allow-Origin: ' . resolve_allowed_origin_header($config));
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);
