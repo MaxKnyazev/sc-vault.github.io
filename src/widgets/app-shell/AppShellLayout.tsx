@@ -13,7 +13,7 @@ import {
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { useEffect, useState } from 'react'
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { ItemDetailsModal } from '../item-details-modal/ItemDetailsModal'
 import { useAuthStore } from '../../shared/store/authStore'
 import { getRoleLabel } from '../../shared/lib/authRole'
@@ -27,10 +27,13 @@ export function AppShellLayout() {
   const computedColorScheme = useComputedColorScheme('dark')
   const isDark = computedColorScheme === 'dark'
   const location = useLocation()
+  const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const isAuthSubmitting = useAuthStore((s) => s.isSubmitting)
   const canUseCoreFeatures = user?.role === 'user' || user?.role === 'admin'
+  const roleGlowColor =
+    user?.role === 'admin' ? '#ef4444' : user?.role === 'user' ? '#3b82f6' : '#ffffff'
 
   useEffect(() => {
     if (!opened) {
@@ -152,23 +155,6 @@ export function AppShellLayout() {
               }}
             />
           ) : null}
-          {user ? (
-            <NavLink
-              component={Link}
-              to="/profile"
-              onClick={close}
-              label="Личный кабинет"
-              active={location.pathname.startsWith('/profile')}
-              variant="subtle"
-              style={getNavItemStyle(location.pathname.startsWith('/profile'))}
-              styles={{
-                label: {
-                  fontWeight: 700,
-                  color: 'var(--mantine-color-text)',
-                },
-              }}
-            />
-          ) : null}
           </Stack>
 
           <Stack gap="xs" style={{ marginTop: 'auto' }}>
@@ -200,17 +186,30 @@ export function AppShellLayout() {
                 gap={6}
                 p="xs"
                 style={{
-                  border: '1px solid var(--mantine-color-default-border)',
+                  background: 'var(--mantine-color-body)',
                   borderRadius: 10,
                 }}
               >
-                <Group wrap="nowrap" gap="xs" align="center">
+                <Group
+                  wrap="nowrap"
+                  gap="xs"
+                  align="center"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => {
+                    close()
+                    void navigate('/profile')
+                  }}
+                >
                   <Avatar
                     radius="xl"
-                    size={32}
+                    size={38}
                     src={user.avatarUrl ?? undefined}
                     name={user.nickname}
                     color="blue"
+                    style={{
+                      border: `1px solid ${roleGlowColor}`,
+                      boxShadow: `0 0 10px ${roleGlowColor}`,
+                    }}
                   />
                   <Stack gap={0}>
                     <Text fw={700} size="sm" style={{ lineHeight: 1.1 }}>

@@ -1,4 +1,4 @@
-import { Alert, Button, Group, Modal, PasswordInput, Stack, Tabs, TextInput } from '@mantine/core'
+import { ActionIcon, Alert, Box, Button, Group, Modal, PasswordInput, Stack, Tabs, TextInput } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '../../shared/store/authStore'
 
@@ -44,9 +44,9 @@ export function AuthModal({ opened, onClose, initialMode = 'login' }: AuthModalP
     setLocalError(null)
     clearError()
 
-    const normalizedNickname = nickname.trim().toLowerCase()
-    if (!/^[a-z0-9_]{3,32}$/.test(normalizedNickname)) {
-      setLocalError('Ник должен быть 3-32 символа: латиница, цифры, underscore')
+    const normalizedNickname = nickname.trim()
+    if (!/^[a-zA-Z0-9_]{6,16}$/.test(normalizedNickname)) {
+      setLocalError('Логин должен быть 6-16 символов: латиница, цифры, underscore')
       return
     }
     if (password.length < 6) {
@@ -74,11 +74,26 @@ export function AuthModal({ opened, onClose, initialMode = 'login' }: AuthModalP
     <Modal
       opened={opened}
       onClose={closeModal}
-      title={mode === 'login' ? 'Вход' : 'Регистрация'}
+      title={null}
+      withCloseButton={false}
       centered
       size="sm"
+      styles={{
+        content: {
+          boxShadow:
+            '0 0 0 1px rgba(255,255,255,0.16), 0 0 24px rgba(255,255,255,0.18), 0 0 56px rgba(255,255,255,0.1)',
+        },
+        body: {
+          paddingTop: 10,
+        },
+      }}
     >
-      <Stack gap="sm">
+      <Stack gap="sm" mih={292}>
+        <Group justify="flex-end" mb={-2}>
+          <ActionIcon variant="subtle" color="gray" size="md" onClick={closeModal} aria-label="Закрыть">
+            ✕
+          </ActionIcon>
+        </Group>
         <Tabs
           value={mode}
           onChange={(value) => {
@@ -96,11 +111,12 @@ export function AuthModal({ opened, onClose, initialMode = 'login' }: AuthModalP
         </Tabs>
 
         <TextInput
-          label="Логин (nickname)"
-          placeholder="например: player_1"
+          label="Логин"
+          placeholder="От 6 до 16 символов"
           value={nickname}
           onChange={(event) => setNickname(event.currentTarget.value)}
           autoComplete="username"
+          styles={{ input: { fontSize: '16px' } }}
         />
         <PasswordInput
           label="Пароль"
@@ -108,16 +124,23 @@ export function AuthModal({ opened, onClose, initialMode = 'login' }: AuthModalP
           value={password}
           onChange={(event) => setPassword(event.currentTarget.value)}
           autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+          styles={{ input: { fontSize: '16px' } }}
         />
-        {mode === 'register' ? (
+        <Box
+          style={{
+            visibility: mode === 'register' ? 'visible' : 'hidden',
+            pointerEvents: mode === 'register' ? 'auto' : 'none',
+          }}
+        >
           <PasswordInput
             label="Повторите пароль"
             placeholder="Повторите пароль"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.currentTarget.value)}
             autoComplete="new-password"
+            styles={{ input: { fontSize: '16px' } }}
           />
-        ) : null}
+        </Box>
 
         {localError ? <Alert color="red">{localError}</Alert> : null}
         {apiError ? <Alert color="red">{apiError}</Alert> : null}

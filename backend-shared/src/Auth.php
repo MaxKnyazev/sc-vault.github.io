@@ -12,7 +12,7 @@ function create_user(PDO $db, string $nickname, string $password, string $role =
 
 function normalize_nickname(string $nickname): string
 {
-    return strtolower(trim($nickname));
+    return trim($nickname);
 }
 
 function normalize_user_role(string $role): string

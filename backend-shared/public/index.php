@@ -106,7 +106,7 @@ if ($path === '/auth/register') {
     $body = read_json_body();
     $nickname = normalize_nickname((string)($body['nickname'] ?? ''));
     $password = (string)($body['password'] ?? '');
-    if (!preg_match('/^[a-zA-Z0-9_]{3,32}$/', $nickname) || strlen($password) < 6) {
+    if (!preg_match('/^[a-zA-Z0-9_]{6,16}$/', $nickname) || strlen($password) < 6) {
         send_json(400, ['error' => 'Invalid nickname or password']);
         exit;
     }
