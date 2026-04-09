@@ -9,6 +9,20 @@ type UserBuyPricesResponse = {
   prices?: Record<string, { value?: string }>
 }
 
+export type UserRole = 'blocked' | 'user' | 'admin'
+
+export type AuthUser = {
+  id: number
+  nickname: string
+  role: UserRole
+  avatarUrl?: string | null
+}
+
+type AuthResponse = {
+  token?: string
+  user?: AuthUser
+}
+
 function buildApiUrl(path: string): string {
   const base = getBackendApiBaseUrl()
   if (!base) throw new Error('Не задан VITE_BACKEND_API_BASE_URL')
@@ -68,6 +82,58 @@ export async function saveBackendUserBuyPrice(itemId: string, value: string): Pr
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ itemId, value }),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function loginBackendUser(nickname: string, password: string): Promise<AuthResponse> {
+  const url = buildApiUrl('/auth/login')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ nickname, password }),
+  })
+  return parseJsonOrThrow<AuthResponse>(response)
+}
+
+export async function registerBackendUser(nickname: string, password: string): Promise<AuthResponse> {
+  const url = buildApiUrl('/auth/register')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ nickname, password }),
+  })
+  return parseJsonOrThrow<AuthResponse>(response)
+}
+
+export async function fetchBackendMe(token: string): Promise<AuthUser> {
+  const url = buildApiUrl('/auth/me')
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  })
+  const payload = await parseJsonOrThrow<{ user?: AuthUser }>(response)
+  if (!payload.user) throw new Error('Пользователь не найден')
+  return payload.user
+}
+
+export async function logoutBackendUser(token: string): Promise<void> {
+  const url = buildApiUrl('/auth/logout')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
   })
   await parseJsonOrThrow<{ ok?: boolean }>(response)
 }

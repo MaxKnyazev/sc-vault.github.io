@@ -8,8 +8,6 @@ export function getBackendApiBaseUrl(): string | undefined {
 }
 
 export function getBackendAuthToken(): string | undefined {
-  const fromEnv = readEnvString('VITE_BACKEND_AUTH_TOKEN')
-  if (fromEnv) return fromEnv
   try {
     const fromStorage = localStorage.getItem('sc-vault-auth-token')
     return fromStorage && fromStorage.trim() !== '' ? fromStorage : undefined

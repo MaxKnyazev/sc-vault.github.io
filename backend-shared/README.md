@@ -18,13 +18,16 @@
 - `public/index.php` — единая точка входа API
 - `src/` — DB, auth, репозитории
 - `config.php` — конфиг через env или значения по умолчанию
-- `migrations/001_init.sql` — базовая схема БД
+- `migrations/001_init.sql` + `migrations/002_users_profile_and_roles.sql` — схема БД
 - `cron/update_auction.php` — обновление `auction_stats`
+- `cron/cleanup_tokens.php` — очистка просроченных auth токенов
 
 ## 3. Настройка
 
 1. Создайте БД и пользователя MySQL.
-2. Примените миграцию `migrations/001_init.sql`.
+2. Примените миграции по порядку:
+   - `migrations/001_init.sql`
+   - `migrations/002_users_profile_and_roles.sql`
 3. Скопируйте `config.example.php` в `config.php` и заполните:
    - DB параметры
    - `EXBO_CLIENT_ID`, `EXBO_CLIENT_SECRET`
@@ -37,9 +40,15 @@
 - `POST /auth/register`
 - `POST /auth/login`
 - `GET /auth/me` (Bearer token)
+- `POST /auth/logout` (Bearer token)
 - `GET /auction/stats?ids=id1,id2`
 - `GET /user/buy-prices` (Bearer token)
 - `POST /user/buy-prices` (Bearer token)
+
+Auth contract:
+- register/login принимают `nickname` + `password`.
+- `GET /auth/me` возвращает профиль: `id`, `nickname`, `role`, `avatarUrl`.
+- роли: `blocked | user | admin`.
 
 ## 5. Cron
 
@@ -47,6 +56,12 @@
 
 ```bash
 */30 * * * * /usr/bin/php /path/to/backend-shared/cron/update_auction.php >/dev/null 2>&1
+```
+
+Рекомендуемая очистка просроченных токенов раз в час:
+
+```bash
+0 * * * * /usr/bin/php /path/to/backend-shared/cron/cleanup_tokens.php >/dev/null 2>&1
 ```
 
 Список item id для обновления:
@@ -67,4 +82,5 @@
 - CORS ограничен `APP_ALLOWED_ORIGIN`
 - Токены хранятся в `auth_tokens` в виде SHA-256 hash
 - Пароли хешируются `password_hash()`
+- В `register/login` включен базовый rate-limit по IP
 

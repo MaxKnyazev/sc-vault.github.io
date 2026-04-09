@@ -1,6 +1,8 @@
 import {
   ActionIcon,
   AppShell,
+  Avatar,
+  Button,
   Burger,
   Group,
   NavLink,
@@ -10,17 +12,25 @@ import {
   useMantineColorScheme,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { StalcraftCredentialsNavFields } from '../../components/stalcraft-credentials-nav/StalcraftCredentialsNavFields'
 import { ItemDetailsModal } from '../item-details-modal/ItemDetailsModal'
+import { useAuthStore } from '../../shared/store/authStore'
+import { getRoleLabel } from '../../shared/lib/authRole'
+import { AuthModal } from '../auth/AuthModal'
 
 export function AppShellLayout() {
   const [opened, { toggle, close }] = useDisclosure()
+  const [authOpened, authModalHandlers] = useDisclosure()
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const { toggleColorScheme } = useMantineColorScheme()
   const computedColorScheme = useComputedColorScheme('dark')
   const isDark = computedColorScheme === 'dark'
   const location = useLocation()
+  const user = useAuthStore((s) => s.user)
+  const logout = useAuthStore((s) => s.logout)
+  const isAuthSubmitting = useAuthStore((s) => s.isSubmitting)
+  const canUseCoreFeatures = user?.role === 'user' || user?.role === 'admin'
 
   useEffect(() => {
     if (!opened) {
@@ -37,6 +47,25 @@ export function AppShellLayout() {
   useEffect(() => {
     close()
   }, [close, location.pathname])
+
+  useEffect(() => {
+    const routeTitleMap: Record<string, string> = {
+      '/': 'Главная',
+      '/crafts': 'Крафты',
+      '/ingredients': 'Ингредиенты',
+      '/profile': 'Профиль',
+    }
+
+    let pageTitle = routeTitleMap[location.pathname]
+    if (!pageTitle) {
+      if (location.pathname.startsWith('/crafts')) pageTitle = 'Крафты'
+      else if (location.pathname.startsWith('/ingredients')) pageTitle = 'Ингредиенты'
+      else if (location.pathname.startsWith('/profile')) pageTitle = 'Профиль'
+      else pageTitle = 'Главная'
+    }
+
+    document.title = `SCTool - ${pageTitle}`
+  }, [location.pathname])
 
   const getNavItemStyle = (active: boolean) =>
     ({
@@ -61,7 +90,7 @@ export function AppShellLayout() {
       <AppShell.Navbar p="md">
         <Stack gap="md" h="100%">
           <Group justify="space-between" align="center" wrap="nowrap">
-            <Text fw={700}>SC Vault</Text>
+            <Text fw={700}>SCTool</Text>
             <ActionIcon
               variant="default"
               size="lg"
@@ -89,41 +118,116 @@ export function AppShellLayout() {
               },
             }}
           />
-          <NavLink
-            component={Link}
-            to="/crafts"
-            onClick={close}
-            label="Крафты"
-            active={location.pathname.startsWith('/crafts')}
-            variant="subtle"
-            style={getNavItemStyle(location.pathname.startsWith('/crafts'))}
-            styles={{
-              label: {
-                fontWeight: 700,
-                color: 'var(--mantine-color-text)',
-              },
-            }}
-          />
-          <NavLink
-            component={Link}
-            to="/ingredients"
-            onClick={close}
-            label="Ингредиенты"
-            active={location.pathname.startsWith('/ingredients')}
-            variant="subtle"
-            style={getNavItemStyle(location.pathname.startsWith('/ingredients'))}
-            styles={{
-              label: {
-                fontWeight: 700,
-                color: 'var(--mantine-color-text)',
-              },
-            }}
-          />
+          {canUseCoreFeatures ? (
+            <NavLink
+              component={Link}
+              to="/crafts"
+              onClick={close}
+              label="Крафты"
+              active={location.pathname.startsWith('/crafts')}
+              variant="subtle"
+              style={getNavItemStyle(location.pathname.startsWith('/crafts'))}
+              styles={{
+                label: {
+                  fontWeight: 700,
+                  color: 'var(--mantine-color-text)',
+                },
+              }}
+            />
+          ) : null}
+          {canUseCoreFeatures ? (
+            <NavLink
+              component={Link}
+              to="/ingredients"
+              onClick={close}
+              label="Ингредиенты"
+              active={location.pathname.startsWith('/ingredients')}
+              variant="subtle"
+              style={getNavItemStyle(location.pathname.startsWith('/ingredients'))}
+              styles={{
+                label: {
+                  fontWeight: 700,
+                  color: 'var(--mantine-color-text)',
+                },
+              }}
+            />
+          ) : null}
+          {user ? (
+            <NavLink
+              component={Link}
+              to="/profile"
+              onClick={close}
+              label="Личный кабинет"
+              active={location.pathname.startsWith('/profile')}
+              variant="subtle"
+              style={getNavItemStyle(location.pathname.startsWith('/profile'))}
+              styles={{
+                label: {
+                  fontWeight: 700,
+                  color: 'var(--mantine-color-text)',
+                },
+              }}
+            />
+          ) : null}
           </Stack>
 
-          <Stack gap={0} style={{ marginTop: 'auto' }}>
-            <StalcraftCredentialsNavFields />
+          <Stack gap="xs" style={{ marginTop: 'auto' }}>
+            {!user ? (
+              <Stack gap="xs">
+                <Button
+                  size="xs"
+                  onClick={() => {
+                    setAuthMode('login')
+                    authModalHandlers.open()
+                  }}
+                >
+                  Вход
+                </Button>
+                <Button
+                  size="xs"
+                  variant="default"
+                  color="gray"
+                  onClick={() => {
+                    setAuthMode('register')
+                    authModalHandlers.open()
+                  }}
+                >
+                  Регистрация
+                </Button>
+              </Stack>
+            ) : (
+              <Stack
+                gap={6}
+                p="xs"
+                style={{
+                  border: '1px solid var(--mantine-color-default-border)',
+                  borderRadius: 10,
+                }}
+              >
+                <Group wrap="nowrap" gap="xs" align="center">
+                  <Avatar
+                    radius="xl"
+                    size={32}
+                    src={user.avatarUrl ?? undefined}
+                    name={user.nickname}
+                    color="blue"
+                  />
+                  <Stack gap={0}>
+                    <Text fw={700} size="sm" style={{ lineHeight: 1.1 }}>
+                      {user.nickname}
+                    </Text>
+                    <Text c="dimmed" size="xs">
+                      {getRoleLabel(user.role)}
+                    </Text>
+                  </Stack>
+                </Group>
+                <Button size="xs" variant="default" color="gray" loading={isAuthSubmitting} onClick={() => void logout()}>
+                  Выйти
+                </Button>
+              </Stack>
+            )}
           </Stack>
+
         </Stack>
       </AppShell.Navbar>
 
@@ -138,6 +242,7 @@ export function AppShellLayout() {
         />
         <Outlet />
         <ItemDetailsModal />
+        <AuthModal opened={authOpened} onClose={authModalHandlers.close} initialMode={authMode} />
       </AppShell.Main>
     </AppShell>
   )

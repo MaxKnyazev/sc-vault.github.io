@@ -41,6 +41,60 @@ try {
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $path = preg_replace('#^/api#', '', $path) ?: '/';
 
+function role_at_least(array $user, string $requiredRole): bool
+{
+    return role_level((string)($user['role'] ?? 'blocked')) >= role_level($requiredRole);
+}
+
+function enforce_auth_user(array $user): void
+{
+    if (!role_at_least($user, 'user')) {
+        send_json(403, ['error' => 'Недостаточно прав']);
+        exit;
+    }
+}
+
+function rate_limit_key(string $action): string
+{
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    return hash('sha256', $action . '|' . $ip);
+}
+
+function enforce_rate_limit(string $action, int $maxAttempts, int $windowSeconds): void
+{
+    $dir = sys_get_temp_dir() . '/sctool-rate-limit';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
+    }
+
+    $file = $dir . '/' . rate_limit_key($action) . '.json';
+    $now = time();
+    $state = ['count' => 0, 'resetAt' => $now + $windowSeconds];
+
+    if (is_file($file)) {
+        $raw = @file_get_contents($file);
+        $decoded = is_string($raw) ? json_decode($raw, true) : null;
+        if (is_array($decoded)) {
+            $state = [
+                'count' => (int)($decoded['count'] ?? 0),
+                'resetAt' => (int)($decoded['resetAt'] ?? ($now + $windowSeconds)),
+            ];
+        }
+    }
+
+    if ($state['resetAt'] <= $now) {
+        $state = ['count' => 0, 'resetAt' => $now + $windowSeconds];
+    }
+
+    if ($state['count'] >= $maxAttempts) {
+        send_json(429, ['error' => 'Слишком много попыток, попробуйте позже']);
+        exit;
+    }
+
+    $state['count'] += 1;
+    @file_put_contents($file, json_encode($state));
+}
+
 if ($path === '/health') {
     send_json(200, ['ok' => true, 'ts' => gmdate('c')]);
     exit;
@@ -48,36 +102,60 @@ if ($path === '/health') {
 
 if ($path === '/auth/register') {
     require_method('POST');
+    enforce_rate_limit('auth/register', 20, 60);
     $body = read_json_body();
-    $email = trim((string)($body['email'] ?? ''));
+    $nickname = normalize_nickname((string)($body['nickname'] ?? ''));
     $password = (string)($body['password'] ?? '');
-    if ($email === '' || strlen($password) < 6) {
-        send_json(400, ['error' => 'Invalid email or password']);
+    if (!preg_match('/^[a-zA-Z0-9_]{3,32}$/', $nickname) || strlen($password) < 6) {
+        send_json(400, ['error' => 'Invalid nickname or password']);
         exit;
     }
-    $exists = find_user_by_email($db, $email);
+    $exists = find_user_by_nickname($db, $nickname);
     if ($exists) {
-        send_json(409, ['error' => 'Email already registered']);
+        send_json(409, ['error' => 'Nickname already registered']);
         exit;
     }
-    $userId = create_user($db, $email, $password);
+    $userId = create_user($db, $nickname, $password, 'user');
     $token = issue_auth_token($db, $userId, (int)$config['auth_token_ttl_seconds']);
-    send_json(201, ['token' => $token, 'user' => ['id' => $userId, 'email' => $email]]);
+    $user = find_user_by_token($db, $token);
+    send_json(201, [
+        'token' => $token,
+        'user' => [
+            'id' => (int)$user['id'],
+            'nickname' => (string)$user['nickname'],
+            'role' => normalize_user_role((string)$user['role']),
+            'avatarUrl' => $user['avatar_url'] ?: null,
+        ],
+    ]);
     exit;
 }
 
 if ($path === '/auth/login') {
     require_method('POST');
+    enforce_rate_limit('auth/login', 30, 60);
     $body = read_json_body();
-    $email = trim((string)($body['email'] ?? ''));
+    $nickname = normalize_nickname((string)($body['nickname'] ?? ''));
+    $legacyEmail = trim((string)($body['email'] ?? ''));
     $password = (string)($body['password'] ?? '');
-    $user = find_user_by_email($db, $email);
+    $user = $nickname !== '' ? find_user_by_nickname($db, $nickname) : null;
+    if (!$user && $legacyEmail !== '') {
+        // Transitional fallback for older accounts that still sign in with email.
+        $user = find_user_by_email($db, $legacyEmail);
+    }
     if (!$user || !password_verify($password, $user['password_hash'])) {
         send_json(401, ['error' => 'Invalid credentials']);
         exit;
     }
     $token = issue_auth_token($db, (int)$user['id'], (int)$config['auth_token_ttl_seconds']);
-    send_json(200, ['token' => $token, 'user' => ['id' => (int)$user['id'], 'email' => $user['email']]]);
+    send_json(200, [
+        'token' => $token,
+        'user' => [
+            'id' => (int)$user['id'],
+            'nickname' => (string)$user['nickname'],
+            'role' => normalize_user_role((string)$user['role']),
+            'avatarUrl' => $user['avatar_url'] ?: null,
+        ],
+    ]);
     exit;
 }
 
@@ -93,7 +171,26 @@ if ($path === '/auth/me') {
         send_json(401, ['error' => 'Invalid token']);
         exit;
     }
-    send_json(200, ['user' => ['id' => (int)$user['id'], 'email' => $user['email']]]);
+    send_json(200, [
+        'user' => [
+            'id' => (int)$user['id'],
+            'nickname' => (string)$user['nickname'],
+            'role' => normalize_user_role((string)$user['role']),
+            'avatarUrl' => $user['avatar_url'] ?: null,
+        ],
+    ]);
+    exit;
+}
+
+if ($path === '/auth/logout') {
+    require_method('POST');
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    delete_token($db, $token);
+    send_json(200, ['ok' => true]);
     exit;
 }
 
@@ -121,6 +218,7 @@ if ($path === '/user/buy-prices') {
         send_json(401, ['error' => 'Invalid token']);
         exit;
     }
+    enforce_auth_user($user);
     $userId = (int)$user['id'];
 
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {

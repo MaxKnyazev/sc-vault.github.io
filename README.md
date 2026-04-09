@@ -48,6 +48,13 @@ git push -u origin main
 VITE_BACKEND_API_BASE_URL=https://api.your-domain.tld
 ```
 
+### Авторизация и роли
+
+- Используется backend auth (`/auth/register`, `/auth/login`, `/auth/me`, `/auth/logout`).
+- Логин/регистрация по `nickname` + `password`.
+- Роли пользователей: `blocked`, `user`, `admin`.
+- Токен сессии хранится в браузере (localStorage) и передается как `Bearer`.
+
 ## 5) Автодеплой на REG.RU из `main`
 
 Добавлен workflow `/.github/workflows/deploy-regru.yml`.
