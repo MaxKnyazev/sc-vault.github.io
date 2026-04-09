@@ -229,7 +229,7 @@ export async function bulkSaveRecipeResultOverrides(
 export async function fetchAdminUsers(): Promise<AdminUser[]> {
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация администратора')
-  const url = buildApiUrl('/admin/users')
+  const url = buildApiUrl('/users-admin/list')
   const response = await fetch(url, {
     method: 'GET',
     headers: {
@@ -249,7 +249,7 @@ export async function updateAdminUser(input: {
 }): Promise<void> {
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация администратора')
-  const url = buildApiUrl('/admin/users/update')
+  const url = buildApiUrl('/users-admin/update')
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -266,7 +266,7 @@ export async function updateAdminUser(input: {
 export async function deleteAdminUser(id: number): Promise<void> {
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация администратора')
-  const url = buildApiUrl('/admin/users/delete')
+  const url = buildApiUrl('/users-admin/delete')
   const response = await fetch(url, {
     method: 'POST',
     headers: {

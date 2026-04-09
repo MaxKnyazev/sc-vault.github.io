@@ -339,7 +339,7 @@ if ($path === '/user/buy-prices') {
     exit;
 }
 
-if ($path === '/admin/users') {
+if ($path === '/users-admin/list' || $path === '/admin/users') {
     require_method('GET');
     $token = bearer_token_from_headers();
     if (!$token) {
@@ -369,7 +369,7 @@ if ($path === '/admin/users') {
     exit;
 }
 
-if ($path === '/admin/users/update') {
+if ($path === '/users-admin/update' || $path === '/admin/users/update') {
     require_method('POST');
     $token = bearer_token_from_headers();
     if (!$token) {
@@ -407,7 +407,7 @@ if ($path === '/admin/users/update') {
     exit;
 }
 
-if ($path === '/admin/users/delete') {
+if ($path === '/users-admin/delete' || $path === '/admin/users/delete') {
     require_method('POST');
     $token = bearer_token_from_headers();
     if (!$token) {
