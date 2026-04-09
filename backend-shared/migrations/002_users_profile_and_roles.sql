@@ -1,6 +1,6 @@
 ALTER TABLE users
   ADD COLUMN nickname VARCHAR(64) NULL AFTER email,
-  ADD COLUMN role VARCHAR(16) NOT NULL DEFAULT 'user' AFTER password_hash,
+  ADD COLUMN role VARCHAR(16) NOT NULL DEFAULT 'blocked' AFTER password_hash,
   ADD COLUMN avatar_url VARCHAR(512) NULL AFTER role;
 
 UPDATE users

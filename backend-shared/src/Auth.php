@@ -1,6 +1,6 @@
 <?php
 
-function create_user(PDO $db, string $nickname, string $password, string $role = 'user'): int
+function create_user(PDO $db, string $nickname, string $password, string $role = 'blocked'): int
 {
     $hash = password_hash($password, PASSWORD_DEFAULT);
     $stmt = $db->prepare(

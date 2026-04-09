@@ -115,7 +115,7 @@ if ($path === '/auth/register') {
         send_json(409, ['error' => 'Nickname already registered']);
         exit;
     }
-    $userId = create_user($db, $nickname, $password, 'user');
+    $userId = create_user($db, $nickname, $password, 'blocked');
     $token = issue_auth_token($db, $userId, (int)$config['auth_token_ttl_seconds']);
     $user = find_user_by_token($db, $token);
     send_json(201, [
