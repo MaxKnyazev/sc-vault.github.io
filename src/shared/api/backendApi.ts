@@ -176,7 +176,7 @@ export async function saveRecipeResultOverride(
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация администратора')
 
-  const url = buildApiUrl('/admin/recipe-overrides')
+  const url = buildApiUrl('/recipe-overrides/save')
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -194,7 +194,7 @@ export async function bulkSaveRecipeResultOverrides(
 ): Promise<number> {
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация администратора')
-  const url = buildApiUrl('/admin/recipe-overrides/bulk')
+  const url = buildApiUrl('/recipe-overrides/bulk-save')
   const response = await fetch(url, {
     method: 'POST',
     headers: {

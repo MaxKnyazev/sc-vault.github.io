@@ -44,8 +44,8 @@
 - `POST /auth/logout` (Bearer token)
 - `GET /auction/stats?ids=id1,id2`
 - `GET /recipe-overrides` (глобальные ручные override для крафтов)
-- `POST /admin/recipe-overrides` (admin only)
-- `POST /admin/recipe-overrides/bulk` (admin only, CSV/массовый импорт)
+- `POST /recipe-overrides/save` (admin only)
+- `POST /recipe-overrides/bulk-save` (admin only, CSV/массовый импорт)
 - `GET /user/buy-prices` (Bearer token)
 - `POST /user/buy-prices` (Bearer token)
 

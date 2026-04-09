@@ -205,49 +205,51 @@ export function RecipeCard({
       ) : null}
 
       {canEditOverride ? (
-        <Group wrap="nowrap" align="flex-end">
-          <Stack gap={4} style={{ flex: 1 }}>
+        <Stack gap={6}>
+          <Text size="sm" fw={600}>
+            Количество результата
+          </Text>
+          <Group wrap="nowrap" align="flex-end">
             <TextInput
-              label="Количество результата"
               value={draftAmount}
               onChange={(event) => setDraftAmount(event.currentTarget.value.replace(/[^\d]/g, ''))}
               disabled={!isEditingAmount || isSavingLocal}
               style={{ flex: 1 }}
             />
-            <Text size="xs" c="dimmed">
-              Дефолтное значение: {baseDefaultAmount}, изменено на {primaryResultAmount ?? baseDefaultAmount}
-            </Text>
-          </Stack>
-          <Button
-            style={{ minWidth: 168, height: 36 }}
-            variant="default"
-            color="gray"
-            loading={isSavingLocal}
-            onClick={async () => {
-              if (!isEditingAmount) {
-                setIsEditingAmount(true)
-                return
-              }
-              if (!primaryResultItemId) return
-              const parsedAmount = Number.parseInt(draftAmount, 10)
-              const safeAmount = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 1
-              setIsSavingLocal(true)
-              try {
-                await saveOneOverride({
-                  recipeId,
-                  resultItemId: primaryResultItemId,
-                  baseAmount: safeAmount,
-                  bonusAmount: null,
-                })
-                setIsEditingAmount(false)
-              } finally {
-                setIsSavingLocal(false)
-              }
-            }}
-          >
-            {isEditingAmount ? 'Сохранить' : 'Изменить количество'}
-          </Button>
-        </Group>
+            <Button
+              style={{ minWidth: 168, height: 36 }}
+              variant="default"
+              color="gray"
+              loading={isSavingLocal}
+              onClick={async () => {
+                if (!isEditingAmount) {
+                  setIsEditingAmount(true)
+                  return
+                }
+                if (!primaryResultItemId) return
+                const parsedAmount = Number.parseInt(draftAmount, 10)
+                const safeAmount = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 1
+                setIsSavingLocal(true)
+                try {
+                  await saveOneOverride({
+                    recipeId,
+                    resultItemId: primaryResultItemId,
+                    baseAmount: safeAmount,
+                    bonusAmount: null,
+                  })
+                  setIsEditingAmount(false)
+                } finally {
+                  setIsSavingLocal(false)
+                }
+              }}
+            >
+              {isEditingAmount ? 'Сохранить' : 'Изменить количество'}
+            </Button>
+          </Group>
+          <Text size="xs" c="dimmed">
+            Дефолтное значение: {baseDefaultAmount}, изменено на {primaryResultAmount ?? baseDefaultAmount}
+          </Text>
+        </Stack>
       ) : null}
     </Stack>
   )

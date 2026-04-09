@@ -232,7 +232,7 @@ if ($path === '/recipe-overrides') {
     exit;
 }
 
-if ($path === '/admin/recipe-overrides') {
+if ($path === '/recipe-overrides/save' || $path === '/admin/recipe-overrides') {
     require_method('POST');
     $token = bearer_token_from_headers();
     if (!$token) {
@@ -270,7 +270,7 @@ if ($path === '/admin/recipe-overrides') {
     exit;
 }
 
-if ($path === '/admin/recipe-overrides/bulk') {
+if ($path === '/recipe-overrides/bulk-save' || $path === '/admin/recipe-overrides/bulk') {
     require_method('POST');
     $token = bearer_token_from_headers();
     if (!$token) {
