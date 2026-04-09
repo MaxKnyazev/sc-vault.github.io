@@ -1,8 +1,8 @@
 CREATE TABLE IF NOT EXISTS recipe_result_overrides (
   recipe_id VARCHAR(512) NOT NULL,
   result_item_id VARCHAR(64) NOT NULL,
-  base_amount INT UNSIGNED NULL,
-  bonus_amount INT UNSIGNED NULL,
+  base_amount DECIMAL(10,3) NULL,
+  bonus_amount DECIMAL(10,3) NULL,
   updated_by_user_id BIGINT UNSIGNED NULL,
   updated_at DATETIME NOT NULL,
   PRIMARY KEY (recipe_id),

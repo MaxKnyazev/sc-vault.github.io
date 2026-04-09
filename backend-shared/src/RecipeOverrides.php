@@ -1,18 +1,19 @@
 <?php
 
-function parse_positive_int_or_null(mixed $value): ?int
+function parse_positive_decimal_or_null(mixed $value): ?float
 {
     if ($value === null || $value === '') {
         return null;
     }
-    if (!is_numeric($value)) {
+    $normalized = str_replace(',', '.', trim((string)$value));
+    if (!is_numeric($normalized)) {
         return null;
     }
-    $intValue = (int)$value;
-    if ($intValue < 0) {
+    $floatValue = (float)$normalized;
+    if ($floatValue < 0) {
         return null;
     }
-    return $intValue;
+    return round($floatValue, 3);
 }
 
 function get_recipe_result_overrides(PDO $db): array
@@ -27,8 +28,8 @@ function get_recipe_result_overrides(PDO $db): array
         $result[$row['recipe_id']] = [
             'recipeId' => (string)$row['recipe_id'],
             'resultItemId' => (string)$row['result_item_id'],
-            'baseAmount' => $row['base_amount'] !== null ? (int)$row['base_amount'] : null,
-            'bonusAmount' => $row['bonus_amount'] !== null ? (int)$row['bonus_amount'] : null,
+            'baseAmount' => $row['base_amount'] !== null ? (float)$row['base_amount'] : null,
+            'bonusAmount' => $row['bonus_amount'] !== null ? (float)$row['bonus_amount'] : null,
             'updatedAt' => (string)$row['updated_at'],
         ];
     }
@@ -40,8 +41,8 @@ function upsert_recipe_result_override(
     int $adminUserId,
     string $recipeId,
     string $resultItemId,
-    ?int $baseAmount,
-    ?int $bonusAmount
+    ?float $baseAmount,
+    ?float $bonusAmount
 ): void {
     $normalizedRecipeId = trim($recipeId);
     $normalizedResultItemId = trim($resultItemId);
@@ -86,8 +87,8 @@ function bulk_upsert_recipe_result_overrides(PDO $db, int $adminUserId, array $i
             }
             $recipeId = (string)($item['recipeId'] ?? '');
             $resultItemId = (string)($item['resultItemId'] ?? '');
-            $baseAmount = parse_positive_int_or_null($item['baseAmount'] ?? null);
-            $bonusAmount = parse_positive_int_or_null($item['bonusAmount'] ?? null);
+            $baseAmount = parse_positive_decimal_or_null($item['baseAmount'] ?? null);
+            $bonusAmount = parse_positive_decimal_or_null($item['bonusAmount'] ?? null);
             upsert_recipe_result_override(
                 $db,
                 $adminUserId,

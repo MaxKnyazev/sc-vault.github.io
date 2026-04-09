@@ -212,7 +212,13 @@ export function RecipeCard({
           <Group wrap="nowrap" align="flex-end">
             <TextInput
               value={draftAmount}
-              onChange={(event) => setDraftAmount(event.currentTarget.value.replace(/[^\d]/g, ''))}
+              onChange={(event) => {
+                const raw = event.currentTarget.value.replace(',', '.')
+                const sanitized = raw
+                  .replace(/[^\d.]/g, '')
+                  .replace(/^(\d*\.\d*).*$/, '$1')
+                setDraftAmount(sanitized)
+              }}
               disabled={!isEditingAmount || isSavingLocal}
               style={{ flex: 1 }}
             />
@@ -227,8 +233,11 @@ export function RecipeCard({
                   return
                 }
                 if (!primaryResultItemId) return
-                const parsedAmount = Number.parseInt(draftAmount, 10)
-                const safeAmount = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 1
+                const parsedAmount = Number.parseFloat(draftAmount.replace(',', '.'))
+                const safeAmount =
+                  Number.isFinite(parsedAmount) && parsedAmount > 0
+                    ? Number(parsedAmount.toFixed(3))
+                    : 1
                 setIsSavingLocal(true)
                 try {
                   await saveOneOverride({

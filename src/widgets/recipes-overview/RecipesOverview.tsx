@@ -1,4 +1,5 @@
 import {
+  ActionIcon,
   Accordion,
   Alert,
   Button,
@@ -57,21 +58,10 @@ export function RecipesOverview() {
           })
           .join(' ')
 
-        const ingredientNames = recipe.ingredients
-          .map((entry) => {
-            const item = itemsById[entry.item]
-            return `${entry.item} ${getItemName(item?.name?.lines)}`.toLowerCase()
-          })
-          .join(' ')
-
         if (!normalizedQuery) {
           matchPriority = 0
         } else if (resultNames.includes(normalizedQuery)) {
-          // Highest priority: crafted item (recipe result) matches query.
           matchPriority = 0
-        } else if (ingredientNames.includes(normalizedQuery)) {
-          // Secondary priority: item participates as ingredient.
-          matchPriority = 1
         }
 
         return { recipe, matchPriority, recipeFavoriteId }
@@ -143,10 +133,36 @@ export function RecipesOverview() {
             <AuctionRefreshToolbar itemIds={auctionItemIds} />
             <Group align="flex-end" wrap="wrap">
               <TextInput
-                placeholder="Поиск: категория, станок, ID или название предмета..."
+                placeholder="Поиск по названию итогового предмета..."
                 value={search}
                 onChange={(event) => setSearch(event.currentTarget.value)}
                 style={{ flex: 1, minWidth: 280 }}
+                rightSection={
+                  search ? (
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      size="sm"
+                      onClick={() => setSearch('')}
+                      aria-label="Очистить поиск"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </ActionIcon>
+                  ) : null
+                }
               />
             </Group>
 

@@ -251,8 +251,8 @@ if ($path === '/recipe-overrides/save' || $path === '/admin/recipe-overrides') {
     $body = read_json_body();
     $recipeId = (string)($body['recipeId'] ?? '');
     $resultItemId = (string)($body['resultItemId'] ?? '');
-    $baseAmount = parse_positive_int_or_null($body['baseAmount'] ?? null);
-    $bonusAmount = parse_positive_int_or_null($body['bonusAmount'] ?? null);
+    $baseAmount = parse_positive_decimal_or_null($body['baseAmount'] ?? null);
+    $bonusAmount = parse_positive_decimal_or_null($body['bonusAmount'] ?? null);
     try {
         upsert_recipe_result_override(
             $db,
