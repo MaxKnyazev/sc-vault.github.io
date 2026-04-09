@@ -24,7 +24,24 @@ require $baseDir . '/src/Auction.php';
 require $baseDir . '/src/UserBuyPrices.php';
 require $baseDir . '/src/RecipeOverrides.php';
 
-header('Access-Control-Allow-Origin: ' . $config['app_allowed_origin']);
+function resolve_allowed_origin_header(array $config): string
+{
+    $raw = (string)($config['app_allowed_origin'] ?? '');
+    $allowedOrigins = array_values(array_filter(array_map('trim', explode(',', $raw))));
+    if (count($allowedOrigins) === 0) {
+        return '*';
+    }
+
+    $requestOrigin = trim((string)($_SERVER['HTTP_ORIGIN'] ?? ''));
+    if ($requestOrigin !== '' && in_array($requestOrigin, $allowedOrigins, true)) {
+        return $requestOrigin;
+    }
+
+    return $allowedOrigins[0];
+}
+
+header('Vary: Origin');
+header('Access-Control-Allow-Origin: ' . resolve_allowed_origin_header($config));
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {

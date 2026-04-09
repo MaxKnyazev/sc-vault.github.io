@@ -10,17 +10,24 @@ $readEnv = static function (string $key, $fallback = null) {
     return $value;
 };
 
+$authTokenTtlSeconds = (int)$readEnv(
+    'AUTH_TOKEN_TTL_SECONDS',
+    (string)$defaults['auth_token_ttl_seconds']
+);
+if ($authTokenTtlSeconds < 300) {
+    $authTokenTtlSeconds = 300;
+}
+
 return [
     'db_host' => $readEnv('DB_HOST', 'localhost'),
     'db_port' => (int)$readEnv('DB_PORT', (string)$defaults['db_port']),
     'db_name' => $readEnv('DB_NAME', 'u3475945_sctool_api'),
     'db_user' => $readEnv('DB_USER', 'u3475945_sctool_api_user'),
     'db_pass' => $readEnv('DB_PASS', 'Ahfth3120++'),
-    'app_allowed_origin' => $readEnv('APP_ALLOWED_ORIGIN', 'https://sctool.ru'),
-    'auth_token_ttl_seconds' => (int)$readEnv(
-        'AUTH_TOKEN_TTL_SECONDS',
-        (string)$defaults['auth_token_ttl_seconds']
-    ),
+    // Comma-separated origins are supported, e.g.:
+    // https://sctool.ru,https://www.sctool.ru
+    'app_allowed_origin' => $readEnv('APP_ALLOWED_ORIGIN', 'https://sctool.ru,https://www.sctool.ru'),
+    'auth_token_ttl_seconds' => $authTokenTtlSeconds,
     'auction_window_hours' => (int)$readEnv(
         'AUCTION_WINDOW_HOURS',
         (string)$defaults['auction_window_hours']
