@@ -8,6 +8,8 @@ export function ProfilePage() {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const isSubmitting = useAuthStore((s) => s.isSubmitting)
+  const roleGlowColor =
+    user?.role === 'admin' ? '#ef4444' : user?.role === 'user' ? '#3b82f6' : '#ffffff'
 
   if (!user) return null
 
@@ -24,7 +26,12 @@ export function ProfilePage() {
               size={48}
               src={user.avatarUrl ?? undefined}
               name={user.nickname}
-              color="blue"
+              color="gray"
+              style={{
+                backgroundColor: 'rgba(0,0,0,0.28)',
+                border: `1px solid ${roleGlowColor}`,
+                boxShadow: `0 0 10px ${roleGlowColor}`,
+              }}
             />
             <Stack gap={2}>
               <Text fw={700} size="lg">

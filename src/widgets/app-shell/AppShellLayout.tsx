@@ -190,39 +190,58 @@ export function AppShellLayout() {
                   borderRadius: 10,
                 }}
               >
-                <Group
-                  wrap="nowrap"
-                  gap="xs"
-                  align="center"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => {
-                    close()
-                    void navigate('/profile')
-                  }}
-                >
-                  <Avatar
-                    radius="xl"
-                    size={38}
-                    src={user.avatarUrl ?? undefined}
-                    name={user.nickname}
-                    color="blue"
-                    style={{
-                      border: `1px solid ${roleGlowColor}`,
-                      boxShadow: `0 0 10px ${roleGlowColor}`,
+                <Group justify="space-between" align="center" wrap="nowrap">
+                  <Group
+                    wrap="nowrap"
+                    gap="xs"
+                    align="center"
+                    style={{ cursor: 'pointer', minWidth: 0, flex: 1 }}
+                    onClick={() => {
+                      close()
+                      void navigate('/profile')
                     }}
-                  />
-                  <Stack gap={0}>
-                    <Text fw={700} size="sm" style={{ lineHeight: 1.1 }}>
-                      {user.nickname}
-                    </Text>
-                    <Text c="dimmed" size="xs">
-                      {getRoleLabel(user.role)}
-                    </Text>
-                  </Stack>
+                  >
+                    <Avatar
+                      radius="xl"
+                      size={38}
+                      src={user.avatarUrl ?? undefined}
+                      name={user.nickname}
+                      color="gray"
+                      style={{
+                        backgroundColor: 'rgba(0,0,0,0.28)',
+                        border: `1px solid ${roleGlowColor}`,
+                        boxShadow: `0 0 10px ${roleGlowColor}`,
+                      }}
+                    />
+                    <Stack gap={0} style={{ minWidth: 0 }}>
+                      <Text fw={700} size="md" style={{ lineHeight: 1.1 }} truncate>
+                        {user.nickname}
+                      </Text>
+                      <Text c="dimmed" size="xs" truncate>
+                        {getRoleLabel(user.role)}
+                      </Text>
+                    </Stack>
+                  </Group>
+                  <ActionIcon
+                    variant="default"
+                    color="gray"
+                    size="lg"
+                    aria-label="Выйти"
+                    title="Выйти"
+                    loading={isAuthSubmitting}
+                    onClick={() => void logout()}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path
+                        d="M10 17L15 12L10 7M15 12H3M8 3H18C19.1046 3 20 3.89543 20 5V19C20 20.1046 19.1046 21 18 21H8"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </ActionIcon>
                 </Group>
-                <Button size="xs" variant="default" color="gray" loading={isAuthSubmitting} onClick={() => void logout()}>
-                  Выйти
-                </Button>
               </Stack>
             )}
           </Stack>
