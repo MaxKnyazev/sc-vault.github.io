@@ -32,6 +32,7 @@ export function AppShellLayout() {
   const logout = useAuthStore((s) => s.logout)
   const isAuthSubmitting = useAuthStore((s) => s.isSubmitting)
   const canUseCoreFeatures = user?.role === 'user' || user?.role === 'admin'
+  const isAdmin = user?.role === 'admin'
   const roleGlowColor =
     user?.role === 'admin' ? '#ef4444' : user?.role === 'user' ? '#3b82f6' : '#ffffff'
 
@@ -57,6 +58,7 @@ export function AppShellLayout() {
       '/crafts': 'Крафты',
       '/ingredients': 'Ингредиенты',
       '/profile': 'Профиль',
+      '/users': 'Пользователи',
     }
 
     let pageTitle = routeTitleMap[location.pathname]
@@ -64,6 +66,7 @@ export function AppShellLayout() {
       if (location.pathname.startsWith('/crafts')) pageTitle = 'Крафты'
       else if (location.pathname.startsWith('/ingredients')) pageTitle = 'Ингредиенты'
       else if (location.pathname.startsWith('/profile')) pageTitle = 'Профиль'
+      else if (location.pathname.startsWith('/users')) pageTitle = 'Пользователи'
       else pageTitle = 'Главная'
     }
 
@@ -147,6 +150,23 @@ export function AppShellLayout() {
               active={location.pathname.startsWith('/ingredients')}
               variant="subtle"
               style={getNavItemStyle(location.pathname.startsWith('/ingredients'))}
+              styles={{
+                label: {
+                  fontWeight: 700,
+                  color: 'var(--mantine-color-text)',
+                },
+              }}
+            />
+          ) : null}
+          {isAdmin ? (
+            <NavLink
+              component={Link}
+              to="/users"
+              onClick={close}
+              label="Пользователи"
+              active={location.pathname.startsWith('/users')}
+              variant="subtle"
+              style={getNavItemStyle(location.pathname.startsWith('/users'))}
               styles={{
                 label: {
                   fontWeight: 700,

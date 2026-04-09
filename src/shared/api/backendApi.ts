@@ -30,9 +30,21 @@ export type AuthUser = {
   avatarUrl?: string | null
 }
 
+export type AdminUser = {
+  id: number
+  nickname: string
+  role: UserRole
+  avatarUrl?: string | null
+  createdAt: string
+}
+
 type AuthResponse = {
   token?: string
   user?: AuthUser
+}
+
+type AdminUsersResponse = {
+  items?: AdminUser[]
 }
 
 export class BackendApiError extends Error {
@@ -212,5 +224,59 @@ export async function bulkSaveRecipeResultOverrides(
   })
   const payload = await parseJsonOrThrow<{ updated?: number }>(response)
   return payload.updated ?? 0
+}
+
+export async function fetchAdminUsers(): Promise<AdminUser[]> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация администратора')
+  const url = buildApiUrl('/admin/users')
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+  })
+  const payload = await parseJsonOrThrow<AdminUsersResponse>(response)
+  return payload.items ?? []
+}
+
+export async function updateAdminUser(input: {
+  id: number
+  nickname: string
+  role: UserRole
+}): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация администратора')
+  const url = buildApiUrl('/admin/users/update')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify(input),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function deleteAdminUser(id: number): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация администратора')
+  const url = buildApiUrl('/admin/users/delete')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify({ id }),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
 }
 

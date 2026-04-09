@@ -6,6 +6,7 @@ import { IngredientsPage } from '../pages/ingredients/IngredientsPage'
 import { NotFoundPage } from '../pages/not-found/NotFoundPage'
 import { ProfilePage } from '../pages/profile/ProfilePage'
 import { RequireRole } from './RequireRole'
+import { UsersPage } from '../pages/users/UsersPage'
 
 export const appRouter = createBrowserRouter(
   [
@@ -44,6 +45,16 @@ export const appRouter = createBrowserRouter(
             {
               index: true,
               element: <ProfilePage />,
+            },
+          ],
+        },
+        {
+          path: 'users',
+          element: <RequireRole minimumRole="admin" />,
+          children: [
+            {
+              index: true,
+              element: <UsersPage />,
             },
           ],
         },

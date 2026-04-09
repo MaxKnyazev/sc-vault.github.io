@@ -339,5 +339,104 @@ if ($path === '/user/buy-prices') {
     exit;
 }
 
+if ($path === '/admin/users') {
+    require_method('GET');
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $currentUser = find_user_by_token($db, $token);
+    if (!$currentUser) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    if (!role_at_least($currentUser, 'admin')) {
+        send_json(403, ['error' => 'Недостаточно прав']);
+        exit;
+    }
+    $users = list_users($db);
+    $items = array_map(static function (array $row): array {
+        return [
+            'id' => (int)$row['id'],
+            'nickname' => (string)$row['nickname'],
+            'role' => normalize_user_role((string)$row['role']),
+            'avatarUrl' => $row['avatar_url'] ?: null,
+            'createdAt' => (string)$row['created_at'],
+        ];
+    }, $users);
+    send_json(200, ['items' => $items]);
+    exit;
+}
+
+if ($path === '/admin/users/update') {
+    require_method('POST');
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $currentUser = find_user_by_token($db, $token);
+    if (!$currentUser) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    if (!role_at_least($currentUser, 'admin')) {
+        send_json(403, ['error' => 'Недостаточно прав']);
+        exit;
+    }
+    $body = read_json_body();
+    $userId = (int)($body['id'] ?? 0);
+    $nickname = (string)($body['nickname'] ?? '');
+    $role = (string)($body['role'] ?? '');
+    if ($userId <= 0) {
+        send_json(400, ['error' => 'id required']);
+        exit;
+    }
+    if ((int)$currentUser['id'] === $userId && normalize_user_role($role) !== 'admin') {
+        send_json(400, ['error' => 'Admin cannot remove own admin role']);
+        exit;
+    }
+    try {
+        update_user_profile($db, $userId, $nickname, $role);
+    } catch (Throwable $e) {
+        send_json(400, ['error' => $e->getMessage()]);
+        exit;
+    }
+    send_json(200, ['ok' => true]);
+    exit;
+}
+
+if ($path === '/admin/users/delete') {
+    require_method('POST');
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $currentUser = find_user_by_token($db, $token);
+    if (!$currentUser) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    if (!role_at_least($currentUser, 'admin')) {
+        send_json(403, ['error' => 'Недостаточно прав']);
+        exit;
+    }
+    $body = read_json_body();
+    $userId = (int)($body['id'] ?? 0);
+    if ($userId <= 0) {
+        send_json(400, ['error' => 'id required']);
+        exit;
+    }
+    if ((int)$currentUser['id'] === $userId) {
+        send_json(400, ['error' => 'Admin cannot delete own account']);
+        exit;
+    }
+    delete_user_by_id($db, $userId);
+    send_json(200, ['ok' => true]);
+    exit;
+}
+
 send_json(404, ['error' => 'Not found']);
 

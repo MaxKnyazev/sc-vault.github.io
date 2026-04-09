@@ -93,3 +93,31 @@ function role_level(string $role): int
     };
 }
 
+function list_users(PDO $db): array
+{
+    $stmt = $db->query(
+        'SELECT id, nickname, role, avatar_url, created_at
+         FROM users
+         ORDER BY created_at DESC, id DESC'
+    );
+    return $stmt->fetchAll() ?: [];
+}
+
+function update_user_profile(PDO $db, int $userId, string $nickname, string $role): void
+{
+    $normalizedNickname = normalize_nickname($nickname);
+    if (!preg_match('/^[a-zA-Z0-9_]{6,16}$/', $normalizedNickname)) {
+        throw new InvalidArgumentException('Invalid nickname');
+    }
+    $normalizedRole = normalize_user_role($role);
+
+    $stmt = $db->prepare('UPDATE users SET nickname = ?, role = ? WHERE id = ?');
+    $stmt->execute([$normalizedNickname, $normalizedRole, $userId]);
+}
+
+function delete_user_by_id(PDO $db, int $userId): void
+{
+    $stmt = $db->prepare('DELETE FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
+}
+
