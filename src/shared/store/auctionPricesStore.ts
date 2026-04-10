@@ -5,6 +5,7 @@ import { aggregateAuctionPurchases24h } from '../api/stalcraftAuction'
 import { fetchBackendAuctionStats } from '../api/backendApi'
 import { getBackendApiBaseUrl } from '../config/backendApi'
 import { getStalcraftAuctionRefreshConcurrency } from '../config/stalcraftApi'
+import { useAuctionBlacklistStore } from './auctionBlacklistStore'
 
 function formatAuctionFailures(
   failed: { itemId: string; message: string }[],
@@ -40,6 +41,7 @@ type AuctionPricesState = {
   progress: { done: number; total: number } | null
   refreshAll: (itemIds: string[]) => Promise<void>
   clearCache: () => void
+  removeItemFromCache: (itemId: string) => void
   resetError: () => void
 }
 
@@ -54,25 +56,45 @@ export const useAuctionPricesStore = create<AuctionPricesState>()(
         set({ byItemId: {}, error: null, progress: null, isRefreshing: false })
       },
       resetError: () => set({ error: null }),
+      removeItemFromCache: (itemId: string) => {
+        set((state) => {
+          const next = { ...state.byItemId }
+          delete next[itemId]
+          return { byItemId: next }
+        })
+      },
       refreshAll: async (itemIds) => {
         const unique = [...new Set(itemIds)].filter(Boolean).sort()
         if (!unique.length) return
 
+        await useAuctionBlacklistStore.getState().ensureLoaded()
+        const isBl = useAuctionBlacklistStore.getState().isBlacklisted
+        const tracked = unique.filter((id) => !isBl(id))
+        const baseByItemId = { ...get().byItemId }
+        for (const id of unique) {
+          if (isBl(id)) delete baseByItemId[id]
+        }
+
+        if (!tracked.length) {
+          set({ byItemId: baseByItemId, isRefreshing: false, error: null, progress: null })
+          return
+        }
+
         set({
           isRefreshing: true,
           error: null,
-          progress: { done: 0, total: unique.length },
+          progress: { done: 0, total: tracked.length },
         })
 
-        const nextByItemId = { ...get().byItemId }
+        const nextByItemId = { ...baseByItemId }
         const failed: { itemId: string; message: string }[] = []
 
         try {
           // Preferred path: one bulk request to backend API.
           if (getBackendApiBaseUrl()) {
             try {
-              const stats = await fetchBackendAuctionStats(unique)
-              for (const id of unique) {
+              const stats = await fetchBackendAuctionStats(tracked)
+              for (const id of tracked) {
                 const row = stats[id]
                 if (row) nextByItemId[id] = row
               }
@@ -98,7 +120,7 @@ export const useAuctionPricesStore = create<AuctionPricesState>()(
           }
 
           const concurrency = getStalcraftAuctionRefreshConcurrency()
-          const queue = [...unique]
+          const queue = [...tracked]
           let done = 0
 
           const worker = async () => {
@@ -115,14 +137,14 @@ export const useAuctionPricesStore = create<AuctionPricesState>()(
                 done += 1
                 set({
                   byItemId: { ...nextByItemId },
-                  progress: { done, total: unique.length },
+                  progress: { done, total: tracked.length },
                 })
               }
             }
           }
 
           const workers = Array.from(
-            { length: Math.min(concurrency, unique.length) },
+            { length: Math.min(concurrency, tracked.length) },
             () => worker(),
           )
           await Promise.all(workers)
@@ -130,7 +152,7 @@ export const useAuctionPricesStore = create<AuctionPricesState>()(
           set({
             isRefreshing: false,
             progress: null,
-            error: failed.length ? formatAuctionFailures(failed, unique.length) : null,
+            error: failed.length ? formatAuctionFailures(failed, tracked.length) : null,
           })
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Auction refresh failed'

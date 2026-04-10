@@ -21,6 +21,7 @@ require $baseDir . '/src/Db.php';
 require $baseDir . '/src/Http.php';
 require $baseDir . '/src/Auth.php';
 require $baseDir . '/src/Auction.php';
+require $baseDir . '/src/AuctionBlacklist.php';
 require $baseDir . '/src/UserBuyPrices.php';
 require $baseDir . '/src/RecipeOverrides.php';
 
@@ -227,8 +228,44 @@ if ($path === '/auction/stats') {
         send_json(400, ['error' => 'Invalid window parameter']);
         exit;
     }
-    $items = get_auction_stats($db, $ids, $windowName);
+    $idsForStats = filter_item_ids_not_blacklisted($db, $ids);
+    $items = count($idsForStats) > 0 ? get_auction_stats($db, $idsForStats, $windowName) : [];
     send_json(200, ['items' => $items]);
+    exit;
+}
+
+if ($path === '/auction/blacklist') {
+    require_method('GET');
+    $ids = get_auction_blacklist_item_ids($db);
+    send_json(200, ['itemIds' => $ids]);
+    exit;
+}
+
+if ($path === '/auction-blacklist/add') {
+    require_method('POST');
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    if (!role_at_least($user, 'admin')) {
+        send_json(403, ['error' => 'Недостаточно прав']);
+        exit;
+    }
+    $body = read_json_body();
+    $itemId = trim((string)($body['itemId'] ?? ''));
+    try {
+        add_auction_blacklist_item($db, $itemId, (int)$user['id']);
+    } catch (Throwable $e) {
+        send_json(400, ['error' => $e->getMessage()]);
+        exit;
+    }
+    send_json(200, ['ok' => true]);
     exit;
 }
 

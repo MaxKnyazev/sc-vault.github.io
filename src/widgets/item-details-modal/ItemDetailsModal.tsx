@@ -4,10 +4,10 @@ import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { RecipeCard } from '../../components/recipe-card/RecipeCard'
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
-import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
+import { AuctionPrice24hLine } from '../../components/auction-price-24h/AuctionPrice24hLine'
+import { AdminAuctionIgnoreButton } from '../../components/admin-auction-ignore/AdminAuctionIgnoreButton'
 import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
 import { useItemDetailsModalStore } from '../../shared/store/itemDetailsModalStore'
-import { useAuctionPricesStore } from '../../shared/store/auctionPricesStore'
 import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
 import { getQualityModalGlowBoxShadow } from '../../shared/lib/getQualityGlowColor'
 import { useRecipeOverridesStore } from '../../shared/store/recipeOverridesStore'
@@ -16,7 +16,6 @@ import { applyRecipeResultOverride } from '../../shared/lib/applyRecipeResultOve
 export function ItemDetailsModal() {
   const { opened, itemId, close } = useItemDetailsModalStore()
   const { itemsById, recipes, realm } = useHideoutStore()
-  const stat = useAuctionPricesStore((s) => (itemId ? s.byItemId[itemId] : undefined))
   const buyPrice = useIngredientPricesStore((s) => (itemId ? s.buyPricesByItemId[itemId] ?? '' : ''))
   const setBuyPrice = useIngredientPricesStore((s) => s.setBuyPrice)
 
@@ -97,17 +96,8 @@ export function ItemDetailsModal() {
               </ActionIcon>
             </Group>
 
-            {stat ? (
-              stat.avgPerUnit !== null ? (
-                <Text size="sm" c="dimmed">
-                  Средняя цена аукциона (12ч): {formatAuctionRub(stat.avgPerUnit)} ₽/шт
-                </Text>
-              ) : (
-                <Text size="sm" c="dimmed">
-                  Средняя цена аукциона (12ч): нет сделок
-                </Text>
-              )
-            ) : null}
+            <AuctionPrice24hLine itemId={itemId} size="sm" />
+            <AdminAuctionIgnoreButton itemId={itemId} itemName={itemName || itemId} />
 
             <Stack gap={6}>
               <Text size="sm" c="dimmed">

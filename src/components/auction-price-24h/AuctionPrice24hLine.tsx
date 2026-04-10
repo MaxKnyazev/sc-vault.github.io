@@ -1,6 +1,7 @@
 import { Text } from '@mantine/core'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 import { useAuctionPricesStore } from '../../shared/store/auctionPricesStore'
+import { useAuctionBlacklistStore } from '../../shared/store/auctionBlacklistStore'
 
 type AuctionPrice24hLineProps = {
   itemId: string
@@ -9,6 +10,15 @@ type AuctionPrice24hLineProps = {
 
 export function AuctionPrice24hLine({ itemId, size = 'xs' }: AuctionPrice24hLineProps) {
   const stat = useAuctionPricesStore((s) => s.byItemId[itemId])
+  const isBlacklisted = useAuctionBlacklistStore((s) => s.blacklist.has(itemId))
+
+  if (isBlacklisted) {
+    return (
+      <Text size={size} c="dimmed" lh={1.35}>
+        Не отслеживается на аукционе
+      </Text>
+    )
+  }
 
   if (!stat) {
     return (

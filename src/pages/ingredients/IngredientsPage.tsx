@@ -21,6 +21,7 @@ import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import { useFavoritesStore } from '../../shared/store/favoritesStore'
 import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
+import { AdminAuctionIgnoreButton } from '../../components/admin-auction-ignore/AdminAuctionIgnoreButton'
 
 function createEnergyIconSvg(fillColor: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -251,6 +252,7 @@ export function IngredientsPage() {
                       Средняя цена аукциона (вручную):
                     </Text>
                     <AuctionPrice24hLine itemId={item.itemId} size="sm" />
+                    <AdminAuctionIgnoreButton itemId={item.itemId} itemName={item.name} />
                     <Group wrap="nowrap" align="flex-end">
                       <TextInput
                         placeholder="Цена скупа за 1 ед."

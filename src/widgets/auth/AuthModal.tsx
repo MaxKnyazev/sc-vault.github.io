@@ -1,6 +1,7 @@
 import { ActionIcon, Alert, Box, Button, Group, Modal, PasswordInput, Stack, Tabs, TextInput } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '../../shared/store/authStore'
+import { authModalGlowModalStyles } from '../../shared/lib/authModalGlowStyles'
 
 type AuthModalProps = {
   opened: boolean
@@ -78,15 +79,7 @@ export function AuthModal({ opened, onClose, initialMode = 'login' }: AuthModalP
       withCloseButton={false}
       centered
       size="sm"
-      styles={{
-        content: {
-          boxShadow:
-            '0 0 0 1px rgba(255,255,255,0.16), 0 0 24px rgba(255,255,255,0.18), 0 0 56px rgba(255,255,255,0.1)',
-        },
-        body: {
-          paddingTop: 10,
-        },
-      }}
+      styles={authModalGlowModalStyles}
     >
       <Stack gap="sm" mih={292}>
         <Group justify="flex-end" mb={-2}>

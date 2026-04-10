@@ -18,7 +18,7 @@
 - `public/index.php` — единая точка входа API
 - `src/` — DB, auth, репозитории
 - `config.php` — конфиг через env или значения по умолчанию
-- `migrations/001_init.sql` + `migrations/002_users_profile_and_roles.sql` + `migrations/003_recipe_result_overrides.sql` + `migrations/004_recipe_result_overrides_decimal_amounts.sql` + `migrations/005_auction_raw_trades.sql` — схема БД
+- `migrations/001_init.sql` + `migrations/002_users_profile_and_roles.sql` + `migrations/003_recipe_result_overrides.sql` + `migrations/004_recipe_result_overrides_decimal_amounts.sql` + `migrations/005_auction_raw_trades.sql` + `migrations/006_auction_item_blacklist.sql` — схема БД
 - `cron/update_auction.php` — обновление `auction_stats`
 - `cron/cleanup_tokens.php` — очистка просроченных auth токенов
 
@@ -31,6 +31,7 @@
    - `migrations/003_recipe_result_overrides.sql`
    - `migrations/004_recipe_result_overrides_decimal_amounts.sql`
    - `migrations/005_auction_raw_trades.sql`
+   - `migrations/006_auction_item_blacklist.sql`
 3. Скопируйте `config.example.php` в `config.php` и заполните:
    - DB параметры
    - `EXBO_CLIENT_ID`, `EXBO_CLIENT_SECRET`
@@ -45,6 +46,8 @@
 - `GET /auth/me` (Bearer token)
 - `POST /auth/logout` (Bearer token)
 - `GET /auction/stats?ids=id1,id2&window=12h` (`window` опционален, формат `Nh`)
+- `GET /auction/blacklist` — список `item_id`, не участвующих в аукционе (публично)
+- `POST /auction-blacklist/add` — добавить предмет в чёрный список (только admin, JSON `{ "itemId": "..." }`)
 - `GET /recipe-overrides` (глобальные ручные override для крафтов)
 - `POST /recipe-overrides/save` (admin only)
 - `POST /recipe-overrides/bulk-save` (admin only, CSV/массовый импорт)

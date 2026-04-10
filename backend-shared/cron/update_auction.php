@@ -5,6 +5,7 @@ declare(strict_types=1);
 $config = require __DIR__ . '/../config.php';
 require __DIR__ . '/../src/Db.php';
 require __DIR__ . '/../src/Auction.php';
+require __DIR__ . '/../src/AuctionBlacklist.php';
 
 const HISTORY_LIMIT = 100;
 const DEFAULT_MAX_PAGES_PER_ITEM = 20;
@@ -195,6 +196,7 @@ $itemLimit = read_int_env('AUCTION_ITEM_LIMIT', 0);
 $lookbackMinutes = max(1, read_int_env('AUCTION_COLLECT_LOOKBACK_MINUTES', DEFAULT_COLLECT_LOOKBACK_MINUTES));
 $statsWindows = parse_window_names((string)getenv('AUCTION_STATS_WINDOWS') ?: DEFAULT_STATS_WINDOWS);
 $targetItemIds = $itemLimit > 0 ? array_slice($itemIds, 0, $itemLimit) : $itemIds;
+$targetItemIds = filter_item_ids_not_blacklisted($db, $targetItemIds);
 $insertedTotal = 0;
 $seenTotal = 0;
 
