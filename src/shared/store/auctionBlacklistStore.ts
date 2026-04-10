@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { addAuctionBlacklistItem, fetchAuctionBlacklist } from '../api/backendApi'
+import { addAuctionBlacklistItem, fetchAuctionBlacklist, removeAuctionBlacklistItem } from '../api/backendApi'
 
 type AuctionBlacklistState = {
   blacklist: Set<string>
@@ -7,6 +7,7 @@ type AuctionBlacklistState = {
   load: () => Promise<void>
   ensureLoaded: () => Promise<void>
   add: (itemId: string) => Promise<void>
+  remove: (itemId: string) => Promise<void>
   isBlacklisted: (itemId: string) => boolean
 }
 
@@ -33,6 +34,15 @@ export const useAuctionBlacklistStore = create<AuctionBlacklistState>((set, get)
     set((state) => {
       const next = new Set(state.blacklist)
       next.add(itemId)
+      return { blacklist: next, isLoaded: true }
+    })
+  },
+
+  remove: async (itemId: string) => {
+    await removeAuctionBlacklistItem(itemId)
+    set((state) => {
+      const next = new Set(state.blacklist)
+      next.delete(itemId)
       return { blacklist: next, isLoaded: true }
     })
   },

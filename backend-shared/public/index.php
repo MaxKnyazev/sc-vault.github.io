@@ -269,6 +269,34 @@ if ($path === '/auction-blacklist/add') {
     exit;
 }
 
+if ($path === '/auction-blacklist/remove') {
+    require_method('POST');
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    if (!role_at_least($user, 'admin')) {
+        send_json(403, ['error' => 'Недостаточно прав']);
+        exit;
+    }
+    $body = read_json_body();
+    $itemId = trim((string)($body['itemId'] ?? ''));
+    try {
+        remove_auction_blacklist_item($db, $itemId);
+    } catch (Throwable $e) {
+        send_json(400, ['error' => $e->getMessage()]);
+        exit;
+    }
+    send_json(200, ['ok' => true]);
+    exit;
+}
+
 if ($path === '/recipe-overrides') {
     require_method('GET');
     $items = get_recipe_result_overrides($db);

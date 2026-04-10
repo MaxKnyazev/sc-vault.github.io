@@ -5,7 +5,6 @@ import { RecipeCard } from '../../components/recipe-card/RecipeCard'
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import { AuctionPrice24hLine } from '../../components/auction-price-24h/AuctionPrice24hLine'
-import { AdminAuctionIgnoreButton } from '../../components/admin-auction-ignore/AdminAuctionIgnoreButton'
 import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
 import { useItemDetailsModalStore } from '../../shared/store/itemDetailsModalStore'
 import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
@@ -97,7 +96,6 @@ export function ItemDetailsModal() {
             </Group>
 
             <AuctionPrice24hLine itemId={itemId} size="sm" />
-            <AdminAuctionIgnoreButton itemId={itemId} itemName={itemName || itemId} />
 
             <Stack gap={6}>
               <Text size="sm" c="dimmed">

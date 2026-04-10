@@ -48,6 +48,7 @@
 - `GET /auction/stats?ids=id1,id2&window=12h` (`window` опционален, формат `Nh`)
 - `GET /auction/blacklist` — список `item_id`, не участвующих в аукционе (публично)
 - `POST /auction-blacklist/add` — добавить предмет в чёрный список (только admin, JSON `{ "itemId": "..." }`)
+- `POST /auction-blacklist/remove` — убрать предмет из чёрного списка (только admin, JSON `{ "itemId": "..." }`)
 - `GET /recipe-overrides` (глобальные ручные override для крафтов)
 - `POST /recipe-overrides/save` (admin only)
 - `POST /recipe-overrides/bulk-save` (admin only, CSV/массовый импорт)

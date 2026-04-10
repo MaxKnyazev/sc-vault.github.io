@@ -11,7 +11,7 @@ import { useFavoritesStore } from '../../shared/store/favoritesStore'
 import { useAuthStore } from '../../shared/store/authStore'
 import { useRecipeOverridesStore } from '../../shared/store/recipeOverridesStore'
 import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
-import { AdminAuctionIgnoreButton } from '../admin-auction-ignore/AdminAuctionIgnoreButton'
+import { AdminAuctionTrackingButton } from '../admin-auction-ignore/AdminAuctionTrackingButton'
 
 function createEnergyIconSvg(fillColor: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -149,7 +149,7 @@ export function RecipeCard({
                 size="result"
               />
               <AuctionPrice24hLine itemId={item.itemId} />
-              <AdminAuctionIgnoreButton itemId={item.itemId} itemName={item.name} />
+              <AdminAuctionTrackingButton itemId={item.itemId} itemName={item.name} />
             </Stack>
           ))}
         </Stack>
@@ -192,7 +192,6 @@ export function RecipeCard({
                   size="ingredient"
                 />
                 <AuctionPrice24hLine itemId={item.itemId} />
-                <AdminAuctionIgnoreButton itemId={item.itemId} itemName={item.name} />
               </Stack>
             ))}
             <ItemBadge

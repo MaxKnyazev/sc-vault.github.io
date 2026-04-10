@@ -26,6 +26,16 @@ function add_auction_blacklist_item(PDO $db, string $itemId, ?int $adminUserId):
     $stmt->execute([$normalized, $adminUserId]);
 }
 
+function remove_auction_blacklist_item(PDO $db, string $itemId): void
+{
+    $normalized = trim($itemId);
+    if ($normalized === '') {
+        throw new InvalidArgumentException('itemId required');
+    }
+    $stmt = $db->prepare('DELETE FROM auction_item_blacklist WHERE item_id = ?');
+    $stmt->execute([$normalized]);
+}
+
 function filter_item_ids_not_blacklisted(PDO $db, array $itemIds): array
 {
     if (count($itemIds) === 0) {

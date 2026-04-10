@@ -113,6 +113,23 @@ export async function addAuctionBlacklistItem(itemId: string): Promise<void> {
   await parseJsonOrThrow<{ ok?: boolean }>(response)
 }
 
+export async function removeAuctionBlacklistItem(itemId: string): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация администратора')
+  const url = buildApiUrl('/auction-blacklist/remove')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify({ itemId }),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
 export async function fetchBackendUserBuyPrices(): Promise<Record<string, string>> {
   const token = getBackendAuthToken()
   if (!token) return {}
