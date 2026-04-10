@@ -215,12 +215,19 @@ if ($path === '/auth/logout') {
 if ($path === '/auction/stats') {
     require_method('GET');
     $idsRaw = trim((string)($_GET['ids'] ?? ''));
+    $windowRaw = trim((string)($_GET['window'] ?? '12h'));
     if ($idsRaw === '') {
         send_json(200, ['items' => []]);
         exit;
     }
     $ids = array_values(array_filter(array_unique(array_map('trim', explode(',', $idsRaw)))));
-    $items = get_auction_stats($db, $ids, '12h');
+    try {
+        $windowName = normalize_window_name($windowRaw);
+    } catch (Throwable $e) {
+        send_json(400, ['error' => 'Invalid window parameter']);
+        exit;
+    }
+    $items = get_auction_stats($db, $ids, $windowName);
     send_json(200, ['items' => $items]);
     exit;
 }

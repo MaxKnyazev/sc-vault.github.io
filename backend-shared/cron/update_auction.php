@@ -11,6 +11,8 @@ const DEFAULT_MAX_PAGES_PER_ITEM = 20;
 const DEFAULT_SLEEP_BETWEEN_PAGES_MS = 0;
 const DEFAULT_SLEEP_BETWEEN_ITEMS_MS = 0;
 const DEFAULT_PROGRESS_EVERY = 25;
+const DEFAULT_COLLECT_LOOKBACK_MINUTES = 65;
+const DEFAULT_STATS_WINDOWS = '12h';
 
 function read_int_env(string $key, int $fallback): int
 {
@@ -76,17 +78,36 @@ function fetch_history_page(array $config, string $itemId, int $offset): array
     return $data;
 }
 
-function aggregate_item(array $config, string $itemId, int $maxPagesPerItem, int $sleepBetweenPagesMs): array
+function parse_window_names(string $rawWindows): array
 {
+    $parts = array_values(array_filter(array_map('trim', explode(',', $rawWindows))));
+    $windows = [];
+    foreach ($parts as $part) {
+        $windows[] = normalize_window_name($part);
+    }
+    if (count($windows) === 0) {
+        $windows[] = normalize_window_name(DEFAULT_STATS_WINDOWS);
+    }
+    return array_values(array_unique($windows));
+}
+
+function collect_raw_trades_for_item(
+    PDO $db,
+    array $config,
+    string $itemId,
+    int $maxPagesPerItem,
+    int $sleepBetweenPagesMs,
+    int $lookbackMinutes
+): array {
     $cutoff = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
-        ->sub(new DateInterval('PT' . ((int)$config['auction_window_hours']) . 'H'))
+        ->sub(new DateInterval('PT' . $lookbackMinutes . 'M'))
         ->getTimestamp();
 
+    $collectedAt = gmdate('Y-m-d H:i:s');
     $offset = 0;
     $pageCount = 0;
-    $totalQty = 0;
-    $totalRevenue = 0.0;
-    $tradeCount = 0;
+    $insertedCount = 0;
+    $seenCount = 0;
 
     while (true) {
         $pageCount++;
@@ -97,16 +118,42 @@ function aggregate_item(array $config, string $itemId, int $maxPagesPerItem, int
         }
 
         $oldest = PHP_INT_MAX;
-        foreach ($prices as $row) {
+        foreach ($prices as $rowIndex => $row) {
             $t = strtotime((string)($row['time'] ?? ''));
             if ($t === false) {
                 continue;
             }
             $oldest = min($oldest, $t);
             if ($t >= $cutoff) {
-                $totalQty += (int)($row['amount'] ?? 0);
-                $totalRevenue += (float)($row['price'] ?? 0);
-                $tradeCount += 1;
+                $amount = (int)($row['amount'] ?? 0);
+                $price = (float)($row['price'] ?? 0);
+                $soldAt = gmdate('Y-m-d H:i:s', $t);
+                $dedupKey = hash(
+                    'sha256',
+                    implode('|', [
+                        $itemId,
+                        $soldAt,
+                        (string)$amount,
+                        sprintf('%.2f', $price),
+                        (string)$offset,
+                        (string)$rowIndex,
+                    ])
+                );
+
+                $inserted = upsert_auction_raw_trade($db, [
+                    'itemId' => $itemId,
+                    'soldAt' => $soldAt,
+                    'amount' => $amount,
+                    'price' => $price,
+                    'sourceOffset' => $offset,
+                    'sourceRowIndex' => $rowIndex,
+                    'collectedAt' => $collectedAt,
+                    'dedupKey' => $dedupKey,
+                ]);
+                $seenCount += 1;
+                if ($inserted) {
+                    $insertedCount += 1;
+                }
             }
         }
 
@@ -120,11 +167,9 @@ function aggregate_item(array $config, string $itemId, int $maxPagesPerItem, int
     }
 
     return [
-        'avgPerUnit' => $totalQty > 0 ? $totalRevenue / $totalQty : null,
-        'totalQty' => $totalQty,
-        'totalRevenue' => $totalRevenue,
-        'tradeCount' => $tradeCount,
-        'fetchedAt' => gmdate('Y-m-d H:i:s'),
+        'seenCount' => $seenCount,
+        'insertedCount' => $insertedCount,
+        'fetchedAt' => $collectedAt,
     ];
 }
 
@@ -147,12 +192,27 @@ $sleepBetweenPagesMs = read_int_env('AUCTION_SLEEP_BETWEEN_PAGES_MS', DEFAULT_SL
 $sleepBetweenItemsMs = read_int_env('AUCTION_SLEEP_BETWEEN_ITEMS_MS', DEFAULT_SLEEP_BETWEEN_ITEMS_MS);
 $progressEvery = max(1, read_int_env('AUCTION_PROGRESS_EVERY', DEFAULT_PROGRESS_EVERY));
 $itemLimit = read_int_env('AUCTION_ITEM_LIMIT', 0);
+$lookbackMinutes = max(1, read_int_env('AUCTION_COLLECT_LOOKBACK_MINUTES', DEFAULT_COLLECT_LOOKBACK_MINUTES));
+$statsWindows = parse_window_names((string)getenv('AUCTION_STATS_WINDOWS') ?: DEFAULT_STATS_WINDOWS);
 $targetItemIds = $itemLimit > 0 ? array_slice($itemIds, 0, $itemLimit) : $itemIds;
+$insertedTotal = 0;
+$seenTotal = 0;
 
 foreach ($targetItemIds as $idx => $itemId) {
     try {
-        $agg = aggregate_item($config, $itemId, $maxPagesPerItem, $sleepBetweenPagesMs);
-        upsert_auction_stat($db, $itemId, $agg, '12h');
+        $collect = collect_raw_trades_for_item(
+            $db,
+            $config,
+            $itemId,
+            $maxPagesPerItem,
+            $sleepBetweenPagesMs,
+            $lookbackMinutes
+        );
+        foreach ($statsWindows as $windowName) {
+            recalculate_auction_stat_from_raw($db, $itemId, $windowName, $collect['fetchedAt']);
+        }
+        $insertedTotal += (int)$collect['insertedCount'];
+        $seenTotal += (int)$collect['seenCount'];
         $processed++;
         if ($sleepBetweenItemsMs > 0) {
             usleep($sleepBetweenItemsMs * 1000);
@@ -163,9 +223,25 @@ foreach ($targetItemIds as $idx => $itemId) {
     }
     $current = $idx + 1;
     if ($current % $progressEvery === 0 || $current === count($targetItemIds)) {
-        fwrite(STDOUT, sprintf("progress: %d/%d, ok=%d failed=%d\n", $current, count($targetItemIds), $processed, $failed));
+        fwrite(STDOUT, sprintf(
+            "progress: %d/%d, ok=%d failed=%d seen=%d inserted=%d\n",
+            $current,
+            count($targetItemIds),
+            $processed,
+            $failed,
+            $seenTotal,
+            $insertedTotal
+        ));
     }
 }
 
-fwrite(STDOUT, sprintf("auction cron done: total=%d ok=%d failed=%d\n", count($targetItemIds), $processed, $failed));
+fwrite(STDOUT, sprintf(
+    "auction cron done: total=%d ok=%d failed=%d seen=%d inserted=%d windows=%s\n",
+    count($targetItemIds),
+    $processed,
+    $failed,
+    $seenTotal,
+    $insertedTotal,
+    implode(',', $statsWindows)
+));
 
