@@ -13,6 +13,20 @@ type TrackedAuctionItemsResponse = {
   itemIds?: string[]
 }
 
+export type AuctionHistoryRange = '24h' | '7d' | '30d' | '90d'
+export type AuctionHistoryPoint = {
+  ts: string
+  avgPerUnit: number | null
+  totalQty: number
+  totalRevenue: number
+  tradeCount: number
+}
+type AuctionHistoryResponse = {
+  itemId?: string
+  range?: AuctionHistoryRange
+  points?: AuctionHistoryPoint[]
+}
+
 type UserBuyPricesResponse = {
   prices?: Record<string, { value?: string }>
 }
@@ -165,6 +179,27 @@ export async function addTrackedAuctionItem(itemId: string): Promise<void> {
     body: JSON.stringify({ itemId }),
   })
   await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function fetchAuctionItemHistory(
+  itemId: string,
+  range: AuctionHistoryRange,
+): Promise<AuctionHistoryPoint[]> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl(
+    `/auction/history?itemId=${encodeURIComponent(itemId)}&range=${encodeURIComponent(range)}`,
+  )
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+  })
+  const payload = await parseJsonOrThrow<AuctionHistoryResponse>(response)
+  return payload.points ?? []
 }
 
 export async function removeTrackedAuctionItem(itemId: string): Promise<void> {

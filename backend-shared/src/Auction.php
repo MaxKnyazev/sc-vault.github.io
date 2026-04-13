@@ -266,3 +266,167 @@ function upsert_auction_stat(PDO $db, string $itemId, array $agg, string $window
     ]);
 }
 
+function normalize_history_range(string $range): string
+{
+    $normalized = strtolower(trim($range));
+    $allowed = ['24h', '7d', '30d', '90d'];
+    if (!in_array($normalized, $allowed, true)) {
+        throw new InvalidArgumentException('Invalid history range');
+    }
+    return $normalized;
+}
+
+function get_auction_item_history(PDO $db, string $itemId, string $range = '7d'): array
+{
+    $normalizedItemId = trim($itemId);
+    if ($normalizedItemId === '') {
+        throw new InvalidArgumentException('itemId required');
+    }
+    $normalizedRange = normalize_history_range($range);
+    $points = [];
+    $push = static function (array &$acc, string $bucket, float $qty, float $revenue, int $trades): void {
+        if (!isset($acc[$bucket])) {
+            $acc[$bucket] = ['totalQty' => 0.0, 'totalRevenue' => 0.0, 'tradeCount' => 0];
+        }
+        $acc[$bucket]['totalQty'] += $qty;
+        $acc[$bucket]['totalRevenue'] += $revenue;
+        $acc[$bucket]['tradeCount'] += $trades;
+    };
+
+    if ($normalizedRange === '24h' || $normalizedRange === '7d') {
+        $hours = $normalizedRange === '24h' ? 24 : 24 * 7;
+        $rawStmt = $db->prepare(
+            "SELECT
+                DATE_FORMAT(sold_at, '%Y-%m-%d %H:00:00') AS bucket_ts,
+                COALESCE(SUM(amount), 0) AS total_qty,
+                COALESCE(SUM(price), 0) AS total_revenue,
+                COUNT(*) AS trade_count
+             FROM auction_raw_trades
+             WHERE item_id = ?
+               AND sold_at >= UTC_TIMESTAMP() - INTERVAL {$hours} HOUR
+             GROUP BY DATE_FORMAT(sold_at, '%Y-%m-%d %H:00:00')"
+        );
+        $rawStmt->execute([$normalizedItemId]);
+        foreach ($rawStmt->fetchAll() as $row) {
+            $push(
+                $points,
+                (string)$row['bucket_ts'],
+                (float)$row['total_qty'],
+                (float)$row['total_revenue'],
+                (int)$row['trade_count']
+            );
+        }
+
+        if ($normalizedRange === '7d') {
+            $hourlyStmt = $db->prepare(
+                "SELECT
+                    DATE_FORMAT(hour_start, '%Y-%m-%d %H:00:00') AS bucket_ts,
+                    COALESCE(SUM(total_qty), 0) AS total_qty,
+                    COALESCE(SUM(total_revenue), 0) AS total_revenue,
+                    COALESCE(SUM(trade_count), 0) AS trade_count
+                 FROM auction_hourly_stats
+                 WHERE item_id = ?
+                   AND hour_start >= UTC_TIMESTAMP() - INTERVAL 7 DAY
+                   AND hour_start < UTC_TIMESTAMP() - INTERVAL 24 HOUR
+                 GROUP BY DATE_FORMAT(hour_start, '%Y-%m-%d %H:00:00')"
+            );
+            $hourlyStmt->execute([$normalizedItemId]);
+            foreach ($hourlyStmt->fetchAll() as $row) {
+                $push(
+                    $points,
+                    (string)$row['bucket_ts'],
+                    (float)$row['total_qty'],
+                    (float)$row['total_revenue'],
+                    (int)$row['trade_count']
+                );
+            }
+        }
+    } else {
+        $days = $normalizedRange === '30d' ? 30 : 90;
+        $rawStmt = $db->prepare(
+            "SELECT
+                DATE_FORMAT(DATE(sold_at), '%Y-%m-%d 00:00:00') AS bucket_ts,
+                COALESCE(SUM(amount), 0) AS total_qty,
+                COALESCE(SUM(price), 0) AS total_revenue,
+                COUNT(*) AS trade_count
+             FROM auction_raw_trades
+             WHERE item_id = ?
+               AND sold_at >= UTC_DATE() - INTERVAL {$days} DAY
+             GROUP BY DATE(sold_at)"
+        );
+        $rawStmt->execute([$normalizedItemId]);
+        foreach ($rawStmt->fetchAll() as $row) {
+            $push(
+                $points,
+                (string)$row['bucket_ts'],
+                (float)$row['total_qty'],
+                (float)$row['total_revenue'],
+                (int)$row['trade_count']
+            );
+        }
+
+        $hourlyStmt = $db->prepare(
+            "SELECT
+                DATE_FORMAT(DATE(hour_start), '%Y-%m-%d 00:00:00') AS bucket_ts,
+                COALESCE(SUM(total_qty), 0) AS total_qty,
+                COALESCE(SUM(total_revenue), 0) AS total_revenue,
+                COALESCE(SUM(trade_count), 0) AS trade_count
+             FROM auction_hourly_stats
+             WHERE item_id = ?
+               AND hour_start >= UTC_DATE() - INTERVAL {$days} DAY
+               AND hour_start < UTC_TIMESTAMP() - INTERVAL 24 HOUR
+             GROUP BY DATE(hour_start)"
+        );
+        $hourlyStmt->execute([$normalizedItemId]);
+        foreach ($hourlyStmt->fetchAll() as $row) {
+            $push(
+                $points,
+                (string)$row['bucket_ts'],
+                (float)$row['total_qty'],
+                (float)$row['total_revenue'],
+                (int)$row['trade_count']
+            );
+        }
+
+        $dailyStmt = $db->prepare(
+            "SELECT
+                DATE_FORMAT(day_date, '%Y-%m-%d 00:00:00') AS bucket_ts,
+                COALESCE(SUM(total_qty), 0) AS total_qty,
+                COALESCE(SUM(total_revenue), 0) AS total_revenue,
+                COALESCE(SUM(trade_count), 0) AS trade_count
+             FROM auction_daily_stats
+             WHERE item_id = ?
+               AND day_date >= UTC_DATE() - INTERVAL {$days} DAY
+               AND day_date < UTC_DATE() - INTERVAL 7 DAY
+             GROUP BY day_date"
+        );
+        $dailyStmt->execute([$normalizedItemId]);
+        foreach ($dailyStmt->fetchAll() as $row) {
+            $push(
+                $points,
+                (string)$row['bucket_ts'],
+                (float)$row['total_qty'],
+                (float)$row['total_revenue'],
+                (int)$row['trade_count']
+            );
+        }
+    }
+
+    ksort($points);
+    $result = [];
+    foreach ($points as $bucketTs => $row) {
+        $totalQty = (float)$row['totalQty'];
+        $totalRevenue = (float)$row['totalRevenue'];
+        $tradeCount = (int)$row['tradeCount'];
+        $result[] = [
+            'ts' => $bucketTs,
+            'avgPerUnit' => $totalQty > 0 ? $totalRevenue / $totalQty : null,
+            'totalQty' => $totalQty,
+            'totalRevenue' => $totalRevenue,
+            'tradeCount' => $tradeCount,
+        ];
+    }
+
+    return $result;
+}
+
