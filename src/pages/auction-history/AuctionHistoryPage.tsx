@@ -24,6 +24,8 @@ import {
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import { authModalGlowModalStyles } from '../../shared/lib/authModalGlowStyles'
+import { useAuctionHistoryItemModalStore } from '../../shared/store/auctionHistoryItemModalStore'
+import { AuctionHistoryItemModal } from '../../widgets/auction-history-item-modal/AuctionHistoryItemModal'
 
 export function AuctionHistoryPage() {
   const { itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
@@ -36,6 +38,7 @@ export function AuctionHistoryPage() {
   const [isRemovingItemId, setIsRemovingItemId] = useState<string | null>(null)
   const [pendingDeleteItemId, setPendingDeleteItemId] = useState<string | null>(null)
   const [trackedError, setTrackedError] = useState<string | null>(null)
+  const openAuctionHistoryItemModal = useAuctionHistoryItemModalStore((s) => s.open)
 
   useEffect(() => {
     void fetchRecipes()
@@ -147,6 +150,8 @@ export function AuctionHistoryPage() {
                       qualityColor={item.qualityColor}
                       size="result"
                       showFavoriteButton={false}
+                      openDetailsOnClick={false}
+                      onClick={() => openAuctionHistoryItemModal(item.itemId)}
                     />
                     <ActionIcon
                       size={40}
@@ -305,6 +310,7 @@ export function AuctionHistoryPage() {
           </Group>
         </Stack>
       </Modal>
+      <AuctionHistoryItemModal />
     </PageContainer>
   )
 }

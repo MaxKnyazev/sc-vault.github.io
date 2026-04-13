@@ -12,6 +12,8 @@ type ItemBadgeProps = {
   size?: 'result' | 'ingredient'
   disableGlow?: boolean
   showFavoriteButton?: boolean
+  openDetailsOnClick?: boolean
+  onClick?: () => void
 }
 
 export function ItemBadge({
@@ -23,6 +25,8 @@ export function ItemBadge({
   size = 'ingredient',
   disableGlow = false,
   showFavoriteButton = true,
+  openDetailsOnClick = true,
+  onClick,
 }: ItemBadgeProps) {
   const { isFavorite, toggleFavorite } = useFavoritesStore()
   const openItemModal = useItemDetailsModalStore((state) => state.open)
@@ -38,6 +42,7 @@ export function ItemBadge({
   const fontSize = size === 'result' ? 19 : 14
   const fontWeight = size === 'result' ? 700 : 500
   const favoriteButtonSize = size === 'result' ? 29 : 24
+  const isClickable = Boolean(onClick || (itemId && openDetailsOnClick))
 
   return (
     <Box
@@ -67,9 +72,13 @@ export function ItemBadge({
         gap="xs"
         wrap="nowrap"
         align="center"
-        style={{ cursor: itemId ? 'pointer' : 'default' }}
+        style={{ cursor: isClickable ? 'pointer' : 'default' }}
         onClick={() => {
-          if (itemId) openItemModal(itemId)
+          if (onClick) {
+            onClick()
+            return
+          }
+          if (itemId && openDetailsOnClick) openItemModal(itemId)
         }}
       >
         <Box
