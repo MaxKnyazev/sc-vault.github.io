@@ -93,66 +93,103 @@ function rebuild_hourly_stats_from_raw_for_item(PDO $db, string $itemId, int $ra
     return $stmt->rowCount();
 }
 
-function purge_raw_trades_older_than_hours(PDO $db, int $rawRetentionHours): int
+function purge_raw_trades_older_than_hours(PDO $db, int $rawRetentionHours, int $batchSize = 10000): int
 {
     $hours = max(1, $rawRetentionHours);
     $cutoffExpr = sprintf('UTC_TIMESTAMP() - INTERVAL %d HOUR', $hours);
-    $stmt = $db->prepare("DELETE FROM auction_raw_trades WHERE sold_at < {$cutoffExpr}");
-    $stmt->execute();
-    return $stmt->rowCount();
+    $limit = max(1000, $batchSize);
+    $deletedTotal = 0;
+
+    while (true) {
+        $stmt = $db->prepare(
+            "DELETE FROM auction_raw_trades
+             WHERE sold_at < {$cutoffExpr}
+             ORDER BY sold_at
+             LIMIT {$limit}"
+        );
+        $stmt->execute();
+        $deleted = $stmt->rowCount();
+        $deletedTotal += $deleted;
+        if ($deleted < $limit) {
+            break;
+        }
+    }
+
+    return $deletedTotal;
 }
 
-function rollup_hourly_to_daily_and_purge(PDO $db, int $hourlyRetentionDays): array
+function rollup_hourly_to_daily_and_purge(PDO $db, int $hourlyRetentionDays, int $batchSize = 10000): array
 {
     $days = max(1, $hourlyRetentionDays);
     $cutoffExpr = sprintf('UTC_TIMESTAMP() - INTERVAL %d DAY', $days);
+    $limit = max(1000, $batchSize);
 
-    $db->beginTransaction();
-    try {
-        $insertStmt = $db->prepare(
-            "INSERT INTO auction_daily_stats
-              (item_id, day_date, total_qty, total_revenue, trade_count, avg_per_unit, source_hours_count, fetched_at, updated_at)
-             SELECT
-              item_id,
-              DATE(hour_start) AS day_date,
-              COALESCE(SUM(total_qty), 0) AS total_qty,
-              COALESCE(SUM(total_revenue), 0) AS total_revenue,
-              COALESCE(SUM(trade_count), 0) AS trade_count,
-              CASE WHEN COALESCE(SUM(total_qty), 0) > 0 THEN COALESCE(SUM(total_revenue), 0) / SUM(total_qty) ELSE NULL END AS avg_per_unit,
-              COUNT(*) AS source_hours_count,
-              UTC_TIMESTAMP() AS fetched_at,
-              UTC_TIMESTAMP() AS updated_at
-             FROM auction_hourly_stats
-             WHERE hour_start < {$cutoffExpr}
-             GROUP BY item_id, DATE(hour_start)
-             ON DUPLICATE KEY UPDATE
-              total_qty = total_qty + VALUES(total_qty),
-              total_revenue = total_revenue + VALUES(total_revenue),
-              trade_count = trade_count + VALUES(trade_count),
-              avg_per_unit = CASE
-                WHEN (total_qty + VALUES(total_qty)) > 0 THEN (total_revenue + VALUES(total_revenue)) / (total_qty + VALUES(total_qty))
-                ELSE NULL
-              END,
-              source_hours_count = source_hours_count + VALUES(source_hours_count),
-              fetched_at = VALUES(fetched_at),
-              updated_at = UTC_TIMESTAMP()"
-        );
-        $insertStmt->execute();
-        $upsertedRows = $insertStmt->rowCount();
+    $upsertedRows = 0;
+    $deletedHourlyRows = 0;
 
-        $deleteStmt = $db->prepare("DELETE FROM auction_hourly_stats WHERE hour_start < {$cutoffExpr}");
-        $deleteStmt->execute();
-        $deletedHourlyRows = $deleteStmt->rowCount();
+    while (true) {
+        $db->beginTransaction();
+        try {
+            $insertStmt = $db->prepare(
+                "INSERT INTO auction_daily_stats
+                  (item_id, day_date, total_qty, total_revenue, trade_count, avg_per_unit, source_hours_count, fetched_at, updated_at)
+                 SELECT
+                  item_id,
+                  DATE(hour_start) AS day_date,
+                  COALESCE(SUM(total_qty), 0) AS total_qty,
+                  COALESCE(SUM(total_revenue), 0) AS total_revenue,
+                  COALESCE(SUM(trade_count), 0) AS trade_count,
+                  CASE WHEN COALESCE(SUM(total_qty), 0) > 0 THEN COALESCE(SUM(total_revenue), 0) / SUM(total_qty) ELSE NULL END AS avg_per_unit,
+                  COUNT(*) AS source_hours_count,
+                  UTC_TIMESTAMP() AS fetched_at,
+                  UTC_TIMESTAMP() AS updated_at
+                 FROM (
+                    SELECT item_id, hour_start, total_qty, total_revenue, trade_count
+                    FROM auction_hourly_stats
+                    WHERE hour_start < {$cutoffExpr}
+                    ORDER BY hour_start
+                    LIMIT {$limit}
+                 ) AS batch
+                 GROUP BY item_id, DATE(hour_start)
+                 ON DUPLICATE KEY UPDATE
+                  total_qty = total_qty + VALUES(total_qty),
+                  total_revenue = total_revenue + VALUES(total_revenue),
+                  trade_count = trade_count + VALUES(trade_count),
+                  avg_per_unit = CASE
+                    WHEN (total_qty + VALUES(total_qty)) > 0 THEN (total_revenue + VALUES(total_revenue)) / (total_qty + VALUES(total_qty))
+                    ELSE NULL
+                  END,
+                  source_hours_count = source_hours_count + VALUES(source_hours_count),
+                  fetched_at = VALUES(fetched_at),
+                  updated_at = UTC_TIMESTAMP()"
+            );
+            $insertStmt->execute();
+            $upsertedRows += $insertStmt->rowCount();
 
-        $db->commit();
-        return [
-            'upsertedDailyRows' => $upsertedRows,
-            'deletedHourlyRows' => $deletedHourlyRows,
-        ];
-    } catch (Throwable $e) {
-        $db->rollBack();
-        throw $e;
+            $deleteStmt = $db->prepare(
+                "DELETE FROM auction_hourly_stats
+                 WHERE hour_start < {$cutoffExpr}
+                 ORDER BY hour_start
+                 LIMIT {$limit}"
+            );
+            $deleteStmt->execute();
+            $deleted = $deleteStmt->rowCount();
+            $deletedHourlyRows += $deleted;
+
+            $db->commit();
+            if ($deleted < $limit) {
+                break;
+            }
+        } catch (Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
     }
+
+    return [
+        'upsertedDailyRows' => $upsertedRows,
+        'deletedHourlyRows' => $deletedHourlyRows,
+    ];
 }
 
 function recalculate_auction_stat_from_raw(PDO $db, string $itemId, string $window, ?string $fetchedAt = null): void
