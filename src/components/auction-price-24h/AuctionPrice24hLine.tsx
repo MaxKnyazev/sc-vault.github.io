@@ -7,12 +7,14 @@ type AuctionPrice24hLineProps = {
   itemId: string
   size?: 'xs' | 'sm'
   showNoCacheHint?: boolean
+  hideWhenNoData?: boolean
 }
 
 export function AuctionPrice24hLine({
   itemId,
   size = 'xs',
   showNoCacheHint = true,
+  hideWhenNoData = false,
 }: AuctionPrice24hLineProps) {
   const stat = useAuctionPricesStore((s) => s.byItemId[itemId])
   const isBlacklisted = useAuctionBlacklistStore((s) => s.blacklist.has(itemId))
@@ -26,6 +28,7 @@ export function AuctionPrice24hLine({
   }
 
   if (!stat) {
+    if (hideWhenNoData) return null
     return (
       <Text size={size} c="dimmed" lh={1.35}>
         {showNoCacheHint ? 'Выкупы 12ч: нет кэша — нажмите «Обновить цены аукциона»' : 'Выкупы 12ч: нет данных'}
@@ -34,6 +37,7 @@ export function AuctionPrice24hLine({
   }
 
   if (stat.tradeCount === 0 || stat.avgPerUnit === null) {
+    if (hideWhenNoData) return null
     return (
       <Text size={size} c="dimmed" lh={1.35}>
         Выкупы 12ч: нет сделок

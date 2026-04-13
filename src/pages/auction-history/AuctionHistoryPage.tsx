@@ -1,4 +1,16 @@
-import { Alert, Button, Group, Loader, Modal, ScrollArea, Stack, Text, TextInput } from '@mantine/core'
+import {
+  ActionIcon,
+  Alert,
+  Button,
+  Group,
+  Loader,
+  Modal,
+  ScrollArea,
+  SimpleGrid,
+  Stack,
+  Text,
+  TextInput,
+} from '@mantine/core'
 import { useEffect, useMemo, useState } from 'react'
 import { PageContainer } from '../../components/page-container/PageContainer'
 import { SectionCard } from '../../components/section-card/SectionCard'
@@ -22,6 +34,7 @@ export function AuctionHistoryPage() {
   const [modalSearch, setModalSearch] = useState('')
   const [isAddingItemId, setIsAddingItemId] = useState<string | null>(null)
   const [isRemovingItemId, setIsRemovingItemId] = useState<string | null>(null)
+  const [pendingDeleteItemId, setPendingDeleteItemId] = useState<string | null>(null)
   const [trackedError, setTrackedError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -81,6 +94,10 @@ export function AuctionHistoryPage() {
   }, [allItems, modalSearch])
 
   const trackedSet = useMemo(() => new Set(trackedItemIds), [trackedItemIds])
+  const pendingDeleteItem = useMemo(
+    () => trackedItems.find((item) => item.itemId === pendingDeleteItemId) ?? null,
+    [pendingDeleteItemId, trackedItems],
+  )
 
   return (
     <PageContainer>
@@ -113,7 +130,7 @@ export function AuctionHistoryPage() {
           {error ? <Alert color="red">{error}</Alert> : null}
 
           {!isLoading && !isLoadingTracked ? (
-            <Stack gap="sm">
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
               {filteredTrackedItems.map((item) => (
                 <Stack
                   key={item.itemId}
@@ -131,33 +148,35 @@ export function AuctionHistoryPage() {
                       size="result"
                       showFavoriteButton={false}
                     />
-                    <Button
-                      size="xs"
+                    <ActionIcon
+                      size={40}
                       color="red"
                       variant="light"
+                      aria-label="Удалить из отслеживания"
+                      title="Удалить из отслеживания"
                       loading={isRemovingItemId === item.itemId}
-                      onClick={async () => {
-                        setIsRemovingItemId(item.itemId)
-                        setTrackedError(null)
-                        try {
-                          await removeTrackedAuctionItem(item.itemId)
-                          setTrackedItemIds((prev) => prev.filter((id) => id !== item.itemId))
-                        } catch (e) {
-                          setTrackedError(
-                            e instanceof Error ? e.message : 'Не удалось удалить предмет из отслеживания',
-                          )
-                        } finally {
-                          setIsRemovingItemId(null)
-                        }
-                      }}
+                      onClick={() => setPendingDeleteItemId(item.itemId)}
                     >
-                      Удалить
-                    </Button>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path
+                          d="M3 6h18M8 6V4h8v2m-1 0v13a1 1 0 0 1-1 1H10a1 1 0 0 1-1-1V6m3 4v6m4-6v6"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </ActionIcon>
                   </Group>
-                  <AuctionPrice24hLine itemId={item.itemId} size="sm" showNoCacheHint={false} />
+                  <AuctionPrice24hLine
+                    itemId={item.itemId}
+                    size="sm"
+                    showNoCacheHint={false}
+                    hideWhenNoData
+                  />
                 </Stack>
               ))}
-            </Stack>
+            </SimpleGrid>
           ) : null}
         </Stack>
       </SectionCard>
@@ -169,6 +188,9 @@ export function AuctionHistoryPage() {
         withCloseButton={false}
         centered
         size="lg"
+        removeScrollProps={{
+          removeScrollBar: false,
+        }}
         styles={authModalGlowModalStyles}
       >
         <Stack gap="sm">
@@ -226,6 +248,59 @@ export function AuctionHistoryPage() {
               ))}
             </Stack>
           </ScrollArea.Autosize>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={pendingDeleteItem !== null}
+        onClose={() => {
+          if (!isRemovingItemId) setPendingDeleteItemId(null)
+        }}
+        title={null}
+        withCloseButton={false}
+        centered
+        size="sm"
+        styles={authModalGlowModalStyles}
+      >
+        <Stack gap="sm">
+          <Text size="md" fw={700}>
+            Подтверждение удаления
+          </Text>
+          <Text size="sm">
+            Удалить предмет «{pendingDeleteItem?.name ?? pendingDeleteItem?.itemId ?? ''}» из отслеживания?
+          </Text>
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              color="gray"
+              disabled={Boolean(isRemovingItemId)}
+              onClick={() => setPendingDeleteItemId(null)}
+            >
+              Отмена
+            </Button>
+            <Button
+              color="red"
+              loading={Boolean(isRemovingItemId)}
+              onClick={async () => {
+                if (!pendingDeleteItem) return
+                setIsRemovingItemId(pendingDeleteItem.itemId)
+                setTrackedError(null)
+                try {
+                  await removeTrackedAuctionItem(pendingDeleteItem.itemId)
+                  setTrackedItemIds((prev) => prev.filter((id) => id !== pendingDeleteItem.itemId))
+                  setPendingDeleteItemId(null)
+                } catch (e) {
+                  setTrackedError(
+                    e instanceof Error ? e.message : 'Не удалось удалить предмет из отслеживания',
+                  )
+                } finally {
+                  setIsRemovingItemId(null)
+                }
+              }}
+            >
+              Удалить
+            </Button>
+          </Group>
         </Stack>
       </Modal>
     </PageContainer>
