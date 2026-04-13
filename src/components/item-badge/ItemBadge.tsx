@@ -87,13 +87,30 @@ export function ItemBadge({
           }}
         >
           {iconUrl ? (
-            <img
-              src={iconUrl}
-              alt={name}
-              width={imageSize}
-              height={imageSize}
-              style={{ objectFit: 'contain', objectPosition: 'center center', display: 'block' }}
-            />
+            <Box
+              w={imageSize}
+              h={imageSize}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <img
+                src={iconUrl}
+                alt={name}
+                width={imageSize}
+                height={imageSize}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  objectPosition: 'center center',
+                  display: 'block',
+                  margin: 'auto',
+                }}
+              />
+            </Box>
           ) : null}
         </Box>
         <Text

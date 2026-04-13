@@ -157,11 +157,11 @@ export function AuctionHistoryPage() {
                       loading={isRemovingItemId === item.itemId}
                       onClick={() => setPendingDeleteItemId(item.itemId)}
                     >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path
-                          d="M3 6h18M8 6V4h8v2m-1 0v13a1 1 0 0 1-1 1H10a1 1 0 0 1-1-1V6m3 4v6m4-6v6"
+                          d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"
                           stroke="currentColor"
-                          strokeWidth="1.8"
+                          strokeWidth="2"
                           strokeLinecap="round"
                           strokeLinejoin="round"
                         />
