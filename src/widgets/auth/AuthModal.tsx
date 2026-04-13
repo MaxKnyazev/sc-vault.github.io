@@ -79,6 +79,9 @@ export function AuthModal({ opened, onClose, initialMode = 'login' }: AuthModalP
       withCloseButton={false}
       centered
       size="sm"
+      removeScrollProps={{
+        removeScrollBar: false,
+      }}
       styles={authModalGlowModalStyles}
     >
       <Stack gap="sm" mih={292}>

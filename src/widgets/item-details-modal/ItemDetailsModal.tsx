@@ -26,6 +26,9 @@ export function ItemDetailsModal() {
       withCloseButton={false}
       centered
       size="sm"
+      removeScrollProps={{
+        removeScrollBar: false,
+      }}
       styles={{
         content: {
           boxShadow: modalGlow,

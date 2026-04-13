@@ -70,6 +70,9 @@ export function AdminAuctionTrackingButton({ itemId, itemName }: AdminAuctionTra
         withCloseButton={false}
         centered
         size="sm"
+        removeScrollProps={{
+          removeScrollBar: false,
+        }}
         styles={authModalGlowModalStyles}
       >
         <Stack gap="sm">
