@@ -25,3 +25,13 @@ function add_tracked_auction_item(PDO $db, string $itemId, ?int $userId): void
     $stmt->execute([$normalized, $userId]);
 }
 
+function remove_tracked_auction_item(PDO $db, string $itemId): void
+{
+    $normalized = trim($itemId);
+    if ($normalized === '') {
+        throw new InvalidArgumentException('itemId required');
+    }
+    $stmt = $db->prepare('DELETE FROM auction_tracked_items WHERE item_id = ?');
+    $stmt->execute([$normalized]);
+}
+

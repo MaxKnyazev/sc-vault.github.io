@@ -167,6 +167,23 @@ export async function addTrackedAuctionItem(itemId: string): Promise<void> {
   await parseJsonOrThrow<{ ok?: boolean }>(response)
 }
 
+export async function removeTrackedAuctionItem(itemId: string): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl('/auction/tracked-items/remove')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify({ itemId }),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
 export async function fetchBackendUserBuyPrices(): Promise<Record<string, string>> {
   const token = getBackendAuthToken()
   if (!token) return {}

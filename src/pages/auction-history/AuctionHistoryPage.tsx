@@ -2,10 +2,13 @@ import { Alert, Button, Group, Loader, Modal, ScrollArea, Stack, Text, TextInput
 import { useEffect, useMemo, useState } from 'react'
 import { PageContainer } from '../../components/page-container/PageContainer'
 import { SectionCard } from '../../components/section-card/SectionCard'
-import { AuctionRefreshToolbar } from '../../components/auction-refresh-toolbar/AuctionRefreshToolbar'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { AuctionPrice24hLine } from '../../components/auction-price-24h/AuctionPrice24hLine'
-import { addTrackedAuctionItem, fetchTrackedAuctionItems } from '../../shared/api/backendApi'
+import {
+  addTrackedAuctionItem,
+  fetchTrackedAuctionItems,
+  removeTrackedAuctionItem,
+} from '../../shared/api/backendApi'
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import { authModalGlowModalStyles } from '../../shared/lib/authModalGlowStyles'
@@ -18,6 +21,7 @@ export function AuctionHistoryPage() {
   const [isModalOpened, setIsModalOpened] = useState(false)
   const [modalSearch, setModalSearch] = useState('')
   const [isAddingItemId, setIsAddingItemId] = useState<string | null>(null)
+  const [isRemovingItemId, setIsRemovingItemId] = useState<string | null>(null)
   const [trackedError, setTrackedError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -104,8 +108,6 @@ export function AuctionHistoryPage() {
             </Button>
           </Group>
 
-          <AuctionRefreshToolbar itemIds={trackedItemIds} />
-
           {trackedError ? <Alert color="red">{trackedError}</Alert> : null}
           {isLoading || isLoadingTracked ? <Loader size="sm" /> : null}
           {error ? <Alert color="red">{error}</Alert> : null}
@@ -120,14 +122,39 @@ export function AuctionHistoryPage() {
                   bd="1px solid var(--mantine-color-default-border)"
                   style={{ borderRadius: 8 }}
                 >
-                  <ItemBadge
-                    itemId={item.itemId}
-                    name={item.name}
-                    iconUrl={item.iconUrl}
-                    qualityColor={item.qualityColor}
-                    size="result"
-                  />
-                  <AuctionPrice24hLine itemId={item.itemId} size="sm" />
+                  <Group justify="space-between" align="center" wrap="nowrap">
+                    <ItemBadge
+                      itemId={item.itemId}
+                      name={item.name}
+                      iconUrl={item.iconUrl}
+                      qualityColor={item.qualityColor}
+                      size="result"
+                      showFavoriteButton={false}
+                    />
+                    <Button
+                      size="xs"
+                      color="red"
+                      variant="light"
+                      loading={isRemovingItemId === item.itemId}
+                      onClick={async () => {
+                        setIsRemovingItemId(item.itemId)
+                        setTrackedError(null)
+                        try {
+                          await removeTrackedAuctionItem(item.itemId)
+                          setTrackedItemIds((prev) => prev.filter((id) => id !== item.itemId))
+                        } catch (e) {
+                          setTrackedError(
+                            e instanceof Error ? e.message : 'Не удалось удалить предмет из отслеживания',
+                          )
+                        } finally {
+                          setIsRemovingItemId(null)
+                        }
+                      }}
+                    >
+                      Удалить
+                    </Button>
+                  </Group>
+                  <AuctionPrice24hLine itemId={item.itemId} size="sm" showNoCacheHint={false} />
                 </Stack>
               ))}
             </Stack>
@@ -174,9 +201,10 @@ export function AuctionHistoryPage() {
                     showFavoriteButton={false}
                   />
                   <Button
-                    size="xs"
+                    size="sm"
                     disabled={trackedSet.has(item.itemId)}
                     loading={isAddingItemId === item.itemId}
+                    style={{ minWidth: 112, whiteSpace: 'nowrap', flexShrink: 0 }}
                     onClick={async () => {
                       setIsAddingItemId(item.itemId)
                       setTrackedError(null)

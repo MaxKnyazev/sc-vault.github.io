@@ -6,9 +6,14 @@ import { useAuctionBlacklistStore } from '../../shared/store/auctionBlacklistSto
 type AuctionPrice24hLineProps = {
   itemId: string
   size?: 'xs' | 'sm'
+  showNoCacheHint?: boolean
 }
 
-export function AuctionPrice24hLine({ itemId, size = 'xs' }: AuctionPrice24hLineProps) {
+export function AuctionPrice24hLine({
+  itemId,
+  size = 'xs',
+  showNoCacheHint = true,
+}: AuctionPrice24hLineProps) {
   const stat = useAuctionPricesStore((s) => s.byItemId[itemId])
   const isBlacklisted = useAuctionBlacklistStore((s) => s.blacklist.has(itemId))
 
@@ -23,7 +28,7 @@ export function AuctionPrice24hLine({ itemId, size = 'xs' }: AuctionPrice24hLine
   if (!stat) {
     return (
       <Text size={size} c="dimmed" lh={1.35}>
-        Выкупы 12ч: нет кэша — нажмите «Обновить цены аукциона»
+        {showNoCacheHint ? 'Выкупы 12ч: нет кэша — нажмите «Обновить цены аукциона»' : 'Выкупы 12ч: нет данных'}
       </Text>
     )
   }

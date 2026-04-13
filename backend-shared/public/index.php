@@ -285,6 +285,31 @@ if ($path === '/auction/tracked-items/add') {
     exit;
 }
 
+if ($path === '/auction/tracked-items/remove') {
+    require_method('POST');
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    enforce_auth_user($user);
+    $body = read_json_body();
+    $itemId = trim((string)($body['itemId'] ?? ''));
+    try {
+        remove_tracked_auction_item($db, $itemId);
+    } catch (Throwable $e) {
+        send_json(400, ['error' => $e->getMessage()]);
+        exit;
+    }
+    send_json(200, ['ok' => true]);
+    exit;
+}
+
 if ($path === '/auction-blacklist/add') {
     require_method('POST');
     $token = bearer_token_from_headers();

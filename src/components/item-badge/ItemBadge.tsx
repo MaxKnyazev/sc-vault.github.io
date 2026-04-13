@@ -92,7 +92,7 @@ export function ItemBadge({
               alt={name}
               width={imageSize}
               height={imageSize}
-              style={{ objectFit: 'contain', display: 'block' }}
+              style={{ objectFit: 'contain', objectPosition: 'center center', display: 'block' }}
             />
           ) : null}
         </Box>
