@@ -21,6 +21,7 @@ require $baseDir . '/src/Db.php';
 require $baseDir . '/src/Http.php';
 require $baseDir . '/src/Auth.php';
 require $baseDir . '/src/Auction.php';
+require $baseDir . '/src/AuctionTrackedItems.php';
 require $baseDir . '/src/AuctionBlacklist.php';
 require $baseDir . '/src/UserBuyPrices.php';
 require $baseDir . '/src/RecipeOverrides.php';
@@ -238,6 +239,49 @@ if ($path === '/auction/blacklist') {
     require_method('GET');
     $ids = get_auction_blacklist_item_ids($db);
     send_json(200, ['itemIds' => $ids]);
+    exit;
+}
+
+if ($path === '/auction/tracked-items') {
+    require_method('GET');
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    enforce_auth_user($user);
+    $ids = get_tracked_auction_item_ids($db);
+    send_json(200, ['itemIds' => $ids]);
+    exit;
+}
+
+if ($path === '/auction/tracked-items/add') {
+    require_method('POST');
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    enforce_auth_user($user);
+    $body = read_json_body();
+    $itemId = trim((string)($body['itemId'] ?? ''));
+    try {
+        add_tracked_auction_item($db, $itemId, (int)$user['id']);
+    } catch (Throwable $e) {
+        send_json(400, ['error' => $e->getMessage()]);
+        exit;
+    }
+    send_json(200, ['ok' => true]);
     exit;
 }
 

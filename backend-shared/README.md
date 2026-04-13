@@ -18,7 +18,7 @@
 - `public/index.php` — единая точка входа API
 - `src/` — DB, auth, репозитории
 - `config.php` — конфиг через env или значения по умолчанию
-- `migrations/001_init.sql` + `migrations/002_users_profile_and_roles.sql` + `migrations/003_recipe_result_overrides.sql` + `migrations/004_recipe_result_overrides_decimal_amounts.sql` + `migrations/005_auction_raw_trades.sql` + `migrations/006_auction_item_blacklist.sql` + `migrations/007_auction_rollups.sql` — схема БД
+- `migrations/001_init.sql` + `migrations/002_users_profile_and_roles.sql` + `migrations/003_recipe_result_overrides.sql` + `migrations/004_recipe_result_overrides_decimal_amounts.sql` + `migrations/005_auction_raw_trades.sql` + `migrations/006_auction_item_blacklist.sql` + `migrations/007_auction_rollups.sql` + `migrations/008_auction_tracked_items.sql` — схема БД
 - `cron/update_auction.php` — обновление `auction_stats`
 - `cron/cleanup_tokens.php` — очистка просроченных auth токенов
 
@@ -33,6 +33,7 @@
    - `migrations/005_auction_raw_trades.sql`
    - `migrations/006_auction_item_blacklist.sql`
    - `migrations/007_auction_rollups.sql`
+   - `migrations/008_auction_tracked_items.sql`
 3. Скопируйте `config.example.php` в `config.php` и заполните:
    - DB параметры
    - `EXBO_CLIENT_ID`, `EXBO_CLIENT_SECRET`
@@ -47,6 +48,8 @@
 - `GET /auth/me` (Bearer token)
 - `POST /auth/logout` (Bearer token)
 - `GET /auction/stats?ids=id1,id2&window=12h` (`window` опционален, формат `Nh`)
+- `GET /auction/tracked-items` (user/admin, список отслеживаемых item_id)
+- `POST /auction/tracked-items/add` (user/admin, JSON `{ "itemId": "..." }`)
 - `GET /auction/blacklist` — список `item_id`, не участвующих в аукционе (публично)
 - `POST /auction-blacklist/add` — добавить предмет в чёрный список (только admin, JSON `{ "itemId": "..." }`)
 - `POST /auction-blacklist/remove` — убрать предмет из чёрного списка (только admin, JSON `{ "itemId": "..." }`)

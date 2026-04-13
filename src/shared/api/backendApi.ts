@@ -9,6 +9,10 @@ type AuctionBlacklistResponse = {
   itemIds?: string[]
 }
 
+type TrackedAuctionItemsResponse = {
+  itemIds?: string[]
+}
+
 type UserBuyPricesResponse = {
   prices?: Record<string, { value?: string }>
 }
@@ -117,6 +121,39 @@ export async function removeAuctionBlacklistItem(itemId: string): Promise<void> 
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация администратора')
   const url = buildApiUrl('/auction-blacklist/remove')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify({ itemId }),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function fetchTrackedAuctionItems(): Promise<string[]> {
+  const token = getBackendAuthToken()
+  if (!token) return []
+  const url = buildApiUrl('/auction/tracked-items')
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+  })
+  const payload = await parseJsonOrThrow<TrackedAuctionItemsResponse>(response)
+  return payload.itemIds ?? []
+}
+
+export async function addTrackedAuctionItem(itemId: string): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl('/auction/tracked-items/add')
   const response = await fetch(url, {
     method: 'POST',
     headers: {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 $config = require __DIR__ . '/../config.php';
 require __DIR__ . '/../src/Db.php';
 require __DIR__ . '/../src/Auction.php';
+require __DIR__ . '/../src/AuctionTrackedItems.php';
 require __DIR__ . '/../src/AuctionBlacklist.php';
 
 const HISTORY_LIMIT = 100;
@@ -27,21 +28,31 @@ function read_int_env(string $key, int $fallback): int
 
 function read_item_ids(array $config): array
 {
+    global $db;
     $csv = trim((string)getenv('AUCTION_ITEM_IDS'));
+    $collected = [];
     if ($csv !== '') {
-        return array_values(array_filter(array_unique(array_map('trim', explode(',', $csv)))));
+        $collected = array_values(array_filter(array_unique(array_map('trim', explode(',', $csv)))));
     }
 
     $file = __DIR__ . '/item_ids.txt';
-    if (!file_exists($file)) {
-        return [];
+    if (file_exists($file)) {
+        $lines = file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if (is_array($lines)) {
+            $collected = [...$collected, ...array_values(array_filter(array_unique(array_map('trim', $lines))))];
+        }
     }
 
-    $lines = file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-    if (!is_array($lines)) {
-        return [];
+    if (isset($db) && $db instanceof PDO) {
+        try {
+            $tracked = get_tracked_auction_item_ids($db);
+            $collected = [...$collected, ...$tracked];
+        } catch (Throwable $e) {
+            fwrite(STDERR, "tracked-items read failed: " . $e->getMessage() . "\n");
+        }
     }
-    return array_values(array_filter(array_unique(array_map('trim', $lines))));
+
+    return array_values(array_filter(array_unique(array_map('trim', $collected))));
 }
 
 function fetch_history_page(array $config, string $itemId, int $offset): array
@@ -181,13 +192,12 @@ if ($config['exbo_client_id'] === '' || $config['exbo_client_secret'] === '') {
     exit(1);
 }
 
+$db = db_connect($config);
 $itemIds = read_item_ids($config);
 if (count($itemIds) === 0) {
-    fwrite(STDERR, "No item ids provided (AUCTION_ITEM_IDS or cron/item_ids.txt)\n");
+    fwrite(STDERR, "No item ids provided (AUCTION_ITEM_IDS or cron/item_ids.txt or auction_tracked_items)\n");
     exit(1);
 }
-
-$db = db_connect($config);
 $processed = 0;
 $failed = 0;
 $maxPagesPerItem = read_int_env('AUCTION_MAX_PAGES_PER_ITEM', DEFAULT_MAX_PAGES_PER_ITEM);

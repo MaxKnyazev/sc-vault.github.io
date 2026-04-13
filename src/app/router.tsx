@@ -7,6 +7,7 @@ import { NotFoundPage } from '../pages/not-found/NotFoundPage'
 import { ProfilePage } from '../pages/profile/ProfilePage'
 import { RequireRole } from './RequireRole'
 import { UsersPage } from '../pages/users/UsersPage'
+import { AuctionHistoryPage } from '../pages/auction-history/AuctionHistoryPage'
 
 export const appRouter = createBrowserRouter(
   [
@@ -35,6 +36,16 @@ export const appRouter = createBrowserRouter(
             {
               index: true,
               element: <IngredientsPage />,
+            },
+          ],
+        },
+        {
+          path: 'auction-history',
+          element: <RequireRole minimumRole="user" />,
+          children: [
+            {
+              index: true,
+              element: <AuctionHistoryPage />,
             },
           ],
         },
