@@ -15,6 +15,7 @@ import { useDisclosure } from '@mantine/hooks'
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { ItemDetailsModal } from '../item-details-modal/ItemDetailsModal'
+import { AuctionHistoryItemModal } from '../auction-history-item-modal/AuctionHistoryItemModal'
 import { useAuthStore } from '../../shared/store/authStore'
 import { getRoleLabel } from '../../shared/lib/authRole'
 import { AuthModal } from '../auth/AuthModal'
@@ -91,7 +92,8 @@ export function AppShellLayout() {
       padding="md"
       styles={{
         root: {
-          backgroundColor: isDark ? undefined : '#ffffff',
+          '--app-layout-bg': isDark ? '#0f1115' : '#ffffff',
+          backgroundColor: 'var(--app-layout-bg)',
         },
       }}
     >
@@ -299,6 +301,7 @@ export function AppShellLayout() {
         />
         <Outlet />
         <ItemDetailsModal />
+        <AuctionHistoryItemModal />
         <AuthModal opened={authOpened} onClose={authModalHandlers.close} initialMode={authMode} />
       </AppShell.Main>
     </AppShell>

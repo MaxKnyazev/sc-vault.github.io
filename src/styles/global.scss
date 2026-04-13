@@ -41,6 +41,13 @@ body {
   background: rgba(175, 175, 175, 0.55);
 }
 
+@media (min-width: 48.001em) {
+  .mantine-AppShell-navbar {
+    background: var(--app-layout-bg) !important;
+    border-inline-end: 0 !important;
+  }
+}
+
 @media (max-width: 48em) {
   .mantine-AppShell-navbar {
     padding-top: 44px !important;
