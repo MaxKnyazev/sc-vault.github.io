@@ -18,7 +18,7 @@
 - `public/index.php` — единая точка входа API
 - `src/` — DB, auth, репозитории
 - `config.php` — конфиг через env или значения по умолчанию
-- `migrations/001_init.sql` + `migrations/002_users_profile_and_roles.sql` + `migrations/003_recipe_result_overrides.sql` + `migrations/004_recipe_result_overrides_decimal_amounts.sql` + `migrations/005_auction_raw_trades.sql` + `migrations/006_auction_item_blacklist.sql` — схема БД
+- `migrations/001_init.sql` + `migrations/002_users_profile_and_roles.sql` + `migrations/003_recipe_result_overrides.sql` + `migrations/004_recipe_result_overrides_decimal_amounts.sql` + `migrations/005_auction_raw_trades.sql` + `migrations/006_auction_item_blacklist.sql` + `migrations/007_auction_rollups.sql` — схема БД
 - `cron/update_auction.php` — обновление `auction_stats`
 - `cron/cleanup_tokens.php` — очистка просроченных auth токенов
 
@@ -32,6 +32,7 @@
    - `migrations/004_recipe_result_overrides_decimal_amounts.sql`
    - `migrations/005_auction_raw_trades.sql`
    - `migrations/006_auction_item_blacklist.sql`
+   - `migrations/007_auction_rollups.sql`
 3. Скопируйте `config.example.php` в `config.php` и заполните:
    - DB параметры
    - `EXBO_CLIENT_ID`, `EXBO_CLIENT_SECRET`
@@ -88,6 +89,14 @@ Auth contract:
 - `AUCTION_PROGRESS_EVERY` (default `25`)
 - `AUCTION_COLLECT_LOOKBACK_MINUTES` (default `65`) — окно сбора сырых лотов
 - `AUCTION_STATS_WINDOWS` (default `12h`) — CSV окон для пересчета `auction_stats`, пример: `1h,12h,24h`
+- `AUCTION_RAW_RETENTION_HOURS` (default `24`) — сколько хранить `auction_raw_trades`
+- `AUCTION_HOURLY_RETENTION_DAYS` (default `7`) — сколько хранить `auction_hourly_stats` перед переносом в `auction_daily_stats`
+
+Ротация данных аукциона:
+
+- `auction_raw_trades`: храним 24 часа.
+- `auction_hourly_stats`: агрегируем из raw по часам, храним 7 суток.
+- `auction_daily_stats`: сводка по дням, в нее переносятся часы старше 7 суток.
 
 ## 6. Безопасность
 

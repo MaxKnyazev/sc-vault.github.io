@@ -14,6 +14,8 @@ const DEFAULT_SLEEP_BETWEEN_ITEMS_MS = 0;
 const DEFAULT_PROGRESS_EVERY = 25;
 const DEFAULT_COLLECT_LOOKBACK_MINUTES = 65;
 const DEFAULT_STATS_WINDOWS = '12h';
+const DEFAULT_RAW_RETENTION_HOURS = 24;
+const DEFAULT_HOURLY_RETENTION_DAYS = 7;
 
 function read_int_env(string $key, int $fallback): int
 {
@@ -195,10 +197,13 @@ $progressEvery = max(1, read_int_env('AUCTION_PROGRESS_EVERY', DEFAULT_PROGRESS_
 $itemLimit = read_int_env('AUCTION_ITEM_LIMIT', 0);
 $lookbackMinutes = max(1, read_int_env('AUCTION_COLLECT_LOOKBACK_MINUTES', DEFAULT_COLLECT_LOOKBACK_MINUTES));
 $statsWindows = parse_window_names((string)getenv('AUCTION_STATS_WINDOWS') ?: DEFAULT_STATS_WINDOWS);
+$rawRetentionHours = max(1, read_int_env('AUCTION_RAW_RETENTION_HOURS', DEFAULT_RAW_RETENTION_HOURS));
+$hourlyRetentionDays = max(1, read_int_env('AUCTION_HOURLY_RETENTION_DAYS', DEFAULT_HOURLY_RETENTION_DAYS));
 $targetItemIds = $itemLimit > 0 ? array_slice($itemIds, 0, $itemLimit) : $itemIds;
 $targetItemIds = filter_item_ids_not_blacklisted($db, $targetItemIds);
 $insertedTotal = 0;
 $seenTotal = 0;
+$hourlyUpsertRowsTotal = 0;
 
 foreach ($targetItemIds as $idx => $itemId) {
     try {
@@ -213,6 +218,7 @@ foreach ($targetItemIds as $idx => $itemId) {
         foreach ($statsWindows as $windowName) {
             recalculate_auction_stat_from_raw($db, $itemId, $windowName, $collect['fetchedAt']);
         }
+        $hourlyUpsertRowsTotal += rebuild_hourly_stats_from_raw_for_item($db, $itemId, $rawRetentionHours);
         $insertedTotal += (int)$collect['insertedCount'];
         $seenTotal += (int)$collect['seenCount'];
         $processed++;
@@ -237,13 +243,20 @@ foreach ($targetItemIds as $idx => $itemId) {
     }
 }
 
+$deletedRawRows = purge_raw_trades_older_than_hours($db, $rawRetentionHours);
+$rollup = rollup_hourly_to_daily_and_purge($db, $hourlyRetentionDays);
+
 fwrite(STDOUT, sprintf(
-    "auction cron done: total=%d ok=%d failed=%d seen=%d inserted=%d windows=%s\n",
+    "auction cron done: total=%d ok=%d failed=%d seen=%d inserted=%d hourly_upserts=%d raw_purged=%d hourly_purged=%d daily_upserted=%d windows=%s\n",
     count($targetItemIds),
     $processed,
     $failed,
     $seenTotal,
     $insertedTotal,
+    $hourlyUpsertRowsTotal,
+    $deletedRawRows,
+    (int)$rollup['deletedHourlyRows'],
+    (int)$rollup['upsertedDailyRows'],
     implode(',', $statsWindows)
 ));
 
