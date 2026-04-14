@@ -250,13 +250,14 @@ if ($path === '/auction/history') {
     enforce_auth_user($user);
     $itemId = trim((string)($_GET['itemId'] ?? ''));
     $range = trim((string)($_GET['range'] ?? '7d'));
+    $quality = trim((string)($_GET['quality'] ?? 'all'));
     try {
-        $points = get_auction_item_history($db, $itemId, $range);
+        $points = get_auction_item_history($db, $itemId, $range, $quality);
     } catch (Throwable $e) {
         send_json(400, ['error' => $e->getMessage()]);
         exit;
     }
-    send_json(200, ['itemId' => $itemId, 'range' => $range, 'points' => $points]);
+    send_json(200, ['itemId' => $itemId, 'range' => $range, 'quality' => $quality, 'points' => $points]);
     exit;
 }
 

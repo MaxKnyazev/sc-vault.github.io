@@ -40,12 +40,13 @@ function upsert_auction_raw_trade(PDO $db, array $trade): bool
 {
     $stmt = $db->prepare(
         'INSERT INTO auction_raw_trades
-          (item_id, sold_at, amount, price, source_offset, source_row_index, collected_at, dedup_key, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())
+          (item_id, quality_key, sold_at, amount, price, source_offset, source_row_index, collected_at, dedup_key, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())
          ON DUPLICATE KEY UPDATE dedup_key = dedup_key'
     );
     $stmt->execute([
         $trade['itemId'],
+        $trade['qualityKey'],
         $trade['soldAt'],
         $trade['amount'],
         $trade['price'],
@@ -64,9 +65,10 @@ function rebuild_hourly_stats_from_raw_for_item(PDO $db, string $itemId, int $ra
     $windowExpr = sprintf('UTC_TIMESTAMP() - INTERVAL %d HOUR', $hours);
     $stmt = $db->prepare(
         "INSERT INTO auction_hourly_stats
-          (item_id, hour_start, total_qty, total_revenue, trade_count, avg_per_unit, source_min_sold_at, source_max_sold_at, fetched_at, updated_at)
+          (item_id, quality_key, hour_start, total_qty, total_revenue, trade_count, avg_per_unit, source_min_sold_at, source_max_sold_at, fetched_at, updated_at)
          SELECT
           item_id,
+          quality_key,
           DATE_FORMAT(sold_at, '%Y-%m-%d %H:00:00') AS hour_start,
           COALESCE(SUM(amount), 0) AS total_qty,
           COALESCE(SUM(price), 0) AS total_revenue,
@@ -78,7 +80,7 @@ function rebuild_hourly_stats_from_raw_for_item(PDO $db, string $itemId, int $ra
           UTC_TIMESTAMP() AS updated_at
          FROM auction_raw_trades
          WHERE item_id = ? AND sold_at >= {$windowExpr}
-         GROUP BY item_id, DATE_FORMAT(sold_at, '%Y-%m-%d %H:00:00')
+         GROUP BY item_id, quality_key, DATE_FORMAT(sold_at, '%Y-%m-%d %H:00:00')
          ON DUPLICATE KEY UPDATE
           total_qty = VALUES(total_qty),
           total_revenue = VALUES(total_revenue),
@@ -132,9 +134,10 @@ function rollup_hourly_to_daily_and_purge(PDO $db, int $hourlyRetentionDays, int
         try {
             $insertStmt = $db->prepare(
                 "INSERT INTO auction_daily_stats
-                  (item_id, day_date, total_qty, total_revenue, trade_count, avg_per_unit, source_hours_count, fetched_at, updated_at)
+                  (item_id, quality_key, day_date, total_qty, total_revenue, trade_count, avg_per_unit, source_hours_count, fetched_at, updated_at)
                  SELECT
                   item_id,
+                  quality_key,
                   DATE(hour_start) AS day_date,
                   COALESCE(SUM(total_qty), 0) AS total_qty,
                   COALESCE(SUM(total_revenue), 0) AS total_revenue,
@@ -144,13 +147,13 @@ function rollup_hourly_to_daily_and_purge(PDO $db, int $hourlyRetentionDays, int
                   UTC_TIMESTAMP() AS fetched_at,
                   UTC_TIMESTAMP() AS updated_at
                  FROM (
-                    SELECT item_id, hour_start, total_qty, total_revenue, trade_count
+                    SELECT item_id, quality_key, hour_start, total_qty, total_revenue, trade_count
                     FROM auction_hourly_stats
                     WHERE hour_start < {$cutoffExpr}
                     ORDER BY hour_start
                     LIMIT {$limit}
                  ) AS batch
-                 GROUP BY item_id, DATE(hour_start)
+                 GROUP BY item_id, quality_key, DATE(hour_start)
                  ON DUPLICATE KEY UPDATE
                   total_qty = total_qty + VALUES(total_qty),
                   total_revenue = total_revenue + VALUES(total_revenue),
@@ -276,14 +279,81 @@ function normalize_history_range(string $range): string
     return $normalized;
 }
 
-function get_auction_item_history(PDO $db, string $itemId, string $range = '7d'): array
+function normalize_history_quality(string $quality): string
+{
+    $normalized = strtolower(trim($quality));
+    $allowed = ['all', 'normal', 'uncommon', 'special', 'rare', 'exclusive', 'legendary', 'unique', 'unknown'];
+    if (!in_array($normalized, $allowed, true)) {
+        throw new InvalidArgumentException('Invalid history quality');
+    }
+    return $normalized;
+}
+
+function normalize_quality_key_from_additional(mixed $additional): string
+{
+    if (is_array($additional)) {
+        $value = $additional['quality'] ?? $additional['qlt'] ?? $additional['grade'] ?? null;
+        if ($value !== null) {
+            return normalize_quality_key_from_additional($value);
+        }
+    }
+
+    if (is_int($additional) || is_float($additional) || (is_string($additional) && preg_match('/^-?\d+$/', trim($additional)))) {
+        $n = (int)$additional;
+        return match ($n) {
+            0, 1 => 'normal',
+            2 => 'uncommon',
+            3 => 'special',
+            4 => 'rare',
+            5 => 'exclusive',
+            6 => 'legendary',
+            7 => 'unique',
+            default => 'unknown',
+        };
+    }
+
+    if (is_string($additional)) {
+        $raw = strtolower(trim($additional));
+        if ($raw === '') return 'normal';
+        $map = [
+            'normal' => 'normal',
+            'common' => 'normal',
+            'обычный' => 'normal',
+            'uncommon' => 'uncommon',
+            'необычный' => 'uncommon',
+            'special' => 'special',
+            'особый' => 'special',
+            'rare' => 'rare',
+            'редкий' => 'rare',
+            'exclusive' => 'exclusive',
+            'exceptional' => 'exclusive',
+            'исключительный' => 'exclusive',
+            'legendary' => 'legendary',
+            'легендарный' => 'legendary',
+            'unique' => 'unique',
+            'уникальный' => 'unique',
+        ];
+        return $map[$raw] ?? 'unknown';
+    }
+
+    return 'normal';
+}
+
+function get_auction_item_history(PDO $db, string $itemId, string $range = '7d', string $quality = 'all'): array
 {
     $normalizedItemId = trim($itemId);
     if ($normalizedItemId === '') {
         throw new InvalidArgumentException('itemId required');
     }
     $normalizedRange = normalize_history_range($range);
+    $normalizedQuality = normalize_history_quality($quality);
     $points = [];
+    $qualityCondition = '';
+    $qualityParams = [];
+    if ($normalizedQuality !== 'all') {
+        $qualityCondition = ' AND quality_key = ?';
+        $qualityParams[] = $normalizedQuality;
+    }
     $push = static function (array &$acc, string $bucket, float $qty, float $revenue, int $trades): void {
         if (!isset($acc[$bucket])) {
             $acc[$bucket] = ['totalQty' => 0.0, 'totalRevenue' => 0.0, 'tradeCount' => 0];
@@ -304,9 +374,10 @@ function get_auction_item_history(PDO $db, string $itemId, string $range = '7d')
              FROM auction_raw_trades
              WHERE item_id = ?
                AND sold_at >= UTC_TIMESTAMP() - INTERVAL {$hours} HOUR
+               {$qualityCondition}
              GROUP BY DATE_FORMAT(sold_at, '%Y-%m-%d %H:00:00')"
         );
-        $rawStmt->execute([$normalizedItemId]);
+        $rawStmt->execute([...[$normalizedItemId], ...$qualityParams]);
         foreach ($rawStmt->fetchAll() as $row) {
             $push(
                 $points,
@@ -328,9 +399,10 @@ function get_auction_item_history(PDO $db, string $itemId, string $range = '7d')
                  WHERE item_id = ?
                    AND hour_start >= UTC_TIMESTAMP() - INTERVAL 7 DAY
                    AND hour_start < UTC_TIMESTAMP() - INTERVAL 24 HOUR
+                   {$qualityCondition}
                  GROUP BY DATE_FORMAT(hour_start, '%Y-%m-%d %H:00:00')"
             );
-            $hourlyStmt->execute([$normalizedItemId]);
+            $hourlyStmt->execute([...[$normalizedItemId], ...$qualityParams]);
             foreach ($hourlyStmt->fetchAll() as $row) {
                 $push(
                     $points,
@@ -352,9 +424,10 @@ function get_auction_item_history(PDO $db, string $itemId, string $range = '7d')
              FROM auction_raw_trades
              WHERE item_id = ?
                AND sold_at >= UTC_DATE() - INTERVAL {$days} DAY
+               {$qualityCondition}
              GROUP BY DATE(sold_at)"
         );
-        $rawStmt->execute([$normalizedItemId]);
+        $rawStmt->execute([...[$normalizedItemId], ...$qualityParams]);
         foreach ($rawStmt->fetchAll() as $row) {
             $push(
                 $points,
@@ -375,9 +448,10 @@ function get_auction_item_history(PDO $db, string $itemId, string $range = '7d')
              WHERE item_id = ?
                AND hour_start >= UTC_DATE() - INTERVAL {$days} DAY
                AND hour_start < UTC_TIMESTAMP() - INTERVAL 24 HOUR
+               {$qualityCondition}
              GROUP BY DATE(hour_start)"
         );
-        $hourlyStmt->execute([$normalizedItemId]);
+        $hourlyStmt->execute([...[$normalizedItemId], ...$qualityParams]);
         foreach ($hourlyStmt->fetchAll() as $row) {
             $push(
                 $points,
@@ -398,9 +472,10 @@ function get_auction_item_history(PDO $db, string $itemId, string $range = '7d')
              WHERE item_id = ?
                AND day_date >= UTC_DATE() - INTERVAL {$days} DAY
                AND day_date < UTC_DATE() - INTERVAL 7 DAY
+               {$qualityCondition}
              GROUP BY day_date"
         );
-        $dailyStmt->execute([$normalizedItemId]);
+        $dailyStmt->execute([...[$normalizedItemId], ...$qualityParams]);
         foreach ($dailyStmt->fetchAll() as $row) {
             $push(
                 $points,

@@ -14,6 +14,16 @@ type TrackedAuctionItemsResponse = {
 }
 
 export type AuctionHistoryRange = '24h' | '7d' | '30d' | '90d'
+export type AuctionHistoryQuality =
+  | 'all'
+  | 'normal'
+  | 'uncommon'
+  | 'special'
+  | 'rare'
+  | 'exclusive'
+  | 'legendary'
+  | 'unique'
+  | 'unknown'
 export type AuctionHistoryPoint = {
   ts: string
   avgPerUnit: number | null
@@ -24,6 +34,7 @@ export type AuctionHistoryPoint = {
 type AuctionHistoryResponse = {
   itemId?: string
   range?: AuctionHistoryRange
+  quality?: AuctionHistoryQuality
   points?: AuctionHistoryPoint[]
 }
 
@@ -184,11 +195,12 @@ export async function addTrackedAuctionItem(itemId: string): Promise<void> {
 export async function fetchAuctionItemHistory(
   itemId: string,
   range: AuctionHistoryRange,
+  quality: AuctionHistoryQuality = 'all',
 ): Promise<AuctionHistoryPoint[]> {
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация')
   const url = buildApiUrl(
-    `/auction/history?itemId=${encodeURIComponent(itemId)}&range=${encodeURIComponent(range)}`,
+    `/auction/history?itemId=${encodeURIComponent(itemId)}&range=${encodeURIComponent(range)}&quality=${encodeURIComponent(quality)}`,
   )
   const response = await fetch(url, {
     method: 'GET',

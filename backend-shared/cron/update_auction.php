@@ -60,7 +60,7 @@ function fetch_history_page(array $config, string $itemId, int $offset): array
     $base = rtrim((string)$config['auction_api_base_url'], '/');
     $region = strtolower((string)$config['auction_region']);
     $url = sprintf(
-        '%s/%s/auction/%s/history?offset=%d&limit=%d&additional=false',
+        '%s/%s/auction/%s/history?offset=%d&limit=%d&additional=true',
         $base,
         $region,
         rawurlencode($itemId),
@@ -142,10 +142,12 @@ function collect_raw_trades_for_item(
                 $amount = (int)($row['amount'] ?? 0);
                 $price = (float)($row['price'] ?? 0);
                 $soldAt = gmdate('Y-m-d H:i:s', $t);
+                $qualityKey = normalize_quality_key_from_additional($row['additional'] ?? null);
                 $dedupKey = hash(
                     'sha256',
                     implode('|', [
                         $itemId,
+                        $qualityKey,
                         $soldAt,
                         (string)$amount,
                         sprintf('%.2f', $price),
@@ -156,6 +158,7 @@ function collect_raw_trades_for_item(
 
                 $inserted = upsert_auction_raw_trade($db, [
                     'itemId' => $itemId,
+                    'qualityKey' => $qualityKey,
                     'soldAt' => $soldAt,
                     'amount' => $amount,
                     'price' => $price,
