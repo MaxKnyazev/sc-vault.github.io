@@ -303,11 +303,12 @@ if ($path === '/auction/tracked-items/add') {
     $itemId = trim((string)($body['itemId'] ?? ''));
     try {
         add_tracked_auction_item($db, $itemId, (int)$user['id']);
+        $sync = sync_tracked_item_history($db, $config, $itemId);
     } catch (Throwable $e) {
         send_json(400, ['error' => $e->getMessage()]);
         exit;
     }
-    send_json(200, ['ok' => true]);
+    send_json(200, ['ok' => true, 'sync' => $sync]);
     exit;
 }
 

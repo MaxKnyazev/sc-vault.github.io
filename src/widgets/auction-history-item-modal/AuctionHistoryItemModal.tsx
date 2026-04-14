@@ -295,21 +295,27 @@ export function AuctionHistoryItemModal() {
         </Group>
 
         {error ? <Alert color="red">{error}</Alert> : null}
-        {isLoading ? <Loader size="sm" /> : null}
 
-        {!isLoading && !error ? (
-          <>
-            <Text size="sm" c="dimmed">
-              {latestPrice !== null ? `Текущая средняя цена: ${formatAuctionRub(latestPrice)} ₽` : 'Нет данных по цене'}
-              {` · Лотов: ${totalTrades} · ZOOM x${zoom.toFixed(1)}`}
-            </Text>
-            {series.length >= 1 ? (
-              <Box
-                pos="relative"
-                p="xs"
-                bd="1px solid var(--mantine-color-default-border)"
-                style={{ borderRadius: 8 }}
-              >
+        <Text size="sm" c="dimmed">
+          {latestPrice !== null ? `Текущая средняя цена: ${formatAuctionRub(latestPrice)} ₽` : 'Нет данных по цене'}
+          {` · Лотов: ${totalTrades} · ZOOM x${zoom.toFixed(1)}`}
+        </Text>
+
+        <Box
+          pos="relative"
+          style={{
+            minHeight: 350,
+            display: 'flex',
+            alignItems: 'stretch',
+          }}
+        >
+          {series.length >= 1 ? (
+            <Box
+              pos="relative"
+              p="xs"
+              bd="1px solid var(--mantine-color-default-border)"
+              style={{ borderRadius: 8, width: '100%' }}
+            >
                 <svg
                   width="100%"
                   viewBox={`0 0 ${CHART_VB.w} ${CHART_VB.h}`}
@@ -466,14 +472,42 @@ export function AuctionHistoryItemModal() {
                     max: {formatAuctionRub(maxPrice)} ₽
                   </Text>
                 </Group>
-              </Box>
-            ) : (
+            </Box>
+          ) : (
+            <Box
+              p="xs"
+              bd="1px solid var(--mantine-color-default-border)"
+              style={{
+                borderRadius: 8,
+                width: '100%',
+                minHeight: 330,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
               <Text size="sm" c="dimmed">
                 Недостаточно точек для графика.
               </Text>
-            )}
-          </>
-        ) : null}
+            </Box>
+          )}
+          {isLoading ? (
+            <Box
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'color-mix(in srgb, var(--mantine-color-body) 75%, transparent)',
+                borderRadius: 8,
+                zIndex: 6,
+              }}
+            >
+              <Loader size="sm" />
+            </Box>
+          ) : null}
+        </Box>
       </Stack>
     </Modal>
   )

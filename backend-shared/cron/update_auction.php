@@ -142,7 +142,7 @@ function collect_raw_trades_for_item(
                 $amount = (int)($row['amount'] ?? 0);
                 $price = (float)($row['price'] ?? 0);
                 $soldAt = gmdate('Y-m-d H:i:s', $t);
-                $qualityKey = normalize_quality_key_from_additional($row['additional'] ?? null);
+                $qualityKey = normalize_quality_key_from_trade_row($row);
                 $dedupKey = hash(
                     'sha256',
                     implode('|', [
