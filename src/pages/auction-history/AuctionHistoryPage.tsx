@@ -25,7 +25,6 @@ import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import { authModalGlowModalStyles } from '../../shared/lib/authModalGlowStyles'
 import { useAuctionHistoryItemModalStore } from '../../shared/store/auctionHistoryItemModalStore'
-import { AuctionHistoryItemModal } from '../../widgets/auction-history-item-modal/AuctionHistoryItemModal'
 
 export function AuctionHistoryPage() {
   const { itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
@@ -310,7 +309,6 @@ export function AuctionHistoryPage() {
           </Group>
         </Stack>
       </Modal>
-      <AuctionHistoryItemModal />
     </PageContainer>
   )
 }

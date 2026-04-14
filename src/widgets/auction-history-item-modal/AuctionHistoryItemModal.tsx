@@ -66,6 +66,17 @@ function pickXTickIndices(count: number, maxTicks: number): number[] {
   return [...new Set(out)].sort((a, b) => a - b)
 }
 
+function pickYTickValues(min: number, max: number, tickCount: number): number[] {
+  if (tickCount <= 1) return [min]
+  const span = max - min
+  if (span <= 0) return [min]
+  const values: number[] = []
+  for (let i = 0; i < tickCount; i += 1) {
+    values.push(min + (i / (tickCount - 1)) * span)
+  }
+  return values
+}
+
 function formatHistoryAxisLabel(ts: string, range: AuctionHistoryRange): string {
   const d = new Date(ts)
   if (Number.isNaN(d.getTime())) return ts
@@ -127,7 +138,10 @@ export function AuctionHistoryItemModal() {
     () => (series.length === 0 ? '' : series.map((s) => `${s.x},${s.y}`).join(' ')),
     [series],
   )
-  const xTickIndices = useMemo(() => pickXTickIndices(series.length, 6), [series.length])
+  const xTickTarget = useMemo(() => Math.max(6, Math.min(20, Math.round(6 + (zoom - 1) * 1.6))), [zoom])
+  const xTickIndices = useMemo(() => pickXTickIndices(series.length, xTickTarget), [series.length, xTickTarget])
+  const yTickTarget = useMemo(() => Math.max(3, Math.min(7, Math.round(3 + (zoom - 1) * 0.35))), [zoom])
+  const yTicks = useMemo(() => pickYTickValues(minPrice, maxPrice, yTickTarget), [minPrice, maxPrice, yTickTarget])
   const [chartHover, setChartHover] = useState<null | { x: number; y: number; point: AuctionHistoryPoint }>(null)
 
   const handleSvgWheel = (e: WheelEvent<SVGSVGElement>) => {
@@ -335,6 +349,41 @@ export function AuctionHistoryItemModal() {
                     strokeOpacity={0.35}
                     strokeWidth={1}
                   />
+                  {yTicks.map((value, idx) => {
+                    const y =
+                      maxPrice === minPrice
+                        ? CHART_MARGIN.top + plotH / 2
+                        : CHART_MARGIN.top + plotH - ((value - minPrice) / (maxPrice - minPrice)) * plotH
+                    return (
+                      <line
+                        key={`y-grid-${idx}`}
+                        x1={CHART_MARGIN.left}
+                        y1={y}
+                        x2={CHART_MARGIN.left + plotW}
+                        y2={y}
+                        stroke="currentColor"
+                        strokeOpacity={idx === 0 || idx === yTicks.length - 1 ? 0.12 : 0.2}
+                        strokeDasharray="3 4"
+                        strokeWidth={1}
+                      />
+                    )
+                  })}
+                  {xTickIndices.map((idx) => {
+                    const s = series[idx]
+                    return (
+                      <line
+                        key={`x-grid-${s.point.ts}-${idx}`}
+                        x1={s.x}
+                        y1={CHART_MARGIN.top}
+                        x2={s.x}
+                        y2={CHART_MARGIN.top + plotH}
+                        stroke="currentColor"
+                        strokeOpacity={0.15}
+                        strokeDasharray="3 4"
+                        strokeWidth={1}
+                      />
+                    )
+                  })}
                   {polyline ? (
                     <polyline
                       points={polyline}
