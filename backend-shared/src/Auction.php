@@ -436,6 +436,8 @@ function get_auction_item_history(PDO $db, string $itemId, string $range = '7d',
     $plan = get_history_plan($normalizedRange, $normalizedZoom);
     $toTs = time();
     $fromTs = $toTs - $plan['rangeSec'];
+    $fromUtc = gmdate('Y-m-d H:i:s', $fromTs);
+    $toUtc = gmdate('Y-m-d H:i:s', $toTs);
     $buckets = [];
     $qualityCondition = '';
     $qualityParams = [];
@@ -457,57 +459,54 @@ function get_auction_item_history(PDO $db, string $itemId, string $range = '7d',
         $acc[$bucketTs]['tradeCount'] += $trades;
     };
 
-    $rawQuery = static function (PDO $dbConn, string $item, int $startTs, int $endTs, string $condition, array $params): array {
-        if ($startTs >= $endTs) return [];
+    $rawQuery = static function (PDO $dbConn, string $item, string $startUtc, string $endUtc, string $condition, array $params): array {
         $rawStmt = $dbConn->prepare(
             "SELECT
-                UNIX_TIMESTAMP(sold_at) AS event_ts,
+                DATE_FORMAT(sold_at, '%Y-%m-%d %H:%i:%s') AS event_at,
                 amount AS total_qty,
                 price AS total_revenue,
                 1 AS trade_count
              FROM auction_raw_trades
              WHERE item_id = ?
-               AND sold_at >= FROM_UNIXTIME(?)
-               AND sold_at < FROM_UNIXTIME(?)
+               AND sold_at >= ?
+               AND sold_at < ?
                {$condition}"
         );
-        $rawStmt->execute([...[$item, $startTs, $endTs], ...$params]);
+        $rawStmt->execute([...[$item, $startUtc, $endUtc], ...$params]);
         return $rawStmt->fetchAll();
     };
 
-    $hourlyQuery = static function (PDO $dbConn, string $item, int $startTs, int $endTs, string $condition, array $params): array {
-        if ($startTs >= $endTs) return [];
+    $hourlyQuery = static function (PDO $dbConn, string $item, string $startUtc, string $endUtc, string $condition, array $params): array {
         $hourlyStmt = $dbConn->prepare(
             "SELECT
-                UNIX_TIMESTAMP(hour_start) AS event_ts,
+                DATE_FORMAT(hour_start, '%Y-%m-%d %H:%i:%s') AS event_at,
                 total_qty,
                 total_revenue,
                 trade_count
              FROM auction_hourly_stats
              WHERE item_id = ?
-               AND hour_start >= FROM_UNIXTIME(?)
-               AND hour_start < FROM_UNIXTIME(?)
+               AND hour_start >= ?
+               AND hour_start < ?
                {$condition}"
         );
-        $hourlyStmt->execute([...[$item, $startTs, $endTs], ...$params]);
+        $hourlyStmt->execute([...[$item, $startUtc, $endUtc], ...$params]);
         return $hourlyStmt->fetchAll();
     };
 
-    $dailyQuery = static function (PDO $dbConn, string $item, int $startTs, int $endTs, string $condition, array $params): array {
-        if ($startTs >= $endTs) return [];
+    $dailyQuery = static function (PDO $dbConn, string $item, string $startUtc, string $endUtc, string $condition, array $params): array {
         $dailyStmt = $dbConn->prepare(
             "SELECT
-                UNIX_TIMESTAMP(day_date) AS event_ts,
+                CONCAT(day_date, ' 00:00:00') AS event_at,
                 total_qty,
                 total_revenue,
                 trade_count
              FROM auction_daily_stats
              WHERE item_id = ?
-               AND day_date >= DATE(FROM_UNIXTIME(?))
-               AND day_date < DATE(FROM_UNIXTIME(?))
+               AND day_date >= DATE(?)
+               AND day_date < DATE(?)
                {$condition}"
         );
-        $dailyStmt->execute([...[$item, $startTs, $endTs], ...$params]);
+        $dailyStmt->execute([...[$item, $startUtc, $endUtc], ...$params]);
         return $dailyStmt->fetchAll();
     };
 
@@ -515,42 +514,57 @@ function get_auction_item_history(PDO $db, string $itemId, string $range = '7d',
     $hourlyRows = [];
     $dailyRows = [];
     if ($plan['bucketSec'] < 3600) {
-        $rawRows = $rawQuery($db, $normalizedItemId, $fromTs, $toTs, $qualityCondition, $qualityParams);
+        $rawRows = $rawQuery($db, $normalizedItemId, $fromUtc, $toUtc, $qualityCondition, $qualityParams);
     } elseif ($plan['bucketSec'] < 86400) {
         $rawStart = max($fromTs, $toTs - 24 * 3600);
-        $rawRows = $rawQuery($db, $normalizedItemId, $rawStart, $toTs, $qualityCondition, $qualityParams);
+        $rawRows = $rawQuery(
+            $db,
+            $normalizedItemId,
+            gmdate('Y-m-d H:i:s', $rawStart),
+            $toUtc,
+            $qualityCondition,
+            $qualityParams
+        );
         $hourlyRows = $hourlyQuery(
             $db,
             $normalizedItemId,
-            $fromTs,
-            min($toTs, $toTs - 24 * 3600),
+            $fromUtc,
+            gmdate('Y-m-d H:i:s', min($toTs, $toTs - 24 * 3600)),
             $qualityCondition,
             $qualityParams
         );
     } else {
         $rawStart = max($fromTs, $toTs - 24 * 3600);
-        $rawRows = $rawQuery($db, $normalizedItemId, $rawStart, $toTs, $qualityCondition, $qualityParams);
+        $rawRows = $rawQuery(
+            $db,
+            $normalizedItemId,
+            gmdate('Y-m-d H:i:s', $rawStart),
+            $toUtc,
+            $qualityCondition,
+            $qualityParams
+        );
         $dailyCutoffTs = strtotime(gmdate('Y-m-d 00:00:00', $toTs - 8 * 24 * 3600));
         $hourlyRows = $hourlyQuery(
             $db,
             $normalizedItemId,
-            max($fromTs, $dailyCutoffTs),
-            min($toTs, $toTs - 24 * 3600),
+            gmdate('Y-m-d H:i:s', max($fromTs, $dailyCutoffTs)),
+            gmdate('Y-m-d H:i:s', min($toTs, $toTs - 24 * 3600)),
             $qualityCondition,
             $qualityParams
         );
         $dailyRows = $dailyQuery(
             $db,
             $normalizedItemId,
-            $fromTs,
-            min($toTs, $dailyCutoffTs),
+            $fromUtc,
+            gmdate('Y-m-d H:i:s', min($toTs, $dailyCutoffTs)),
             $qualityCondition,
             $qualityParams
         );
     }
 
     foreach ([...$dailyRows, ...$hourlyRows, ...$rawRows] as $row) {
-        $eventTs = (int)($row['event_ts'] ?? 0);
+        $eventAt = (string)($row['event_at'] ?? '');
+        $eventTs = $eventAt !== '' ? (int)strtotime($eventAt . ' UTC') : 0;
         if ($eventTs <= 0) continue;
         $addToBucket(
             $buckets,
