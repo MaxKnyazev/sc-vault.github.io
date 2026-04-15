@@ -658,8 +658,6 @@ function sync_tracked_item_history(PDO $db, array $config, string $itemId, int $
                     $soldAt,
                     (string)$amount,
                     sprintf('%.2f', $price),
-                    (string)$offset,
-                    (string)$rowIndex,
                 ])
             );
             $didInsert = upsert_auction_raw_trade($db, [
@@ -693,6 +691,125 @@ function sync_tracked_item_history(PDO $db, array $config, string $itemId, int $
         'seenCount' => $seen,
         'insertedCount' => $inserted,
         'window' => $defaultWindow,
+    ];
+}
+
+function sync_recent_auction_raw_for_item(
+    PDO $db,
+    array $config,
+    string $itemId,
+    int $lookbackMinutes = 65,
+    int $maxPages = 20
+): array {
+    $normalizedItemId = trim($itemId);
+    if ($normalizedItemId === '') {
+        throw new InvalidArgumentException('itemId required');
+    }
+
+    $base = rtrim((string)($config['auction_api_base_url'] ?? ''), '/');
+    $region = strtolower(trim((string)($config['auction_region'] ?? 'ru')));
+    $clientId = trim((string)($config['exbo_client_id'] ?? ''));
+    $clientSecret = trim((string)($config['exbo_client_secret'] ?? ''));
+    if ($base === '' || $clientId === '' || $clientSecret === '') {
+        throw new RuntimeException('Missing auction API credentials');
+    }
+
+    $headers = [
+        'Accept: application/json',
+        'Client-Id: ' . $clientId,
+        'Client-Secret: ' . $clientSecret,
+    ];
+
+    $cutoffTs = time() - max(1, $lookbackMinutes) * 60;
+    $collectedAt = gmdate('Y-m-d H:i:s');
+    $offset = 0;
+    $page = 0;
+    $seen = 0;
+    $inserted = 0;
+
+    while (true) {
+        $page += 1;
+        $url = sprintf(
+            '%s/%s/auction/%s/history?offset=%d&limit=100&additional=true',
+            $base,
+            $region,
+            rawurlencode($normalizedItemId),
+            $offset
+        );
+        $ctx = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'header' => implode("\r\n", $headers),
+                'timeout' => 25,
+            ],
+        ]);
+        $raw = @file_get_contents($url, false, $ctx);
+        if ($raw === false) {
+            throw new RuntimeException('Auction API request failed while syncing recent item history');
+        }
+        $payload = json_decode($raw, true);
+        if (!is_array($payload)) {
+            throw new RuntimeException('Auction API returned invalid JSON while syncing recent item history');
+        }
+        $prices = is_array($payload['prices'] ?? null) ? $payload['prices'] : [];
+        if (count($prices) === 0) {
+            break;
+        }
+
+        $oldestOnPage = PHP_INT_MAX;
+        foreach ($prices as $rowIndex => $row) {
+            $t = strtotime((string)($row['time'] ?? ''));
+            if ($t === false) {
+                continue;
+            }
+            $oldestOnPage = min($oldestOnPage, $t);
+            if ($t < $cutoffTs) {
+                continue;
+            }
+            $amount = (int)($row['amount'] ?? 0);
+            $price = (float)($row['price'] ?? 0);
+            if ($amount <= 0 || $price <= 0) {
+                continue;
+            }
+            $soldAt = gmdate('Y-m-d H:i:s', $t);
+            $qualityKey = normalize_quality_key_from_trade_row($row);
+            $dedupKey = hash(
+                'sha256',
+                implode('|', [
+                    $normalizedItemId,
+                    $qualityKey,
+                    $soldAt,
+                    (string)$amount,
+                    sprintf('%.2f', $price),
+                ])
+            );
+
+            $didInsert = upsert_auction_raw_trade($db, [
+                'itemId' => $normalizedItemId,
+                'qualityKey' => $qualityKey,
+                'soldAt' => $soldAt,
+                'amount' => $amount,
+                'price' => $price,
+                'sourceOffset' => $offset,
+                'sourceRowIndex' => (int)$rowIndex,
+                'collectedAt' => $collectedAt,
+                'dedupKey' => $dedupKey,
+            ]);
+            $seen += 1;
+            if ($didInsert) {
+                $inserted += 1;
+            }
+        }
+
+        if (count($prices) < 100 || $page >= max(1, $maxPages) || $oldestOnPage < $cutoffTs) {
+            break;
+        }
+        $offset += 100;
+    }
+
+    return [
+        'seenCount' => $seen,
+        'insertedCount' => $inserted,
     ];
 }
 

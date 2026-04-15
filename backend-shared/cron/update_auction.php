@@ -176,8 +176,6 @@ function collect_raw_trades_for_item(
                         $soldAt,
                         (string)$amount,
                         sprintf('%.2f', $price),
-                        (string)$offset,
-                        (string)$rowIndex,
                     ])
                 );
 
@@ -215,6 +213,27 @@ function collect_raw_trades_for_item(
     ];
 }
 
+function resolve_collect_lookback_minutes_for_item(
+    PDO $db,
+    string $itemId,
+    int $defaultLookbackMinutes,
+    int $rawRetentionHours
+): int {
+    $defaultMinutes = max(1, $defaultLookbackMinutes);
+    $maxMinutes = max($defaultMinutes, $rawRetentionHours * 60 + 5);
+    $stmt = $db->prepare('SELECT UNIX_TIMESTAMP(MAX(sold_at)) AS last_ts FROM auction_raw_trades WHERE item_id = ?');
+    $stmt->execute([$itemId]);
+    $row = $stmt->fetch();
+    $lastTs = isset($row['last_ts']) ? (int)$row['last_ts'] : 0;
+    if ($lastTs <= 0) {
+        return $defaultMinutes;
+    }
+    $gapMinutes = (int)ceil(max(0, time() - $lastTs) / 60);
+    // Add small overlap to avoid tiny API/clock drifts around bucket borders.
+    $needed = $gapMinutes + 5;
+    return min($maxMinutes, max($defaultMinutes, $needed));
+}
+
 if ($config['exbo_client_id'] === '' || $config['exbo_client_secret'] === '') {
     fwrite(STDERR, "Missing EXBO_CLIENT_ID / EXBO_CLIENT_SECRET\n");
     exit(1);
@@ -245,13 +264,19 @@ $hourlyUpsertRowsTotal = 0;
 
 foreach ($targetItemIds as $idx => $itemId) {
     try {
+        $itemLookbackMinutes = resolve_collect_lookback_minutes_for_item(
+            $db,
+            $itemId,
+            $lookbackMinutes,
+            $rawRetentionHours
+        );
         $collect = collect_raw_trades_for_item(
             $db,
             $config,
             $itemId,
             $maxPagesPerItem,
             $sleepBetweenPagesMs,
-            $lookbackMinutes
+            $itemLookbackMinutes
         );
         foreach ($statsWindows as $windowName) {
             recalculate_auction_stat_from_raw($db, $itemId, $windowName, $collect['fetchedAt']);
