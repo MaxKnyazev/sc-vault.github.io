@@ -7,6 +7,8 @@ import {
   logoutBackendUser,
   registerBackendUser,
   type AuthUser,
+  type CraftBranchLevels,
+  updateOwnProfile,
 } from '../api/backendApi'
 import { getBackendApiBaseUrl } from '../config/backendApi'
 
@@ -43,6 +45,10 @@ type AuthStore = {
   login: (nickname: string, password: string) => Promise<void>
   register: (nickname: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  saveProfilePreferences: (input: {
+    timezoneOffsetHours: number
+    craftBranchLevels: CraftBranchLevels
+  }) => Promise<void>
   clearError: () => void
 }
 
@@ -122,6 +128,19 @@ export const useAuthStore = create<AuthStore>()(
         } finally {
           writeTokenToStorage(null)
           set({ token: null, user: null, isSubmitting: false, isAuthResolved: true, error: null })
+        }
+      },
+      saveProfilePreferences: async ({ timezoneOffsetHours, craftBranchLevels }) => {
+        set({ isSubmitting: true, error: null })
+        try {
+          const user = await updateOwnProfile({ timezoneOffsetHours, craftBranchLevels })
+          set({ user, isSubmitting: false, error: null })
+        } catch (err) {
+          set({
+            isSubmitting: false,
+            error: err instanceof Error ? err.message : String(err),
+          })
+          throw err
         }
       },
     }),

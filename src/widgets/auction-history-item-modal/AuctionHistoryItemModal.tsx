@@ -5,6 +5,7 @@ import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import { getQualityModalGlowBoxShadow } from '../../shared/lib/getQualityGlowColor'
 import { useAuctionHistoryItemModalStore } from '../../shared/store/auctionHistoryItemModalStore'
+import { useAuthStore } from '../../shared/store/authStore'
 import {
   fetchAuctionItemHistory,
   type AuctionHistoryPoint,
@@ -77,27 +78,47 @@ function pickYTickValues(min: number, max: number, tickCount: number): number[] 
   return values
 }
 
-function formatHistoryAxisLabel(ts: string, range: AuctionHistoryRange): string {
-  const d = new Date(ts)
-  if (Number.isNaN(d.getTime())) return ts
-  if (range === '30m' || range === '1h' || range === '12h') {
-    return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-  }
-  if (range === '24h' || range === '7d') {
-    return d.toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-  }
-  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: '2-digit' })
+function parseUtcDate(ts: string): Date | null {
+  const normalized = ts.includes('T') ? ts : ts.replace(' ', 'T') + 'Z'
+  const d = new Date(normalized)
+  if (Number.isNaN(d.getTime())) return null
+  return d
 }
 
-function formatHistoryTooltipTime(ts: string): string {
-  const d = new Date(ts)
-  if (Number.isNaN(d.getTime())) return ts
-  return d.toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' })
+function applyTimezoneOffset(date: Date, timezoneOffsetHours: number): Date {
+  return new Date(date.getTime() + timezoneOffsetHours * 60 * 60 * 1000)
+}
+
+function formatHistoryAxisLabel(ts: string, range: AuctionHistoryRange, timezoneOffsetHours: number): string {
+  const utcDate = parseUtcDate(ts)
+  if (!utcDate) return ts
+  const d = applyTimezoneOffset(utcDate, timezoneOffsetHours)
+  if (range === '30m' || range === '1h' || range === '12h') {
+    return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
+  }
+  if (range === '24h' || range === '7d') {
+    return d.toLocaleString('ru-RU', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC',
+    })
+  }
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: '2-digit', timeZone: 'UTC' })
+}
+
+function formatHistoryTooltipTime(ts: string, timezoneOffsetHours: number): string {
+  const utcDate = parseUtcDate(ts)
+  if (!utcDate) return ts
+  const d = applyTimezoneOffset(utcDate, timezoneOffsetHours)
+  return d.toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })
 }
 
 export function AuctionHistoryItemModal() {
   const { opened, itemId, close } = useAuctionHistoryItemModalStore()
   const { itemsById, realm } = useHideoutStore()
+  const timezoneOffsetHours = useAuthStore((s) => s.user?.timezoneOffsetHours ?? 0)
   const [range, setRange] = useState<AuctionHistoryRange>('7d')
   const [quality, setQuality] = useState<AuctionHistoryQuality>('all')
   const [points, setPoints] = useState<AuctionHistoryPoint[]>([])
@@ -387,7 +408,7 @@ export function AuctionHistoryItemModal() {
                         textAnchor="middle"
                         fill="currentColor"
                       >
-                        {formatHistoryAxisLabel(s.point.ts, range)}
+                        {formatHistoryAxisLabel(s.point.ts, range, timezoneOffsetHours)}
                       </text>
                     )
                   })}
@@ -426,7 +447,7 @@ export function AuctionHistoryItemModal() {
                     }}
                   >
                     <Text size="xs" fw={600}>
-                      {formatHistoryTooltipTime(chartHover.point.ts)}
+                      {formatHistoryTooltipTime(chartHover.point.ts, timezoneOffsetHours)}
                     </Text>
                     <Text size="xs" mt={4}>
                       Средняя цена: {formatAuctionRub(chartHover.point.avgPerUnit!)} ₽

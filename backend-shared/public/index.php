@@ -140,12 +140,7 @@ if ($path === '/auth/register') {
     $user = find_user_by_token($db, $token);
     send_json(201, [
         'token' => $token,
-        'user' => [
-            'id' => (int)$user['id'],
-            'nickname' => (string)$user['nickname'],
-            'role' => normalize_user_role((string)$user['role']),
-            'avatarUrl' => $user['avatar_url'] ?: null,
-        ],
+        'user' => format_auth_user_payload($user),
     ]);
     exit;
 }
@@ -169,12 +164,7 @@ if ($path === '/auth/login') {
     $token = issue_auth_token($db, (int)$user['id'], (int)$config['auth_token_ttl_seconds']);
     send_json(200, [
         'token' => $token,
-        'user' => [
-            'id' => (int)$user['id'],
-            'nickname' => (string)$user['nickname'],
-            'role' => normalize_user_role((string)$user['role']),
-            'avatarUrl' => $user['avatar_url'] ?: null,
-        ],
+        'user' => format_auth_user_payload($user),
     ]);
     exit;
 }
@@ -192,13 +182,38 @@ if ($path === '/auth/me') {
         exit;
     }
     send_json(200, [
-        'user' => [
-            'id' => (int)$user['id'],
-            'nickname' => (string)$user['nickname'],
-            'role' => normalize_user_role((string)$user['role']),
-            'avatarUrl' => $user['avatar_url'] ?: null,
-        ],
+        'user' => format_auth_user_payload($user),
     ]);
+    exit;
+}
+
+if ($path === '/user/profile') {
+    require_method('POST');
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    enforce_auth_user($user);
+    $body = read_json_body();
+    $timezoneOffsetHours = (int)($body['timezoneOffsetHours'] ?? 0);
+    $craftBranchLevels = $body['craftBranchLevels'] ?? null;
+    try {
+        update_own_user_preferences($db, (int)$user['id'], $timezoneOffsetHours, is_array($craftBranchLevels) ? $craftBranchLevels : []);
+        $freshUser = find_user_by_token($db, $token);
+        if (!$freshUser) {
+            throw new RuntimeException('User not found after update');
+        }
+    } catch (Throwable $e) {
+        send_json(400, ['error' => $e->getMessage()]);
+        exit;
+    }
+    send_json(200, ['ok' => true, 'user' => format_auth_user_payload($freshUser)]);
     exit;
 }
 

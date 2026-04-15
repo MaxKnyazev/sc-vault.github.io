@@ -4,9 +4,10 @@ function create_user(PDO $db, string $nickname, string $password, string $role =
 {
     $hash = password_hash($password, PASSWORD_DEFAULT);
     $stmt = $db->prepare(
-        'INSERT INTO users (email, nickname, password_hash, role, created_at) VALUES (?, ?, ?, ?, UTC_TIMESTAMP())'
+        'INSERT INTO users (email, nickname, password_hash, role, timezone_offset_hours, craft_branch_levels, created_at)
+         VALUES (?, ?, ?, ?, 0, ?, UTC_TIMESTAMP())'
     );
-    $stmt->execute([$nickname, $nickname, $hash, normalize_user_role($role)]);
+    $stmt->execute([$nickname, $nickname, $hash, normalize_user_role($role), default_craft_branch_levels_json()]);
     return (int)$db->lastInsertId();
 }
 
@@ -27,7 +28,9 @@ function normalize_user_role(string $role): string
 function find_user_by_nickname(PDO $db, string $nickname): ?array
 {
     $stmt = $db->prepare(
-        'SELECT id, email, nickname, role, avatar_url, password_hash FROM users WHERE nickname = ? LIMIT 1'
+        'SELECT id, email, nickname, role, avatar_url, password_hash, timezone_offset_hours, craft_branch_levels
+         FROM users
+         WHERE nickname = ? LIMIT 1'
     );
     $stmt->execute([normalize_nickname($nickname)]);
     $row = $stmt->fetch();
@@ -37,7 +40,9 @@ function find_user_by_nickname(PDO $db, string $nickname): ?array
 function find_user_by_email(PDO $db, string $email): ?array
 {
     $stmt = $db->prepare(
-        'SELECT id, email, nickname, role, avatar_url, password_hash FROM users WHERE email = ? LIMIT 1'
+        'SELECT id, email, nickname, role, avatar_url, password_hash, timezone_offset_hours, craft_branch_levels
+         FROM users
+         WHERE email = ? LIMIT 1'
     );
     $stmt->execute([$email]);
     $row = $stmt->fetch();
@@ -59,7 +64,7 @@ function find_user_by_token(PDO $db, string $token): ?array
 {
     $tokenHash = hash('sha256', $token);
     $stmt = $db->prepare(
-        'SELECT u.id, u.email, u.nickname, u.role, u.avatar_url
+        'SELECT u.id, u.email, u.nickname, u.role, u.avatar_url, u.timezone_offset_hours, u.craft_branch_levels
          FROM auth_tokens t
          JOIN users u ON u.id = t.user_id
          WHERE t.token_hash = ? AND t.expires_at > UTC_TIMESTAMP()
@@ -68,6 +73,95 @@ function find_user_by_token(PDO $db, string $token): ?array
     $stmt->execute([$tokenHash]);
     $row = $stmt->fetch();
     return $row ?: null;
+}
+
+function normalize_timezone_offset_hours(mixed $value): int
+{
+    $hours = (int)$value;
+    if ($hours < -12 || $hours > 14) {
+        throw new InvalidArgumentException('timezoneOffsetHours out of range');
+    }
+    return $hours;
+}
+
+function default_craft_branch_levels(): array
+{
+    return [
+        'cooking' => 1,
+        'rawMaterials' => 1,
+        'medicine' => 1,
+        'weaponModules' => 1,
+        'armor' => 1,
+        'other' => 1,
+    ];
+}
+
+function default_craft_branch_levels_json(): string
+{
+    return json_encode(default_craft_branch_levels(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+function normalize_craft_branch_levels(mixed $value): array
+{
+    $base = default_craft_branch_levels();
+    if (!is_array($value)) {
+        return $base;
+    }
+    $out = $base;
+    foreach ($base as $key => $defaultLevel) {
+        $raw = $value[$key] ?? $defaultLevel;
+        $lvl = (int)$raw;
+        if ($lvl < 1) $lvl = 1;
+        if ($lvl > 5) $lvl = 5;
+        $out[$key] = $lvl;
+    }
+    return $out;
+}
+
+function decode_craft_branch_levels(mixed $value): array
+{
+    if (is_string($value) && trim($value) !== '') {
+        $decoded = json_decode($value, true);
+        if (is_array($decoded)) {
+            return normalize_craft_branch_levels($decoded);
+        }
+    }
+    if (is_array($value)) {
+        return normalize_craft_branch_levels($value);
+    }
+    return default_craft_branch_levels();
+}
+
+function format_auth_user_payload(array $user): array
+{
+    return [
+        'id' => (int)$user['id'],
+        'nickname' => (string)$user['nickname'],
+        'role' => normalize_user_role((string)$user['role']),
+        'avatarUrl' => $user['avatar_url'] ?: null,
+        'timezoneOffsetHours' => isset($user['timezone_offset_hours']) ? (int)$user['timezone_offset_hours'] : 0,
+        'craftBranchLevels' => decode_craft_branch_levels($user['craft_branch_levels'] ?? null),
+    ];
+}
+
+function update_own_user_preferences(
+    PDO $db,
+    int $userId,
+    int $timezoneOffsetHours,
+    array $craftBranchLevels
+): void {
+    $normalizedTz = normalize_timezone_offset_hours($timezoneOffsetHours);
+    $normalizedLevels = normalize_craft_branch_levels($craftBranchLevels);
+    $stmt = $db->prepare(
+        'UPDATE users
+         SET timezone_offset_hours = ?, craft_branch_levels = ?
+         WHERE id = ?'
+    );
+    $stmt->execute([
+        $normalizedTz,
+        json_encode($normalizedLevels, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        $userId,
+    ]);
 }
 
 function delete_token(PDO $db, string $token): void

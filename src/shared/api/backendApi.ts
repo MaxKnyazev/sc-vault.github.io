@@ -57,12 +57,22 @@ type RecipeResultOverridesResponse = {
 }
 
 export type UserRole = 'blocked' | 'user' | 'admin'
+export type CraftBranchLevels = {
+  cooking: number
+  rawMaterials: number
+  medicine: number
+  weaponModules: number
+  armor: number
+  other: number
+}
 
 export type AuthUser = {
   id: number
   nickname: string
   role: UserRole
   avatarUrl?: string | null
+  timezoneOffsetHours: number
+  craftBranchLevels: CraftBranchLevels
 }
 
 export type AdminUser = {
@@ -75,6 +85,10 @@ export type AdminUser = {
 
 type AuthResponse = {
   token?: string
+  user?: AuthUser
+}
+type UpdateOwnProfileResponse = {
+  ok?: boolean
   user?: AuthUser
 }
 
@@ -323,6 +337,28 @@ export async function logoutBackendUser(token: string): Promise<void> {
     },
   })
   await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function updateOwnProfile(input: {
+  timezoneOffsetHours: number
+  craftBranchLevels: CraftBranchLevels
+}): Promise<AuthUser> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl('/user/profile')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify(input),
+  })
+  const payload = await parseJsonOrThrow<UpdateOwnProfileResponse>(response)
+  if (!payload.user) throw new Error('Профиль не получен после сохранения')
+  return payload.user
 }
 
 export async function fetchRecipeResultOverrides(): Promise<Record<string, RecipeResultOverride>> {

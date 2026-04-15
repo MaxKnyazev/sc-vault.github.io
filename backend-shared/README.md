@@ -18,7 +18,7 @@
 - `public/index.php` — единая точка входа API
 - `src/` — DB, auth, репозитории
 - `config.php` — конфиг через env или значения по умолчанию
-- `migrations/001_init.sql` + `migrations/002_users_profile_and_roles.sql` + `migrations/003_recipe_result_overrides.sql` + `migrations/004_recipe_result_overrides_decimal_amounts.sql` + `migrations/005_auction_raw_trades.sql` + `migrations/006_auction_item_blacklist.sql` + `migrations/007_auction_rollups.sql` + `migrations/008_auction_tracked_items.sql` — схема БД
+- `migrations/001_init.sql` + `migrations/002_users_profile_and_roles.sql` + `migrations/003_recipe_result_overrides.sql` + `migrations/004_recipe_result_overrides_decimal_amounts.sql` + `migrations/005_auction_raw_trades.sql` + `migrations/006_auction_item_blacklist.sql` + `migrations/007_auction_rollups.sql` + `migrations/008_auction_tracked_items.sql` + `migrations/009_auction_quality_history.sql` + `migrations/010_users_timezone_and_craft_levels.sql` — схема БД
 - `cron/update_auction.php` — обновление `auction_stats`
 - `cron/cleanup_tokens.php` — очистка просроченных auth токенов
 
@@ -34,6 +34,8 @@
    - `migrations/006_auction_item_blacklist.sql`
    - `migrations/007_auction_rollups.sql`
    - `migrations/008_auction_tracked_items.sql`
+   - `migrations/009_auction_quality_history.sql`
+   - `migrations/010_users_timezone_and_craft_levels.sql`
 3. Скопируйте `config.example.php` в `config.php` и заполните:
    - DB параметры
    - `EXBO_CLIENT_ID`, `EXBO_CLIENT_SECRET`
