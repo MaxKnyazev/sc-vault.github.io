@@ -10,10 +10,11 @@ import {
   type AuctionHistoryPoint,
   type AuctionHistoryQuality,
   type AuctionHistoryRange,
+  type AuctionHistoryZoom,
 } from '../../shared/api/backendApi'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 
-const RANGE_OPTIONS: AuctionHistoryRange[] = ['24h', '7d', '30d', '90d']
+const RANGE_OPTIONS: AuctionHistoryRange[] = ['30m', '1h', '12h', '24h', '7d', '30d', '90d']
 const QUALITY_OPTIONS: Array<{ value: AuctionHistoryQuality; label: string }> = [
   { value: 'all', label: 'Все' },
   { value: 'normal', label: 'Обычный' },
@@ -25,8 +26,7 @@ const QUALITY_OPTIONS: Array<{ value: AuctionHistoryQuality; label: string }> = 
   { value: 'unique', label: 'Уникальный' },
   { value: 'unknown', label: 'Неизвестно' },
 ]
-const MIN_ZOOM = 1
-const MAX_ZOOM = 12
+const ZOOM_LEVELS: AuctionHistoryZoom[] = [1, 2, 4]
 
 const CHART_VB = { w: 640, h: 280 }
 const CHART_MARGIN = { left: 48, right: 12, top: 14, bottom: 54 }
@@ -80,6 +80,9 @@ function pickYTickValues(min: number, max: number, tickCount: number): number[] 
 function formatHistoryAxisLabel(ts: string, range: AuctionHistoryRange): string {
   const d = new Date(ts)
   if (Number.isNaN(d.getTime())) return ts
+  if (range === '30m' || range === '1h' || range === '12h') {
+    return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  }
   if (range === '24h' || range === '7d') {
     return d.toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
   }
@@ -100,8 +103,7 @@ export function AuctionHistoryItemModal() {
   const [points, setPoints] = useState<AuctionHistoryPoint[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [zoom, setZoom] = useState<number>(1)
-  const [zoomCenterRatio, setZoomCenterRatio] = useState<number>(1)
+  const [zoom, setZoom] = useState<AuctionHistoryZoom>(1)
   const item = itemId ? itemsById[itemId] : undefined
   const itemName = getItemName(item?.name?.lines)
   const iconUrl = item ? buildItemIconUrl(item.icon, realm) : undefined
@@ -115,25 +117,11 @@ export function AuctionHistoryItemModal() {
     () => points.reduce((sum, point) => sum + point.tradeCount, 0),
     [points],
   )
-  const pointsWithPrice = useMemo(
+  const visiblePoints = useMemo(
     () => points.filter((p): p is AuctionHistoryPoint & { avgPerUnit: number } => p.avgPerUnit !== null),
     [points],
   )
-  const zoomState = useMemo(() => {
-    const total = pointsWithPrice.length
-    if (total === 0) return { visible: [] as Array<AuctionHistoryPoint & { avgPerUnit: number }>, start: 0, end: 0 }
-    const windowSize = Math.max(8, Math.ceil(total / zoom))
-    const centerIndex = Math.round((total - 1) * zoomCenterRatio)
-    const start = Math.max(0, Math.min(total - windowSize, centerIndex - Math.floor(windowSize / 2)))
-    const end = Math.min(total, start + windowSize)
-    const windowPoints = pointsWithPrice.slice(start, end)
-    const maxRenderPoints = Math.min(total, Math.round(35 + zoom * 45))
-    if (windowPoints.length <= maxRenderPoints) return { visible: windowPoints, start, end }
-    const stride = Math.ceil(windowPoints.length / maxRenderPoints)
-    const compact = windowPoints.filter((_, idx) => idx % stride === 0 || idx === windowPoints.length - 1)
-    return { visible: compact, start, end }
-  }, [pointsWithPrice, zoom, zoomCenterRatio])
-  const { series, min: minPrice, max: maxPrice } = useMemo(() => buildChartSeries(zoomState.visible), [zoomState.visible])
+  const { series, min: minPrice, max: maxPrice } = useMemo(() => buildChartSeries(visiblePoints), [visiblePoints])
   const polyline = useMemo(
     () => (series.length === 0 ? '' : series.map((s) => `${s.x},${s.y}`).join(' ')),
     [series],
@@ -145,21 +133,11 @@ export function AuctionHistoryItemModal() {
   const [chartHover, setChartHover] = useState<null | { x: number; y: number; point: AuctionHistoryPoint }>(null)
 
   const handleSvgWheel = (e: WheelEvent<SVGSVGElement>) => {
-    if (pointsWithPrice.length <= 1) return
     e.preventDefault()
-    const svg = e.currentTarget
-    const rect = svg.getBoundingClientRect()
-    const localRatio = rect.width > 0 ? Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)) : 0.5
-    const total = pointsWithPrice.length
-    const currentSpanRatio = total > 0 ? (zoomState.end - zoomState.start) / total : 1
-    const currentStartRatio = total > 1 ? zoomState.start / (total - 1) : 0
-    const currentEndRatio = Math.min(1, currentStartRatio + currentSpanRatio)
-    const targetRatio = currentStartRatio + localRatio * Math.max(0, currentEndRatio - currentStartRatio)
     const direction = e.deltaY < 0 ? 1 : -1
-    const factor = direction > 0 ? 1.18 : 1 / 1.18
-    const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor))
-    setZoom(nextZoom)
-    setZoomCenterRatio(Math.min(1, Math.max(0, targetRatio)))
+    const idx = ZOOM_LEVELS.indexOf(zoom)
+    const nextIdx = direction > 0 ? Math.min(ZOOM_LEVELS.length - 1, idx + 1) : Math.max(0, idx - 1)
+    setZoom(ZOOM_LEVELS[nextIdx] ?? 1)
   }
 
   const handleSvgMouseMove = (e: MouseEvent<SVGSVGElement>) => {
@@ -195,7 +173,7 @@ export function AuctionHistoryItemModal() {
       setIsLoading(true)
       setError(null)
       try {
-        const rows = await fetchAuctionItemHistory(itemId, range, quality)
+        const rows = await fetchAuctionItemHistory(itemId, range, quality, zoom)
         setPoints(rows)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Не удалось загрузить историю')
@@ -204,7 +182,7 @@ export function AuctionHistoryItemModal() {
         setIsLoading(false)
       }
     })()
-  }, [opened, itemId, range, quality])
+  }, [opened, itemId, range, quality, zoom])
 
   useEffect(() => {
     setChartHover(null)
@@ -212,7 +190,6 @@ export function AuctionHistoryItemModal() {
 
   useEffect(() => {
     setZoom(1)
-    setZoomCenterRatio(1)
   }, [range, quality, itemId])
 
   useEffect(() => {
@@ -223,7 +200,6 @@ export function AuctionHistoryItemModal() {
       setError(null)
       setIsLoading(false)
       setZoom(1)
-      setZoomCenterRatio(1)
     }
   }, [opened])
 
@@ -298,7 +274,7 @@ export function AuctionHistoryItemModal() {
 
         <Text size="sm" c="dimmed">
           {latestPrice !== null ? `Текущая средняя цена: ${formatAuctionRub(latestPrice)} ₽` : 'Нет данных по цене'}
-          {` · Лотов: ${totalTrades} · ZOOM x${zoom.toFixed(1)}`}
+          {` · Лотов: ${totalTrades} · ZOOM x${zoom}`}
         </Text>
 
         <Box

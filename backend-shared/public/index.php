@@ -251,13 +251,14 @@ if ($path === '/auction/history') {
     $itemId = trim((string)($_GET['itemId'] ?? ''));
     $range = trim((string)($_GET['range'] ?? '7d'));
     $quality = trim((string)($_GET['quality'] ?? 'all'));
+    $zoom = (int)($_GET['zoom'] ?? 1);
     try {
-        $points = get_auction_item_history($db, $itemId, $range, $quality);
+        $points = get_auction_item_history($db, $itemId, $range, $quality, $zoom);
     } catch (Throwable $e) {
         send_json(400, ['error' => $e->getMessage()]);
         exit;
     }
-    send_json(200, ['itemId' => $itemId, 'range' => $range, 'quality' => $quality, 'points' => $points]);
+    send_json(200, ['itemId' => $itemId, 'range' => $range, 'quality' => $quality, 'zoom' => $zoom, 'points' => $points]);
     exit;
 }
 

@@ -16,7 +16,7 @@ const DEFAULT_PROGRESS_EVERY = 25;
 const DEFAULT_COLLECT_LOOKBACK_MINUTES = 65;
 const DEFAULT_STATS_WINDOWS = '12h';
 const DEFAULT_RAW_RETENTION_HOURS = 24;
-const DEFAULT_HOURLY_RETENTION_DAYS = 7;
+const DEFAULT_HOURLY_RETENTION_DAYS = 8;
 
 function read_int_env(string $key, int $fallback): int
 {
@@ -103,6 +103,31 @@ function parse_window_names(string $rawWindows): array
         $windows[] = normalize_window_name(DEFAULT_STATS_WINDOWS);
     }
     return array_values(array_unique($windows));
+}
+
+function rollup_marker_path(): string
+{
+    $dir = sys_get_temp_dir() . '/sctool-auction-rollup';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
+    }
+    return $dir . '/last_rollup_utc_date.txt';
+}
+
+function is_daily_rollup_due(): bool
+{
+    $today = gmdate('Y-m-d');
+    $marker = rollup_marker_path();
+    if (!is_file($marker)) {
+        return true;
+    }
+    $last = trim((string)@file_get_contents($marker));
+    return $last !== $today;
+}
+
+function mark_daily_rollup_done(): void
+{
+    @file_put_contents(rollup_marker_path(), gmdate('Y-m-d'));
 }
 
 function collect_raw_trades_for_item(
@@ -257,7 +282,11 @@ foreach ($targetItemIds as $idx => $itemId) {
 }
 
 $deletedRawRows = purge_raw_trades_older_than_hours($db, $rawRetentionHours);
-$rollup = rollup_hourly_to_daily_and_purge($db, $hourlyRetentionDays);
+$rollup = ['upsertedDailyRows' => 0, 'deletedHourlyRows' => 0];
+if (is_daily_rollup_due()) {
+    $rollup = rollup_hourly_to_daily_and_purge($db, $hourlyRetentionDays);
+    mark_daily_rollup_done();
+}
 
 fwrite(STDOUT, sprintf(
     "auction cron done: total=%d ok=%d failed=%d seen=%d inserted=%d hourly_upserts=%d raw_purged=%d hourly_purged=%d daily_upserted=%d windows=%s\n",

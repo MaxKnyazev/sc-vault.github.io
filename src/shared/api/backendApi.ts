@@ -13,7 +13,8 @@ type TrackedAuctionItemsResponse = {
   itemIds?: string[]
 }
 
-export type AuctionHistoryRange = '24h' | '7d' | '30d' | '90d'
+export type AuctionHistoryRange = '30m' | '1h' | '12h' | '24h' | '7d' | '30d' | '90d'
+export type AuctionHistoryZoom = 1 | 2 | 4
 export type AuctionHistoryQuality =
   | 'all'
   | 'normal'
@@ -35,6 +36,7 @@ type AuctionHistoryResponse = {
   itemId?: string
   range?: AuctionHistoryRange
   quality?: AuctionHistoryQuality
+  zoom?: AuctionHistoryZoom
   points?: AuctionHistoryPoint[]
 }
 
@@ -196,11 +198,12 @@ export async function fetchAuctionItemHistory(
   itemId: string,
   range: AuctionHistoryRange,
   quality: AuctionHistoryQuality = 'all',
+  zoom: AuctionHistoryZoom = 1,
 ): Promise<AuctionHistoryPoint[]> {
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация')
   const url = buildApiUrl(
-    `/auction/history?itemId=${encodeURIComponent(itemId)}&range=${encodeURIComponent(range)}&quality=${encodeURIComponent(quality)}`,
+    `/auction/history?itemId=${encodeURIComponent(itemId)}&range=${encodeURIComponent(range)}&quality=${encodeURIComponent(quality)}&zoom=${encodeURIComponent(String(zoom))}`,
   )
   const response = await fetch(url, {
     method: 'GET',

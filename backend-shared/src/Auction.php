@@ -123,7 +123,8 @@ function purge_raw_trades_older_than_hours(PDO $db, int $rawRetentionHours, int 
 function rollup_hourly_to_daily_and_purge(PDO $db, int $hourlyRetentionDays, int $batchSize = 10000): array
 {
     $days = max(1, $hourlyRetentionDays);
-    $cutoffExpr = sprintf('UTC_TIMESTAMP() - INTERVAL %d DAY', $days);
+    // Roll up only full UTC days so each daily row is exactly one calendar day.
+    $cutoffExpr = sprintf('UTC_DATE() - INTERVAL %d DAY', $days);
     $limit = max(1000, $batchSize);
 
     $upsertedRows = 0;
@@ -272,11 +273,62 @@ function upsert_auction_stat(PDO $db, string $itemId, array $agg, string $window
 function normalize_history_range(string $range): string
 {
     $normalized = strtolower(trim($range));
-    $allowed = ['24h', '7d', '30d', '90d'];
+    $allowed = ['30m', '1h', '12h', '24h', '7d', '30d', '90d'];
     if (!in_array($normalized, $allowed, true)) {
         throw new InvalidArgumentException('Invalid history range');
     }
     return $normalized;
+}
+
+function normalize_history_zoom(mixed $zoom): int
+{
+    $value = (int)$zoom;
+    if (!in_array($value, [1, 2, 4], true)) {
+        throw new InvalidArgumentException('Invalid history zoom');
+    }
+    return $value;
+}
+
+function get_history_plan(string $range, int $zoom): array
+{
+    $plans = [
+        '30m' => [
+            1 => ['rangeSec' => 30 * 60, 'bucketSec' => 180, 'targetPoints' => 10],
+            2 => ['rangeSec' => 30 * 60, 'bucketSec' => 90, 'targetPoints' => 20],
+            4 => ['rangeSec' => 30 * 60, 'bucketSec' => 45, 'targetPoints' => 40],
+        ],
+        '1h' => [
+            1 => ['rangeSec' => 60 * 60, 'bucketSec' => 300, 'targetPoints' => 12],
+            2 => ['rangeSec' => 60 * 60, 'bucketSec' => 150, 'targetPoints' => 24],
+            4 => ['rangeSec' => 60 * 60, 'bucketSec' => 75, 'targetPoints' => 48],
+        ],
+        '12h' => [
+            1 => ['rangeSec' => 12 * 60 * 60, 'bucketSec' => 3600, 'targetPoints' => 12],
+            2 => ['rangeSec' => 12 * 60 * 60, 'bucketSec' => 1800, 'targetPoints' => 24],
+            4 => ['rangeSec' => 12 * 60 * 60, 'bucketSec' => 900, 'targetPoints' => 48],
+        ],
+        '24h' => [
+            1 => ['rangeSec' => 24 * 60 * 60, 'bucketSec' => 7200, 'targetPoints' => 12],
+            2 => ['rangeSec' => 24 * 60 * 60, 'bucketSec' => 3600, 'targetPoints' => 24],
+            4 => ['rangeSec' => 24 * 60 * 60, 'bucketSec' => 1800, 'targetPoints' => 48],
+        ],
+        '7d' => [
+            1 => ['rangeSec' => 7 * 24 * 60 * 60, 'bucketSec' => 24 * 3600, 'targetPoints' => 7],
+            2 => ['rangeSec' => 7 * 24 * 60 * 60, 'bucketSec' => 12 * 3600, 'targetPoints' => 14],
+            4 => ['rangeSec' => 7 * 24 * 60 * 60, 'bucketSec' => 6 * 3600, 'targetPoints' => 28],
+        ],
+        '30d' => [
+            1 => ['rangeSec' => 30 * 24 * 60 * 60, 'bucketSec' => 3 * 24 * 3600, 'targetPoints' => 10],
+            2 => ['rangeSec' => 30 * 24 * 60 * 60, 'bucketSec' => 2 * 24 * 3600, 'targetPoints' => 15],
+            4 => ['rangeSec' => 30 * 24 * 60 * 60, 'bucketSec' => 24 * 3600, 'targetPoints' => 30],
+        ],
+        '90d' => [
+            1 => ['rangeSec' => 90 * 24 * 60 * 60, 'bucketSec' => 30 * 24 * 3600, 'targetPoints' => 3],
+            2 => ['rangeSec' => 90 * 24 * 60 * 60, 'bucketSec' => 10 * 24 * 3600, 'targetPoints' => 9],
+            4 => ['rangeSec' => 90 * 24 * 60 * 60, 'bucketSec' => 3 * 24 * 3600, 'targetPoints' => 30],
+        ],
+    ];
+    return $plans[$range][$zoom];
 }
 
 function normalize_history_quality(string $quality): string
@@ -310,13 +362,13 @@ function normalize_quality_key_from_additional(mixed $additional): string
     if (is_int($additional) || is_float($additional) || (is_string($additional) && preg_match('/^-?\d+$/', trim($additional)))) {
         $n = (int)$additional;
         return match ($n) {
-            0, 1 => 'normal',
-            2 => 'uncommon',
-            3 => 'special',
-            4 => 'rare',
-            5 => 'exclusive',
-            6 => 'legendary',
-            7 => 'unique',
+            0 => 'normal',
+            1 => 'uncommon',
+            2 => 'special',
+            3 => 'rare',
+            4 => 'exclusive',
+            5 => 'legendary',
+            6 => 'unique',
             default => 'unknown',
         };
     }
@@ -372,7 +424,7 @@ function normalize_quality_key_from_trade_row(array $row): string
     return 'normal';
 }
 
-function get_auction_item_history(PDO $db, string $itemId, string $range = '7d', string $quality = 'all'): array
+function get_auction_item_history(PDO $db, string $itemId, string $range = '7d', string $quality = 'all', int $zoom = 1): array
 {
     $normalizedItemId = trim($itemId);
     if ($normalizedItemId === '') {
@@ -380,161 +432,154 @@ function get_auction_item_history(PDO $db, string $itemId, string $range = '7d',
     }
     $normalizedRange = normalize_history_range($range);
     $normalizedQuality = normalize_history_quality($quality);
-    $points = [];
+    $normalizedZoom = normalize_history_zoom($zoom);
+    $plan = get_history_plan($normalizedRange, $normalizedZoom);
+    $toTs = time();
+    $fromTs = $toTs - $plan['rangeSec'];
+    $buckets = [];
     $qualityCondition = '';
     $qualityParams = [];
     if ($normalizedQuality !== 'all') {
         $qualityCondition = ' AND quality_key = ?';
         $qualityParams[] = $normalizedQuality;
     }
-    $push = static function (array &$acc, string $bucket, float $qty, float $revenue, int $trades): void {
-        if (!isset($acc[$bucket])) {
-            $acc[$bucket] = ['totalQty' => 0.0, 'totalRevenue' => 0.0, 'tradeCount' => 0];
+
+    $addToBucket = static function (array &$acc, int $eventTs, float $qty, float $revenue, int $trades, int $rangeFrom, array $historyPlan): void {
+        if ($eventTs < $rangeFrom) return;
+        $idx = (int)floor(($eventTs - $rangeFrom) / $historyPlan['bucketSec']);
+        if ($idx < 0 || $idx >= $historyPlan['targetPoints']) return;
+        $bucketTs = $rangeFrom + $idx * $historyPlan['bucketSec'];
+        if (!isset($acc[$bucketTs])) {
+            $acc[$bucketTs] = ['totalQty' => 0.0, 'totalRevenue' => 0.0, 'tradeCount' => 0];
         }
-        $acc[$bucket]['totalQty'] += $qty;
-        $acc[$bucket]['totalRevenue'] += $revenue;
-        $acc[$bucket]['tradeCount'] += $trades;
+        $acc[$bucketTs]['totalQty'] += $qty;
+        $acc[$bucketTs]['totalRevenue'] += $revenue;
+        $acc[$bucketTs]['tradeCount'] += $trades;
     };
 
-    if ($normalizedRange === '24h' || $normalizedRange === '7d') {
-        $hours = $normalizedRange === '24h' ? 24 : 24 * 7;
-        $rawStmt = $db->prepare(
+    $rawQuery = static function (PDO $dbConn, string $item, int $startTs, int $endTs, string $condition, array $params): array {
+        if ($startTs >= $endTs) return [];
+        $rawStmt = $dbConn->prepare(
             "SELECT
-                DATE_FORMAT(sold_at, '%Y-%m-%d %H:00:00') AS bucket_ts,
-                COALESCE(SUM(amount), 0) AS total_qty,
-                COALESCE(SUM(price), 0) AS total_revenue,
-                COUNT(*) AS trade_count
+                UNIX_TIMESTAMP(sold_at) AS event_ts,
+                amount AS total_qty,
+                price AS total_revenue,
+                1 AS trade_count
              FROM auction_raw_trades
              WHERE item_id = ?
-               AND sold_at >= UTC_TIMESTAMP() - INTERVAL {$hours} HOUR
-               {$qualityCondition}
-             GROUP BY DATE_FORMAT(sold_at, '%Y-%m-%d %H:00:00')"
+               AND sold_at >= FROM_UNIXTIME(?)
+               AND sold_at < FROM_UNIXTIME(?)
+               {$condition}"
         );
-        $rawStmt->execute([...[$normalizedItemId], ...$qualityParams]);
-        foreach ($rawStmt->fetchAll() as $row) {
-            $push(
-                $points,
-                (string)$row['bucket_ts'],
-                (float)$row['total_qty'],
-                (float)$row['total_revenue'],
-                (int)$row['trade_count']
-            );
-        }
+        $rawStmt->execute([...[$item, $startTs, $endTs], ...$params]);
+        return $rawStmt->fetchAll();
+    };
 
-        if ($normalizedRange === '7d') {
-            $hourlyStmt = $db->prepare(
-                "SELECT
-                    DATE_FORMAT(hour_start, '%Y-%m-%d %H:00:00') AS bucket_ts,
-                    COALESCE(SUM(total_qty), 0) AS total_qty,
-                    COALESCE(SUM(total_revenue), 0) AS total_revenue,
-                    COALESCE(SUM(trade_count), 0) AS trade_count
-                 FROM auction_hourly_stats
-                 WHERE item_id = ?
-                   AND hour_start >= UTC_TIMESTAMP() - INTERVAL 7 DAY
-                   AND hour_start < UTC_TIMESTAMP() - INTERVAL 24 HOUR
-                   {$qualityCondition}
-                 GROUP BY DATE_FORMAT(hour_start, '%Y-%m-%d %H:00:00')"
-            );
-            $hourlyStmt->execute([...[$normalizedItemId], ...$qualityParams]);
-            foreach ($hourlyStmt->fetchAll() as $row) {
-                $push(
-                    $points,
-                    (string)$row['bucket_ts'],
-                    (float)$row['total_qty'],
-                    (float)$row['total_revenue'],
-                    (int)$row['trade_count']
-                );
-            }
-        }
-    } else {
-        $days = $normalizedRange === '30d' ? 30 : 90;
-        $rawStmt = $db->prepare(
+    $hourlyQuery = static function (PDO $dbConn, string $item, int $startTs, int $endTs, string $condition, array $params): array {
+        if ($startTs >= $endTs) return [];
+        $hourlyStmt = $dbConn->prepare(
             "SELECT
-                DATE_FORMAT(DATE(sold_at), '%Y-%m-%d 00:00:00') AS bucket_ts,
-                COALESCE(SUM(amount), 0) AS total_qty,
-                COALESCE(SUM(price), 0) AS total_revenue,
-                COUNT(*) AS trade_count
-             FROM auction_raw_trades
-             WHERE item_id = ?
-               AND sold_at >= UTC_DATE() - INTERVAL {$days} DAY
-               {$qualityCondition}
-             GROUP BY DATE(sold_at)"
-        );
-        $rawStmt->execute([...[$normalizedItemId], ...$qualityParams]);
-        foreach ($rawStmt->fetchAll() as $row) {
-            $push(
-                $points,
-                (string)$row['bucket_ts'],
-                (float)$row['total_qty'],
-                (float)$row['total_revenue'],
-                (int)$row['trade_count']
-            );
-        }
-
-        $hourlyStmt = $db->prepare(
-            "SELECT
-                DATE_FORMAT(DATE(hour_start), '%Y-%m-%d 00:00:00') AS bucket_ts,
-                COALESCE(SUM(total_qty), 0) AS total_qty,
-                COALESCE(SUM(total_revenue), 0) AS total_revenue,
-                COALESCE(SUM(trade_count), 0) AS trade_count
+                UNIX_TIMESTAMP(hour_start) AS event_ts,
+                total_qty,
+                total_revenue,
+                trade_count
              FROM auction_hourly_stats
              WHERE item_id = ?
-               AND hour_start >= UTC_DATE() - INTERVAL {$days} DAY
-               AND hour_start < UTC_TIMESTAMP() - INTERVAL 24 HOUR
-               {$qualityCondition}
-             GROUP BY DATE(hour_start)"
+               AND hour_start >= FROM_UNIXTIME(?)
+               AND hour_start < FROM_UNIXTIME(?)
+               {$condition}"
         );
-        $hourlyStmt->execute([...[$normalizedItemId], ...$qualityParams]);
-        foreach ($hourlyStmt->fetchAll() as $row) {
-            $push(
-                $points,
-                (string)$row['bucket_ts'],
-                (float)$row['total_qty'],
-                (float)$row['total_revenue'],
-                (int)$row['trade_count']
-            );
-        }
+        $hourlyStmt->execute([...[$item, $startTs, $endTs], ...$params]);
+        return $hourlyStmt->fetchAll();
+    };
 
-        $dailyStmt = $db->prepare(
+    $dailyQuery = static function (PDO $dbConn, string $item, int $startTs, int $endTs, string $condition, array $params): array {
+        if ($startTs >= $endTs) return [];
+        $dailyStmt = $dbConn->prepare(
             "SELECT
-                DATE_FORMAT(day_date, '%Y-%m-%d 00:00:00') AS bucket_ts,
-                COALESCE(SUM(total_qty), 0) AS total_qty,
-                COALESCE(SUM(total_revenue), 0) AS total_revenue,
-                COALESCE(SUM(trade_count), 0) AS trade_count
+                UNIX_TIMESTAMP(day_date) AS event_ts,
+                total_qty,
+                total_revenue,
+                trade_count
              FROM auction_daily_stats
              WHERE item_id = ?
-               AND day_date >= UTC_DATE() - INTERVAL {$days} DAY
-               AND day_date < UTC_DATE() - INTERVAL 7 DAY
-               {$qualityCondition}
-             GROUP BY day_date"
+               AND day_date >= DATE(FROM_UNIXTIME(?))
+               AND day_date < DATE(FROM_UNIXTIME(?))
+               {$condition}"
         );
-        $dailyStmt->execute([...[$normalizedItemId], ...$qualityParams]);
-        foreach ($dailyStmt->fetchAll() as $row) {
-            $push(
-                $points,
-                (string)$row['bucket_ts'],
-                (float)$row['total_qty'],
-                (float)$row['total_revenue'],
-                (int)$row['trade_count']
-            );
-        }
+        $dailyStmt->execute([...[$item, $startTs, $endTs], ...$params]);
+        return $dailyStmt->fetchAll();
+    };
+
+    $rawRows = [];
+    $hourlyRows = [];
+    $dailyRows = [];
+    if ($plan['bucketSec'] < 3600) {
+        $rawRows = $rawQuery($db, $normalizedItemId, $fromTs, $toTs, $qualityCondition, $qualityParams);
+    } elseif ($plan['bucketSec'] < 86400) {
+        $rawStart = max($fromTs, $toTs - 24 * 3600);
+        $rawRows = $rawQuery($db, $normalizedItemId, $rawStart, $toTs, $qualityCondition, $qualityParams);
+        $hourlyRows = $hourlyQuery(
+            $db,
+            $normalizedItemId,
+            $fromTs,
+            min($toTs, $toTs - 24 * 3600),
+            $qualityCondition,
+            $qualityParams
+        );
+    } else {
+        $rawStart = max($fromTs, $toTs - 24 * 3600);
+        $rawRows = $rawQuery($db, $normalizedItemId, $rawStart, $toTs, $qualityCondition, $qualityParams);
+        $dailyCutoffTs = strtotime(gmdate('Y-m-d 00:00:00', $toTs - 8 * 24 * 3600));
+        $hourlyRows = $hourlyQuery(
+            $db,
+            $normalizedItemId,
+            max($fromTs, $dailyCutoffTs),
+            min($toTs, $toTs - 24 * 3600),
+            $qualityCondition,
+            $qualityParams
+        );
+        $dailyRows = $dailyQuery(
+            $db,
+            $normalizedItemId,
+            $fromTs,
+            min($toTs, $dailyCutoffTs),
+            $qualityCondition,
+            $qualityParams
+        );
     }
 
-    ksort($points);
+    foreach ([...$dailyRows, ...$hourlyRows, ...$rawRows] as $row) {
+        $eventTs = (int)($row['event_ts'] ?? 0);
+        if ($eventTs <= 0) continue;
+        $addToBucket(
+            $buckets,
+            $eventTs,
+            (float)($row['total_qty'] ?? 0),
+            (float)($row['total_revenue'] ?? 0),
+            (int)($row['trade_count'] ?? 0),
+            $fromTs,
+            $plan
+        );
+    }
+
+    ksort($buckets);
     $result = [];
-    foreach ($points as $bucketTs => $row) {
+    foreach ($buckets as $bucketTs => $row) {
         $totalQty = (float)$row['totalQty'];
+        if ($totalQty <= 0.0) {
+            continue;
+        }
         $totalRevenue = (float)$row['totalRevenue'];
         $tradeCount = (int)$row['tradeCount'];
         $result[] = [
-            'ts' => $bucketTs,
-            'avgPerUnit' => $totalQty > 0 ? $totalRevenue / $totalQty : null,
+            'ts' => gmdate('Y-m-d H:i:s', (int)$bucketTs),
+            'avgPerUnit' => $totalRevenue / $totalQty,
             'totalQty' => $totalQty,
             'totalRevenue' => $totalRevenue,
             'tradeCount' => $tradeCount,
         ];
     }
-
     return $result;
 }
 
