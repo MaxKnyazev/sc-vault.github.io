@@ -22,6 +22,65 @@ import { getItemName } from '../../entities/item/lib'
 import { useFavoritesStore } from '../../shared/store/favoritesStore'
 import { useRecipeOverridesStore } from '../../shared/store/recipeOverridesStore'
 import { applyRecipeResultOverride } from '../../shared/lib/applyRecipeResultOverride'
+import type { HideoutRecipe } from '../../entities/hideout/types'
+
+const CANON_BRANCHES = [
+  'Боеприпасы',
+  'Пиротехника',
+  'Защитное снаряжение',
+  'Инженерия',
+  'Кулинария',
+  'Самогоноварение',
+  'Медицина',
+  'Сырье и материалы',
+] as const
+type CanonBranch = (typeof CANON_BRANCHES)[number]
+
+const BRANCH_BY_CATEGORY: Record<string, CanonBranch> = {
+  Боеприпасы: 'Боеприпасы',
+  Взрывчатка: 'Пиротехника',
+  Бронепластины: 'Защитное снаряжение',
+  'Функциональные объекты': 'Инженерия',
+  'Декоративная мебель': 'Инженерия',
+  Прочее: 'Инженерия',
+  Кулинария: 'Кулинария',
+  Алкоголь: 'Самогоноварение',
+  Медицина: 'Медицина',
+  Материалы: 'Сырье и материалы',
+}
+
+const BRANCH_BY_RESULT_NAME: Array<{ branch: CanonBranch; names: string[] }> = [
+  { branch: 'Боеприпасы', names: ['Сумка снайперских 12.7 мм', 'Сумка СБП 9x39 мм', 'Сумка 9 мм «Сосуля»'] },
+  { branch: 'Пиротехника', names: ['M18 Claymore', 'Ящик гранат «Вонючка»', 'Ящик гранат «Хворь»'] },
+  {
+    branch: 'Защитное снаряжение',
+    names: ['Сумка композитных пластин V', 'Сумка керамических пластин IV', 'Сумка стальных пластин III'],
+  },
+  { branch: 'Инженерия', names: ['Щепки', 'Набор болтов', 'Набор тонких сверл и бит'] },
+  { branch: 'Кулинария', names: ['Солянка', 'Чесночный суп', 'Заливное'] },
+  { branch: 'Самогоноварение', names: ['Коктейль «Незабываемый»', '«Алкобык»', 'Водка «Гейзер»'] },
+  { branch: 'Медицина', names: ['Морфин', 'Эпинефрин', '«Биозаплатка»'] },
+  { branch: 'Сырье и материалы', names: ['Латунь', 'Мутаген', 'Нейродегенерант'] },
+]
+
+function resolveRecipeCanonBranch(
+  recipe: HideoutRecipe,
+  itemsById: ReturnType<typeof useHideoutStore.getState>['itemsById'],
+): CanonBranch | null {
+  const categoryName = getLocalizedLine(recipe.category.lines) || 'Без категории'
+  const byCategory = BRANCH_BY_CATEGORY[categoryName]
+  if (byCategory) return byCategory
+
+  const resultNames = recipe.result
+    .map((entry) => getItemName(itemsById[entry.item]?.name?.lines))
+    .filter(Boolean) as string[]
+  for (const rule of BRANCH_BY_RESULT_NAME) {
+    if (resultNames.some((name) => rule.names.includes(name))) {
+      return rule.branch
+    }
+  }
+  return null
+}
 
 export function RecipesOverview() {
   const { recipes, itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
@@ -40,8 +99,13 @@ export function RecipesOverview() {
   }, [loadOverrides])
 
   const allCategories = useMemo(() => {
-    return [...new Set(recipes.map((recipe) => getLocalizedLine(recipe.category.lines) || 'Без категории'))]
-  }, [recipes])
+    const set = new Set<CanonBranch>()
+    for (const recipe of recipes) {
+      const branch = resolveRecipeCanonBranch(recipe, itemsById)
+      if (branch) set.add(branch)
+    }
+    return CANON_BRANCHES.filter((branch) => set.has(branch))
+  }, [itemsById, recipes])
 
   const groupedRecipes = useMemo(() => {
     const normalizedQuery = search.trim().toLowerCase()
@@ -69,7 +133,10 @@ export function RecipesOverview() {
       .filter((entry) => entry.matchPriority !== null)
 
     const filtered = scoredRecipes.filter(({ recipe, recipeFavoriteId }) => {
-      const categoryName = getLocalizedLine(recipe.category.lines) || 'Без категории'
+      const categoryName = resolveRecipeCanonBranch(recipe, itemsById)
+      if (!categoryName) {
+        return false
+      }
       if (
         activeCategory !== 'all' &&
         activeCategory !== 'favorites' &&
@@ -87,7 +154,8 @@ export function RecipesOverview() {
 
     return filtered.reduce<Record<string, typeof filtered>>((acc, entry) => {
       const { recipe, matchPriority } = entry
-      const categoryName = getLocalizedLine(recipe.category.lines) || 'Без категории'
+      const categoryName = resolveRecipeCanonBranch(recipe, itemsById)
+      if (!categoryName) return acc
 
       if (!acc[categoryName]) {
         acc[categoryName] = []

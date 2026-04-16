@@ -87,12 +87,14 @@ function normalize_timezone_offset_hours(mixed $value): int
 function default_craft_branch_levels(): array
 {
     return [
+        'ammo' => 1,
+        'pyrotechnics' => 1,
+        'protectiveGear' => 1,
+        'engineering' => 1,
         'cooking' => 1,
-        'rawMaterials' => 1,
+        'moonshining' => 1,
         'medicine' => 1,
-        'weaponModules' => 1,
-        'armor' => 1,
-        'other' => 1,
+        'rawMaterials' => 1,
     ];
 }
 
@@ -104,8 +106,18 @@ function default_craft_branch_levels_json(): string
 function normalize_craft_branch_levels(mixed $value): array
 {
     $base = default_craft_branch_levels();
+    $legacyMap = [
+        'weaponModules' => 'engineering',
+        'armor' => 'protectiveGear',
+        'other' => 'engineering',
+    ];
     if (!is_array($value)) {
         return $base;
+    }
+    foreach ($legacyMap as $legacyKey => $newKey) {
+        if (!array_key_exists($newKey, $value) && array_key_exists($legacyKey, $value)) {
+            $value[$newKey] = $value[$legacyKey];
+        }
     }
     $out = $base;
     foreach ($base as $key => $defaultLevel) {

@@ -7,12 +7,14 @@ import { getRoleLabel } from '../../shared/lib/authRole'
 import type { CraftBranchLevels } from '../../shared/api/backendApi'
 
 const CRAFT_BRANCHES: Array<{ key: keyof CraftBranchLevels; label: string }> = [
+  { key: 'ammo', label: 'Боеприпасы' },
+  { key: 'pyrotechnics', label: 'Пиротехника' },
+  { key: 'protectiveGear', label: 'Защитное снаряжение' },
+  { key: 'engineering', label: 'Инженерия' },
   { key: 'cooking', label: 'Кулинария' },
-  { key: 'rawMaterials', label: 'Сырье и материалы' },
+  { key: 'moonshining', label: 'Самогоноварение' },
   { key: 'medicine', label: 'Медицина' },
-  { key: 'weaponModules', label: 'Модули оружия' },
-  { key: 'armor', label: 'Броня и снаряжение' },
-  { key: 'other', label: 'Прочие ветки' },
+  { key: 'rawMaterials', label: 'Сырье и материалы' },
 ]
 
 export function ProfilePage() {
@@ -24,12 +26,14 @@ export function ProfilePage() {
   const [timezoneOffsetHours, setTimezoneOffsetHours] = useState<number>(user?.timezoneOffsetHours ?? 0)
   const [craftBranchLevels, setCraftBranchLevels] = useState<CraftBranchLevels>(
     user?.craftBranchLevels ?? {
+      ammo: 1,
+      pyrotechnics: 1,
+      protectiveGear: 1,
+      engineering: 1,
       cooking: 1,
+      moonshining: 1,
       rawMaterials: 1,
       medicine: 1,
-      weaponModules: 1,
-      armor: 1,
-      other: 1,
     },
   )
   const roleGlowColor =

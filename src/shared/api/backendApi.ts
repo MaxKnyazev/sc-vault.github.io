@@ -58,12 +58,14 @@ type RecipeResultOverridesResponse = {
 
 export type UserRole = 'blocked' | 'user' | 'admin'
 export type CraftBranchLevels = {
+  ammo: number
+  pyrotechnics: number
+  protectiveGear: number
+  engineering: number
   cooking: number
+  moonshining: number
   rawMaterials: number
   medicine: number
-  weaponModules: number
-  armor: number
-  other: number
 }
 
 export type AuthUser = {

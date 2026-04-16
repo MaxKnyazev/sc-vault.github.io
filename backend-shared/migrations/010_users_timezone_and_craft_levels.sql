@@ -4,11 +4,13 @@ ALTER TABLE users
 
 UPDATE users
 SET craft_branch_levels = JSON_OBJECT(
+  'ammo', 1,
+  'pyrotechnics', 1,
+  'protectiveGear', 1,
+  'engineering', 1,
   'cooking', 1,
+  'moonshining', 1,
   'rawMaterials', 1,
-  'medicine', 1,
-  'weaponModules', 1,
-  'armor', 1,
-  'other', 1
+  'medicine', 1
 )
 WHERE craft_branch_levels IS NULL;
