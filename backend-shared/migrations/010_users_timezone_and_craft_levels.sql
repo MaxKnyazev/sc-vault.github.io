@@ -1,6 +1,6 @@
 ALTER TABLE users
-  ADD COLUMN timezone_offset_hours SMALLINT NOT NULL DEFAULT 0 AFTER avatar_url,
-  ADD COLUMN craft_branch_levels JSON NULL AFTER timezone_offset_hours;
+  ADD COLUMN IF NOT EXISTS timezone_offset_hours SMALLINT NOT NULL DEFAULT 0 AFTER avatar_url,
+  ADD COLUMN IF NOT EXISTS craft_branch_levels JSON NULL AFTER timezone_offset_hours;
 
 UPDATE users
 SET craft_branch_levels = JSON_OBJECT(
