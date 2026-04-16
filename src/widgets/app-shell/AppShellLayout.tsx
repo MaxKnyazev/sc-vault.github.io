@@ -76,14 +76,24 @@ export function AppShellLayout() {
     document.title = `SCTool - ${pageTitle}`
   }, [location.pathname])
 
-  const getNavItemStyle = (active: boolean) =>
+  const getNavItemStyles = (active: boolean) =>
     ({
-      borderRadius: 10,
-      border: active
-        ? '1px solid var(--mantine-color-blue-6)'
-        : '1px solid var(--mantine-color-default-border)',
-      background: active ? 'var(--mantine-color-blue-6)' : 'var(--mantine-color-body)',
-      transition: 'all 120ms ease',
+      root: {
+        borderRadius: 10,
+        border: 'none',
+        background: active ? 'rgba(255,255,255,0.10)' : 'transparent',
+        color: active ? '#ffffff' : 'var(--mantine-color-text)',
+        boxShadow: active ? '0 0 22px 4px rgba(59,130,246,0.95)' : 'none',
+        transition: 'background-color 120ms ease, box-shadow 120ms ease, color 120ms ease',
+        '&:hover': {
+          background: 'rgba(255,255,255,0.10)',
+          color: '#ffffff',
+        },
+      },
+      label: {
+        fontWeight: 700,
+        color: 'inherit',
+      },
     }) as const
 
   return (
@@ -119,14 +129,7 @@ export function AppShellLayout() {
             onClick={close}
             label="Главная"
             active={location.pathname === '/'}
-            variant="subtle"
-            style={getNavItemStyle(location.pathname === '/')}
-            styles={{
-              label: {
-                fontWeight: 700,
-                color: 'var(--mantine-color-text)',
-              },
-            }}
+            styles={getNavItemStyles(location.pathname === '/')}
           />
           {canUseCoreFeatures ? (
             <NavLink
@@ -135,14 +138,7 @@ export function AppShellLayout() {
               onClick={close}
               label="Крафты"
               active={location.pathname.startsWith('/crafts')}
-              variant="subtle"
-              style={getNavItemStyle(location.pathname.startsWith('/crafts'))}
-              styles={{
-                label: {
-                  fontWeight: 700,
-                  color: 'var(--mantine-color-text)',
-                },
-              }}
+              styles={getNavItemStyles(location.pathname.startsWith('/crafts'))}
             />
           ) : null}
           {canUseCoreFeatures ? (
@@ -152,14 +148,7 @@ export function AppShellLayout() {
               onClick={close}
               label="Ингредиенты"
               active={location.pathname.startsWith('/ingredients')}
-              variant="subtle"
-              style={getNavItemStyle(location.pathname.startsWith('/ingredients'))}
-              styles={{
-                label: {
-                  fontWeight: 700,
-                  color: 'var(--mantine-color-text)',
-                },
-              }}
+              styles={getNavItemStyles(location.pathname.startsWith('/ingredients'))}
             />
           ) : null}
           {canUseCoreFeatures ? (
@@ -169,14 +158,7 @@ export function AppShellLayout() {
               onClick={close}
               label="История аукциона"
               active={location.pathname.startsWith('/auction-history')}
-              variant="subtle"
-              style={getNavItemStyle(location.pathname.startsWith('/auction-history'))}
-              styles={{
-                label: {
-                  fontWeight: 700,
-                  color: 'var(--mantine-color-text)',
-                },
-              }}
+              styles={getNavItemStyles(location.pathname.startsWith('/auction-history'))}
             />
           ) : null}
           {isAdmin ? (
@@ -186,14 +168,7 @@ export function AppShellLayout() {
               onClick={close}
               label="Пользователи"
               active={location.pathname.startsWith('/users')}
-              variant="subtle"
-              style={getNavItemStyle(location.pathname.startsWith('/users'))}
-              styles={{
-                label: {
-                  fontWeight: 700,
-                  color: 'var(--mantine-color-text)',
-                },
-              }}
+              styles={getNavItemStyles(location.pathname.startsWith('/users'))}
             />
           ) : null}
           </Stack>

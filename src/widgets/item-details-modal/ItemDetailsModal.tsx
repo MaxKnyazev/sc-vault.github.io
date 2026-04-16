@@ -11,6 +11,7 @@ import { useIngredientPricesStore } from '../../shared/store/ingredientPricesSto
 import { getQualityModalGlowBoxShadow } from '../../shared/lib/getQualityGlowColor'
 import { useRecipeOverridesStore } from '../../shared/store/recipeOverridesStore'
 import { applyRecipeResultOverride } from '../../shared/lib/applyRecipeResultOverride'
+import { useAuthStore } from '../../shared/store/authStore'
 
 export function ItemDetailsModal() {
   const { opened, itemId, close } = useItemDetailsModalStore()
@@ -25,6 +26,7 @@ export function ItemDetailsModal() {
   const [showUsedInCrafts, setShowUsedInCrafts] = useState(false)
   const recipeOverridesById = useRecipeOverridesStore((s) => s.byRecipeId)
   const loadOverrides = useRecipeOverridesStore((s) => s.loadOverrides)
+  const craftBranchLevels = useAuthStore((s) => s.user?.craftBranchLevels ?? null)
 
   useEffect(() => {
     void loadOverrides()
@@ -137,7 +139,7 @@ export function ItemDetailsModal() {
                       {craftRecipes.map((recipe, index) => (
                         <RecipeCard
                           key={`${recipe.bench}-${index}`}
-                          recipe={applyRecipeResultOverride(recipe, recipeOverridesById)}
+                          recipe={applyRecipeResultOverride(recipe, recipeOverridesById, craftBranchLevels)}
                           itemsById={itemsById}
                           realm={realm}
                           recipeFavoriteId={getRecipeFavoriteId(recipe)}
@@ -182,7 +184,7 @@ export function ItemDetailsModal() {
                           <Text size="xs" c="dimmed">
                             Результат крафта
                           </Text>
-                          {applyRecipeResultOverride(recipe, recipeOverridesById).result.map((entry) => {
+                          {applyRecipeResultOverride(recipe, recipeOverridesById, craftBranchLevels).result.map((entry) => {
                             const resultItem = itemsById[entry.item]
                             return (
                               <ItemBadge

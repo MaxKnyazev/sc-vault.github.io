@@ -17,12 +17,13 @@ import { SectionCard } from '../../components/section-card/SectionCard'
 import { RecipeCard } from '../../components/recipe-card/RecipeCard'
 import { collectHideoutItemIds } from '../../shared/lib/collectHideoutItemIds'
 import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
-import { getLocalizedLine } from '../../shared/lib/getLocalizedLine'
 import { getItemName } from '../../entities/item/lib'
 import { useFavoritesStore } from '../../shared/store/favoritesStore'
 import { useRecipeOverridesStore } from '../../shared/store/recipeOverridesStore'
 import { applyRecipeResultOverride } from '../../shared/lib/applyRecipeResultOverride'
 import type { HideoutRecipe } from '../../entities/hideout/types'
+import { useAuthStore } from '../../shared/store/authStore'
+import { getRecipeRequiredSkill } from '../../shared/lib/craftSkills'
 
 const CANON_BRANCHES = [
   'Боеприпасы',
@@ -36,55 +37,29 @@ const CANON_BRANCHES = [
 ] as const
 type CanonBranch = (typeof CANON_BRANCHES)[number]
 
-const BRANCH_BY_CATEGORY: Record<string, CanonBranch> = {
-  Боеприпасы: 'Боеприпасы',
-  Взрывчатка: 'Пиротехника',
-  Бронепластины: 'Защитное снаряжение',
-  'Функциональные объекты': 'Инженерия',
-  'Декоративная мебель': 'Инженерия',
-  Прочее: 'Инженерия',
-  Кулинария: 'Кулинария',
-  Алкоголь: 'Самогоноварение',
-  Медицина: 'Медицина',
-  Материалы: 'Сырье и материалы',
+const BRANCH_BY_PERK: Record<string, CanonBranch> = {
+  ammunition: 'Боеприпасы',
+  pyrotechnics: 'Пиротехника',
+  armorer: 'Защитное снаряжение',
+  engineering: 'Инженерия',
+  cooking: 'Кулинария',
+  brewing: 'Самогоноварение',
+  medicine: 'Медицина',
+  materials: 'Сырье и материалы',
 }
-
-const BRANCH_BY_RESULT_NAME: Array<{ branch: CanonBranch; names: string[] }> = [
-  { branch: 'Боеприпасы', names: ['Сумка снайперских 12.7 мм', 'Сумка СБП 9x39 мм', 'Сумка 9 мм «Сосуля»'] },
-  { branch: 'Пиротехника', names: ['M18 Claymore', 'Ящик гранат «Вонючка»', 'Ящик гранат «Хворь»'] },
-  {
-    branch: 'Защитное снаряжение',
-    names: ['Сумка композитных пластин V', 'Сумка керамических пластин IV', 'Сумка стальных пластин III'],
-  },
-  { branch: 'Инженерия', names: ['Щепки', 'Набор болтов', 'Набор тонких сверл и бит'] },
-  { branch: 'Кулинария', names: ['Солянка', 'Чесночный суп', 'Заливное'] },
-  { branch: 'Самогоноварение', names: ['Коктейль «Незабываемый»', '«Алкобык»', 'Водка «Гейзер»'] },
-  { branch: 'Медицина', names: ['Морфин', 'Эпинефрин', '«Биозаплатка»'] },
-  { branch: 'Сырье и материалы', names: ['Латунь', 'Мутаген', 'Нейродегенерант'] },
-]
 
 function resolveRecipeCanonBranch(
   recipe: HideoutRecipe,
-  itemsById: ReturnType<typeof useHideoutStore.getState>['itemsById'],
 ): CanonBranch | null {
-  const categoryName = getLocalizedLine(recipe.category.lines) || 'Без категории'
-  const byCategory = BRANCH_BY_CATEGORY[categoryName]
-  if (byCategory) return byCategory
-
-  const resultNames = recipe.result
-    .map((entry) => getItemName(itemsById[entry.item]?.name?.lines))
-    .filter(Boolean) as string[]
-  for (const rule of BRANCH_BY_RESULT_NAME) {
-    if (resultNames.some((name) => rule.names.includes(name))) {
-      return rule.branch
-    }
-  }
-  return null
+  const required = getRecipeRequiredSkill(recipe)
+  if (!required) return null
+  return BRANCH_BY_PERK[required.perkId] ?? null
 }
 
 export function RecipesOverview() {
   const { recipes, itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
   const favoriteCraftIds = useFavoritesStore((state) => state.favoriteCraftIds)
+  const craftBranchLevels = useAuthStore((s) => s.user?.craftBranchLevels ?? null)
   const recipeOverridesById = useRecipeOverridesStore((s) => s.byRecipeId)
   const loadOverrides = useRecipeOverridesStore((s) => s.loadOverrides)
   const [search, setSearch] = useState('')
@@ -101,11 +76,11 @@ export function RecipesOverview() {
   const allCategories = useMemo(() => {
     const set = new Set<CanonBranch>()
     for (const recipe of recipes) {
-      const branch = resolveRecipeCanonBranch(recipe, itemsById)
+      const branch = resolveRecipeCanonBranch(recipe)
       if (branch) set.add(branch)
     }
     return CANON_BRANCHES.filter((branch) => set.has(branch))
-  }, [itemsById, recipes])
+  }, [recipes])
 
   const groupedRecipes = useMemo(() => {
     const normalizedQuery = search.trim().toLowerCase()
@@ -133,7 +108,7 @@ export function RecipesOverview() {
       .filter((entry) => entry.matchPriority !== null)
 
     const filtered = scoredRecipes.filter(({ recipe, recipeFavoriteId }) => {
-      const categoryName = resolveRecipeCanonBranch(recipe, itemsById)
+      const categoryName = resolveRecipeCanonBranch(recipe)
       if (!categoryName) {
         return false
       }
@@ -154,7 +129,7 @@ export function RecipesOverview() {
 
     return filtered.reduce<Record<string, typeof filtered>>((acc, entry) => {
       const { recipe, matchPriority } = entry
-      const categoryName = resolveRecipeCanonBranch(recipe, itemsById)
+      const categoryName = resolveRecipeCanonBranch(recipe)
       if (!categoryName) return acc
 
       if (!acc[categoryName]) {
@@ -302,8 +277,7 @@ export function RecipesOverview() {
                       {categoryRecipes.map(({ recipe, recipeFavoriteId }, index) => (
                         <RecipeCard
                           key={`${categoryName}-${recipe.bench}-${index}`}
-                          recipe={applyRecipeResultOverride(recipe, recipeOverridesById)}
-                          defaultResultAmount={recipe.result[0]?.amount}
+                          recipe={applyRecipeResultOverride(recipe, recipeOverridesById, craftBranchLevels)}
                           itemsById={itemsById}
                           realm={realm}
                           recipeFavoriteId={recipeFavoriteId}

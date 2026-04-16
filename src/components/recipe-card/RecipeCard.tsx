@@ -12,6 +12,7 @@ import { useAuthStore } from '../../shared/store/authStore'
 import { useRecipeOverridesStore } from '../../shared/store/recipeOverridesStore'
 import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
 import { AdminAuctionTrackingButton } from '../admin-auction-ignore/AdminAuctionTrackingButton'
+import { getRecipeRequiredSkill, getUserSkillLevel } from '../../shared/lib/craftSkills'
 
 function createEnergyIconSvg(fillColor: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -25,7 +26,6 @@ type RecipeCardProps = {
   recipe: HideoutRecipe
   itemsById: Record<string, ListingItemWithId>
   realm: Realm
-  defaultResultAmount?: number
   recipeFavoriteId?: string
   hideRecipeTitle?: boolean
   hideResultSection?: boolean
@@ -53,7 +53,6 @@ export function RecipeCard({
   recipe,
   itemsById,
   realm,
-  defaultResultAmount,
   recipeFavoriteId,
   hideRecipeTitle = false,
   hideResultSection = false,
@@ -65,14 +64,13 @@ export function RecipeCard({
   const { isFavoriteCraft, toggleFavoriteCraft } = useFavoritesStore()
   const user = useAuthStore((s) => s.user)
   const saveOneOverride = useRecipeOverridesStore((s) => s.saveOne)
+  const overridesByRecipeId = useRecipeOverridesStore((s) => s.byRecipeId)
   const colorScheme = useComputedColorScheme('dark')
   const primaryResultItemId = recipe.result[0]?.item
-  const primaryResultAmount = recipe.result[0]?.amount
-  const baseDefaultAmount = defaultResultAmount ?? primaryResultAmount ?? 1
   const recipeId = recipeFavoriteId || getRecipeFavoriteId(recipe)
   const [isCraftOpen, setIsCraftOpen] = useState(defaultCraftOpen)
-  const [isEditingAmount, setIsEditingAmount] = useState(false)
-  const [draftAmount, setDraftAmount] = useState<string>(primaryResultAmount ? String(primaryResultAmount) : '')
+  const [isEditingBonus, setIsEditingBonus] = useState(false)
+  const [draftBonus, setDraftBonus] = useState('0')
   const [isSavingLocal, setIsSavingLocal] = useState(false)
   const energyIconSvg = createEnergyIconSvg(colorScheme === 'light' ? '#4b5563' : '#ffffff')
   const canEditOverride =
@@ -81,12 +79,17 @@ export function RecipeCard({
     !hideResultSection &&
     !showResultTextOnly &&
     Boolean(primaryResultItemId)
+  const requiredSkill = getRecipeRequiredSkill(recipe)
+  const userSkillLevel = requiredSkill ? getUserSkillLevel(user?.craftBranchLevels, requiredSkill.perkId) : 0
+  const isSkillInsufficient = requiredSkill ? userSkillLevel < requiredSkill.level : false
+  const activeOverride = overridesByRecipeId[recipeId]
+  const currentBonus = activeOverride?.bonusAmount ?? 0
 
   useEffect(() => {
-    setDraftAmount(primaryResultAmount ? String(primaryResultAmount) : '')
-    setIsEditingAmount(false)
+    setDraftBonus(String(currentBonus))
+    setIsEditingBonus(false)
     setIsSavingLocal(false)
-  }, [primaryResultAmount, recipeId])
+  }, [currentBonus, recipeId])
 
   const resultItems = recipe.result.map((entry) => {
     const view = getItemPresentation(entry.item, itemsById, realm)
@@ -102,9 +105,28 @@ export function RecipeCard({
     <Stack
       gap="sm"
       p="md"
-      bd="1px solid var(--mantine-color-default-border)"
-      style={{ borderRadius: 8, position: 'relative' }}
+      bd={isSkillInsufficient ? '1px solid #5a1f1f' : '1px solid var(--mantine-color-default-border)'}
+      style={{
+        borderRadius: 8,
+        position: 'relative',
+        boxShadow: isSkillInsufficient ? '0 0 10px rgba(120, 30, 30, 0.35)' : undefined,
+      }}
     >
+      {isSkillInsufficient ? (
+        <Text
+          size="xs"
+          fw={700}
+          style={{
+            background: '#4a1f1f',
+            color: '#ffdede',
+            borderRadius: 6,
+            padding: '4px 8px',
+            alignSelf: 'flex-start',
+          }}
+        >
+          Недостаточный уровень навыка
+        </Text>
+      ) : null}
       {recipeFavoriteId && primaryResultItemId ? (
         <ActionIcon
           size={36}
@@ -209,19 +231,19 @@ export function RecipeCard({
       {canEditOverride ? (
         <Stack gap={6}>
           <Text size="sm" fw={600}>
-            Количество результата
+            Бонусный крафт
           </Text>
           <Group wrap="nowrap" align="flex-end">
             <TextInput
-              value={draftAmount}
+              value={draftBonus}
               onChange={(event) => {
                 const raw = event.currentTarget.value.replace(',', '.')
                 const sanitized = raw
                   .replace(/[^\d.]/g, '')
                   .replace(/^(\d*\.\d*).*$/, '$1')
-                setDraftAmount(sanitized)
+                setDraftBonus(sanitized)
               }}
-              disabled={!isEditingAmount || isSavingLocal}
+              disabled={!isEditingBonus || isSavingLocal}
               style={{ flex: 1 }}
             />
             <Button
@@ -230,35 +252,35 @@ export function RecipeCard({
               color="gray"
               loading={isSavingLocal}
               onClick={async () => {
-                if (!isEditingAmount) {
-                  setIsEditingAmount(true)
+                if (!isEditingBonus) {
+                  setIsEditingBonus(true)
                   return
                 }
                 if (!primaryResultItemId) return
-                const parsedAmount = Number.parseFloat(draftAmount.replace(',', '.'))
-                const safeAmount =
-                  Number.isFinite(parsedAmount) && parsedAmount > 0
-                    ? Number(parsedAmount.toFixed(3))
-                    : 1
+                const parsedBonus = Number.parseFloat(draftBonus.replace(',', '.'))
+                const safeBonus = Number.isFinite(parsedBonus) && parsedBonus >= 0 ? Number(parsedBonus.toFixed(3)) : 0
                 setIsSavingLocal(true)
                 try {
                   await saveOneOverride({
                     recipeId,
                     resultItemId: primaryResultItemId,
-                    baseAmount: safeAmount,
-                    bonusAmount: null,
+                    baseAmount: null,
+                    bonusAmount: safeBonus,
                   })
-                  setIsEditingAmount(false)
+                  setIsEditingBonus(false)
                 } finally {
                   setIsSavingLocal(false)
                 }
               }}
             >
-              {isEditingAmount ? 'Сохранить' : 'Изменить количество'}
+              {isEditingBonus ? 'Сохранить' : 'Изменить бонус'}
             </Button>
           </Group>
           <Text size="xs" c="dimmed">
-            Дефолтное значение: {baseDefaultAmount}, изменено на {primaryResultAmount ?? baseDefaultAmount}
+            Дефолтное значение: 0, текущий бонус: {currentBonus}
+            {requiredSkill
+              ? ` · Требуется: ${requiredSkill.level}, ваш уровень: ${userSkillLevel}`
+              : ''}
           </Text>
         </Stack>
       ) : null}
