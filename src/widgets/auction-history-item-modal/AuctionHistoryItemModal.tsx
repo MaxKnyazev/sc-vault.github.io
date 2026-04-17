@@ -11,6 +11,7 @@ import {
   type AuctionHistoryPoint,
   type AuctionHistoryQuality,
   type AuctionHistoryRange,
+  type AuctionHistoryUpgrade,
   type AuctionHistoryZoom,
 } from '../../shared/api/backendApi'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
@@ -28,6 +29,24 @@ const QUALITY_OPTIONS: Array<{ value: AuctionHistoryQuality; label: string }> = 
   { value: 'unknown', label: 'Неизвестно' },
 ]
 const ZOOM_LEVELS: AuctionHistoryZoom[] = [1, 2, 4]
+const UPGRADE_OPTIONS: Array<{ value: AuctionHistoryUpgrade; label: string }> = [
+  { value: 'all', label: 'Все' },
+  { value: 1, label: '+1' },
+  { value: 2, label: '+2' },
+  { value: 3, label: '+3' },
+  { value: 4, label: '+4' },
+  { value: 5, label: '+5' },
+  { value: 6, label: '+6' },
+  { value: 7, label: '+7' },
+  { value: 8, label: '+8' },
+  { value: 9, label: '+9' },
+  { value: 10, label: '+10' },
+  { value: 11, label: '+11' },
+  { value: 12, label: '+12' },
+  { value: 13, label: '+13' },
+  { value: 14, label: '+14' },
+  { value: 15, label: '+15' },
+]
 
 const CHART_VB = { w: 640, h: 280 }
 const CHART_MARGIN = { left: 48, right: 12, top: 14, bottom: 54 }
@@ -121,6 +140,7 @@ export function AuctionHistoryItemModal() {
   const timezoneOffsetHours = useAuthStore((s) => s.user?.timezoneOffsetHours ?? 0)
   const [range, setRange] = useState<AuctionHistoryRange>('7d')
   const [quality, setQuality] = useState<AuctionHistoryQuality>('all')
+  const [upgrade, setUpgrade] = useState<AuctionHistoryUpgrade>('all')
   const [points, setPoints] = useState<AuctionHistoryPoint[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -194,7 +214,7 @@ export function AuctionHistoryItemModal() {
       setIsLoading(true)
       setError(null)
       try {
-        const rows = await fetchAuctionItemHistory(itemId, range, quality, zoom)
+        const rows = await fetchAuctionItemHistory(itemId, range, quality, zoom, upgrade)
         setPoints(rows)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Не удалось загрузить историю')
@@ -203,20 +223,21 @@ export function AuctionHistoryItemModal() {
         setIsLoading(false)
       }
     })()
-  }, [opened, itemId, range, quality, zoom])
+  }, [opened, itemId, range, quality, zoom, upgrade])
 
   useEffect(() => {
     setChartHover(null)
-  }, [points, zoom, quality, range])
+  }, [points, zoom, quality, range, upgrade])
 
   useEffect(() => {
     setZoom(1)
-  }, [range, quality, itemId])
+  }, [range, quality, upgrade, itemId])
 
   useEffect(() => {
     if (!opened) {
       setRange('7d')
       setQuality('all')
+      setUpgrade('all')
       setPoints([])
       setError(null)
       setIsLoading(false)
@@ -285,6 +306,18 @@ export function AuctionHistoryItemModal() {
               size="xs"
               variant={quality === option.value ? 'filled' : 'default'}
               onClick={() => setQuality(option.value)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </Group>
+        <Group gap="xs" wrap="wrap">
+          {UPGRADE_OPTIONS.map((option) => (
+            <Button
+              key={`upgrade-${String(option.value)}`}
+              size="xs"
+              variant={upgrade === option.value ? 'filled' : 'default'}
+              onClick={() => setUpgrade(option.value)}
             >
               {option.label}
             </Button>

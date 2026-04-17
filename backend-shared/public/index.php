@@ -267,16 +267,17 @@ if ($path === '/auction/history') {
     $range = trim((string)($_GET['range'] ?? '7d'));
     $quality = trim((string)($_GET['quality'] ?? 'all'));
     $zoom = (int)($_GET['zoom'] ?? 1);
+    $upgrade = trim((string)($_GET['upgrade'] ?? 'all'));
     try {
         // On every modal open/range switch refresh the latest hour for this item,
         // so charts use the freshest raw trades while still keeping cron as the main collector.
         sync_recent_auction_raw_for_item($db, $config, $itemId, 65, 20);
-        $points = get_auction_item_history($db, $itemId, $range, $quality, $zoom);
+        $points = get_auction_item_history($db, $itemId, $range, $quality, $zoom, $upgrade);
     } catch (Throwable $e) {
         send_json(400, ['error' => $e->getMessage()]);
         exit;
     }
-    send_json(200, ['itemId' => $itemId, 'range' => $range, 'quality' => $quality, 'zoom' => $zoom, 'points' => $points]);
+    send_json(200, ['itemId' => $itemId, 'range' => $range, 'quality' => $quality, 'zoom' => $zoom, 'upgrade' => $upgrade, 'points' => $points]);
     exit;
 }
 

@@ -168,11 +168,13 @@ function collect_raw_trades_for_item(
                 $price = (float)($row['price'] ?? 0);
                 $soldAt = gmdate('Y-m-d H:i:s', $t);
                 $qualityKey = normalize_quality_key_from_trade_row($row);
+                $upgradeLevel = normalize_upgrade_level_from_trade_row($row);
                 $dedupKey = hash(
                     'sha256',
                     implode('|', [
                         $itemId,
                         $qualityKey,
+                        (string)$upgradeLevel,
                         $soldAt,
                         (string)$amount,
                         sprintf('%.2f', $price),
@@ -182,6 +184,7 @@ function collect_raw_trades_for_item(
                 $inserted = upsert_auction_raw_trade($db, [
                     'itemId' => $itemId,
                     'qualityKey' => $qualityKey,
+                    'upgradeLevel' => $upgradeLevel,
                     'soldAt' => $soldAt,
                     'amount' => $amount,
                     'price' => $price,

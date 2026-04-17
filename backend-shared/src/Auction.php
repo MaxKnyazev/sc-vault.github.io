@@ -40,13 +40,14 @@ function upsert_auction_raw_trade(PDO $db, array $trade): bool
 {
     $stmt = $db->prepare(
         'INSERT INTO auction_raw_trades
-          (item_id, quality_key, sold_at, amount, price, source_offset, source_row_index, collected_at, dedup_key, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())
+          (item_id, quality_key, upgrade_level, sold_at, amount, price, source_offset, source_row_index, collected_at, dedup_key, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())
          ON DUPLICATE KEY UPDATE dedup_key = dedup_key'
     );
     $stmt->execute([
         $trade['itemId'],
         $trade['qualityKey'],
+        $trade['upgradeLevel'],
         $trade['soldAt'],
         $trade['amount'],
         $trade['price'],
@@ -65,10 +66,11 @@ function rebuild_hourly_stats_from_raw_for_item(PDO $db, string $itemId, int $ra
     $windowExpr = sprintf('UTC_TIMESTAMP() - INTERVAL %d HOUR', $hours);
     $stmt = $db->prepare(
         "INSERT INTO auction_hourly_stats
-          (item_id, quality_key, hour_start, total_qty, total_revenue, trade_count, avg_per_unit, source_min_sold_at, source_max_sold_at, fetched_at, updated_at)
+          (item_id, quality_key, upgrade_level, hour_start, total_qty, total_revenue, trade_count, avg_per_unit, source_min_sold_at, source_max_sold_at, fetched_at, updated_at)
          SELECT
           item_id,
           quality_key,
+          upgrade_level,
           DATE_FORMAT(sold_at, '%Y-%m-%d %H:00:00') AS hour_start,
           COALESCE(SUM(amount), 0) AS total_qty,
           COALESCE(SUM(price), 0) AS total_revenue,
@@ -80,7 +82,7 @@ function rebuild_hourly_stats_from_raw_for_item(PDO $db, string $itemId, int $ra
           UTC_TIMESTAMP() AS updated_at
          FROM auction_raw_trades
          WHERE item_id = ? AND sold_at >= {$windowExpr}
-         GROUP BY item_id, quality_key, DATE_FORMAT(sold_at, '%Y-%m-%d %H:00:00')
+         GROUP BY item_id, quality_key, upgrade_level, DATE_FORMAT(sold_at, '%Y-%m-%d %H:00:00')
          ON DUPLICATE KEY UPDATE
           total_qty = VALUES(total_qty),
           total_revenue = VALUES(total_revenue),
@@ -135,10 +137,11 @@ function rollup_hourly_to_daily_and_purge(PDO $db, int $hourlyRetentionDays, int
         try {
             $insertStmt = $db->prepare(
                 "INSERT INTO auction_daily_stats
-                  (item_id, quality_key, day_date, total_qty, total_revenue, trade_count, avg_per_unit, source_hours_count, fetched_at, updated_at)
+                  (item_id, quality_key, upgrade_level, day_date, total_qty, total_revenue, trade_count, avg_per_unit, source_hours_count, fetched_at, updated_at)
                  SELECT
                   item_id,
                   quality_key,
+                  upgrade_level,
                   DATE(hour_start) AS day_date,
                   COALESCE(SUM(total_qty), 0) AS total_qty,
                   COALESCE(SUM(total_revenue), 0) AS total_revenue,
@@ -148,13 +151,13 @@ function rollup_hourly_to_daily_and_purge(PDO $db, int $hourlyRetentionDays, int
                   UTC_TIMESTAMP() AS fetched_at,
                   UTC_TIMESTAMP() AS updated_at
                  FROM (
-                    SELECT item_id, quality_key, hour_start, total_qty, total_revenue, trade_count
+                    SELECT item_id, quality_key, upgrade_level, hour_start, total_qty, total_revenue, trade_count
                     FROM auction_hourly_stats
                     WHERE hour_start < {$cutoffExpr}
                     ORDER BY hour_start
                     LIMIT {$limit}
                  ) AS batch
-                 GROUP BY item_id, quality_key, DATE(hour_start)
+                 GROUP BY item_id, quality_key, upgrade_level, DATE(hour_start)
                  ON DUPLICATE KEY UPDATE
                   total_qty = total_qty + VALUES(total_qty),
                   total_revenue = total_revenue + VALUES(total_revenue),
@@ -341,6 +344,20 @@ function normalize_history_quality(string $quality): string
     return $normalized;
 }
 
+function normalize_history_upgrade(mixed $upgrade): int|string
+{
+    if (is_string($upgrade) && strtolower(trim($upgrade)) === 'all') {
+        return 'all';
+    }
+    if (is_int($upgrade) || is_float($upgrade) || (is_string($upgrade) && preg_match('/^-?\d+$/', trim($upgrade)))) {
+        $value = (int)$upgrade;
+        if ($value >= 1 && $value <= 15) {
+            return $value;
+        }
+    }
+    throw new InvalidArgumentException('Invalid history upgrade');
+}
+
 function normalize_quality_key_from_additional(mixed $additional): string
 {
     if (is_array($additional)) {
@@ -424,7 +441,60 @@ function normalize_quality_key_from_trade_row(array $row): string
     return 'normal';
 }
 
-function get_auction_item_history(PDO $db, string $itemId, string $range = '7d', string $quality = 'all', int $zoom = 1): array
+function normalize_upgrade_level_from_additional(mixed $additional): int
+{
+    if (is_array($additional)) {
+        $value = $additional['ptn'] ?? $additional['upgrade'] ?? $additional['level'] ?? null;
+        if ($value !== null) {
+            return normalize_upgrade_level_from_additional($value);
+        }
+        foreach ($additional as $nested) {
+            if (!is_array($nested)) {
+                continue;
+            }
+            $nestedUpgrade = normalize_upgrade_level_from_additional($nested);
+            if ($nestedUpgrade > 0) {
+                return $nestedUpgrade;
+            }
+        }
+    }
+
+    if (is_int($additional) || is_float($additional) || (is_string($additional) && preg_match('/^-?\d+$/', trim($additional)))) {
+        $n = (int)$additional;
+        return max(0, min(15, $n));
+    }
+
+    return 0;
+}
+
+function normalize_upgrade_level_from_trade_row(array $row): int
+{
+    $candidates = [
+        $row['ptn'] ?? null,
+        $row['upgrade'] ?? null,
+        $row['level'] ?? null,
+        $row['additional'] ?? null,
+    ];
+    foreach ($candidates as $candidate) {
+        if ($candidate === null) {
+            continue;
+        }
+        $upgrade = normalize_upgrade_level_from_additional($candidate);
+        if ($upgrade > 0 || $candidate === 0 || $candidate === '0') {
+            return $upgrade;
+        }
+    }
+    return 0;
+}
+
+function get_auction_item_history(
+    PDO $db,
+    string $itemId,
+    string $range = '7d',
+    string $quality = 'all',
+    int $zoom = 1,
+    int|string $upgrade = 'all'
+): array
 {
     $normalizedItemId = trim($itemId);
     if ($normalizedItemId === '') {
@@ -433,17 +503,22 @@ function get_auction_item_history(PDO $db, string $itemId, string $range = '7d',
     $normalizedRange = normalize_history_range($range);
     $normalizedQuality = normalize_history_quality($quality);
     $normalizedZoom = normalize_history_zoom($zoom);
+    $normalizedUpgrade = normalize_history_upgrade($upgrade);
     $plan = get_history_plan($normalizedRange, $normalizedZoom);
     $toTs = time();
     $fromTs = $toTs - $plan['rangeSec'];
     $fromUtc = gmdate('Y-m-d H:i:s', $fromTs);
     $toUtc = gmdate('Y-m-d H:i:s', $toTs);
     $buckets = [];
-    $qualityCondition = '';
-    $qualityParams = [];
+    $filterCondition = '';
+    $filterParams = [];
     if ($normalizedQuality !== 'all') {
-        $qualityCondition = ' AND quality_key = ?';
-        $qualityParams[] = $normalizedQuality;
+        $filterCondition .= ' AND quality_key = ?';
+        $filterParams[] = $normalizedQuality;
+    }
+    if ($normalizedUpgrade !== 'all') {
+        $filterCondition .= ' AND upgrade_level = ?';
+        $filterParams[] = $normalizedUpgrade;
     }
 
     $addToBucket = static function (array &$acc, int $eventTs, float $qty, float $revenue, int $trades, int $rangeFrom, array $historyPlan): void {
@@ -514,7 +589,7 @@ function get_auction_item_history(PDO $db, string $itemId, string $range = '7d',
     $hourlyRows = [];
     $dailyRows = [];
     if ($plan['bucketSec'] < 3600) {
-        $rawRows = $rawQuery($db, $normalizedItemId, $fromUtc, $toUtc, $qualityCondition, $qualityParams);
+        $rawRows = $rawQuery($db, $normalizedItemId, $fromUtc, $toUtc, $filterCondition, $filterParams);
     } elseif ($plan['bucketSec'] < 86400) {
         $rawStart = max($fromTs, $toTs - 24 * 3600);
         $rawRows = $rawQuery(
@@ -522,16 +597,16 @@ function get_auction_item_history(PDO $db, string $itemId, string $range = '7d',
             $normalizedItemId,
             gmdate('Y-m-d H:i:s', $rawStart),
             $toUtc,
-            $qualityCondition,
-            $qualityParams
+            $filterCondition,
+            $filterParams
         );
         $hourlyRows = $hourlyQuery(
             $db,
             $normalizedItemId,
             $fromUtc,
             gmdate('Y-m-d H:i:s', min($toTs, $toTs - 24 * 3600)),
-            $qualityCondition,
-            $qualityParams
+            $filterCondition,
+            $filterParams
         );
     } else {
         $rawStart = max($fromTs, $toTs - 24 * 3600);
@@ -540,8 +615,8 @@ function get_auction_item_history(PDO $db, string $itemId, string $range = '7d',
             $normalizedItemId,
             gmdate('Y-m-d H:i:s', $rawStart),
             $toUtc,
-            $qualityCondition,
-            $qualityParams
+            $filterCondition,
+            $filterParams
         );
         $dailyCutoffTs = strtotime(gmdate('Y-m-d 00:00:00', $toTs - 8 * 24 * 3600));
         $hourlyRows = $hourlyQuery(
@@ -549,16 +624,16 @@ function get_auction_item_history(PDO $db, string $itemId, string $range = '7d',
             $normalizedItemId,
             gmdate('Y-m-d H:i:s', max($fromTs, $dailyCutoffTs)),
             gmdate('Y-m-d H:i:s', min($toTs, $toTs - 24 * 3600)),
-            $qualityCondition,
-            $qualityParams
+            $filterCondition,
+            $filterParams
         );
         $dailyRows = $dailyQuery(
             $db,
             $normalizedItemId,
             $fromUtc,
             gmdate('Y-m-d H:i:s', min($toTs, $dailyCutoffTs)),
-            $qualityCondition,
-            $qualityParams
+            $filterCondition,
+            $filterParams
         );
     }
 
@@ -664,11 +739,13 @@ function sync_tracked_item_history(PDO $db, array $config, string $itemId, int $
             }
             $soldAt = gmdate('Y-m-d H:i:s', $t);
             $qualityKey = normalize_quality_key_from_trade_row($row);
+            $upgradeLevel = normalize_upgrade_level_from_trade_row($row);
             $dedupKey = hash(
                 'sha256',
                 implode('|', [
                     $normalizedItemId,
                     $qualityKey,
+                    (string)$upgradeLevel,
                     $soldAt,
                     (string)$amount,
                     sprintf('%.2f', $price),
@@ -677,6 +754,7 @@ function sync_tracked_item_history(PDO $db, array $config, string $itemId, int $
             $didInsert = upsert_auction_raw_trade($db, [
                 'itemId' => $normalizedItemId,
                 'qualityKey' => $qualityKey,
+                'upgradeLevel' => $upgradeLevel,
                 'soldAt' => $soldAt,
                 'amount' => $amount,
                 'price' => $price,
@@ -787,11 +865,13 @@ function sync_recent_auction_raw_for_item(
             }
             $soldAt = gmdate('Y-m-d H:i:s', $t);
             $qualityKey = normalize_quality_key_from_trade_row($row);
+            $upgradeLevel = normalize_upgrade_level_from_trade_row($row);
             $dedupKey = hash(
                 'sha256',
                 implode('|', [
                     $normalizedItemId,
                     $qualityKey,
+                    (string)$upgradeLevel,
                     $soldAt,
                     (string)$amount,
                     sprintf('%.2f', $price),
@@ -801,6 +881,7 @@ function sync_recent_auction_raw_for_item(
             $didInsert = upsert_auction_raw_trade($db, [
                 'itemId' => $normalizedItemId,
                 'qualityKey' => $qualityKey,
+                'upgradeLevel' => $upgradeLevel,
                 'soldAt' => $soldAt,
                 'amount' => $amount,
                 'price' => $price,
