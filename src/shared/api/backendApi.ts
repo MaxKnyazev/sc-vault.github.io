@@ -39,6 +39,8 @@ export type AuctionHistoryPoint = {
 export type AuctionActiveLot = {
   amount: number
   price: number
+  startPrice: number | null
+  buyoutPrice: number | null
   placedAt: string
   expiresAt: string
   quality: AuctionHistoryQuality

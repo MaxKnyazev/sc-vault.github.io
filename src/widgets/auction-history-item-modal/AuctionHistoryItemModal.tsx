@@ -176,6 +176,18 @@ function formatHistoryTooltipTime(ts: string, timezoneOffsetHours: number): stri
   return d.toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })
 }
 
+function formatRemaining(endTs: string, nowMs: number): string {
+  const d = parseUtcDate(endTs)
+  if (!d) return '—'
+  const sec = Math.floor((d.getTime() - nowMs) / 1000)
+  if (sec <= 0) return 'Завершён'
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  if (h > 0) return `${h}ч ${String(m).padStart(2, '0')}м`
+  return `${m}м ${String(s).padStart(2, '0')}с`
+}
+
 export function AuctionHistoryItemModal() {
   const { opened, itemId, close } = useAuctionHistoryItemModalStore()
   const { itemsById, realm } = useHideoutStore()
@@ -186,6 +198,7 @@ export function AuctionHistoryItemModal() {
   const [points, setPoints] = useState<AuctionHistoryPoint[]>([])
   const [activeLots, setActiveLots] = useState<AuctionActiveLot[]>([])
   const [viewMode, setViewMode] = useState<AuctionModalViewMode>('history')
+  const [nowMs, setNowMs] = useState(() => Date.now())
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [zoom, setZoom] = useState<AuctionHistoryZoom>(1)
@@ -227,11 +240,13 @@ export function AuctionHistoryItemModal() {
     [points],
   )
   const { series, min: minPrice, max: maxPrice } = useMemo(() => buildChartSeries(visiblePoints), [visiblePoints])
-  const activeLotsTotalQty = useMemo(() => activeLots.reduce((sum, lot) => sum + lot.amount, 0), [activeLots])
-  const activeLotsTotalValue = useMemo(
-    () => activeLots.reduce((sum, lot) => sum + lot.amount * lot.price, 0),
-    [activeLots],
-  )
+  const filteredActiveLots = useMemo(() => {
+    return activeLots.filter((lot) => {
+      if (showQualityFilter && effectiveQuality !== 'all' && lot.quality !== effectiveQuality) return false
+      if (showUpgradeFilter && effectiveUpgrade !== 'all' && lot.upgrade !== effectiveUpgrade) return false
+      return true
+    })
+  }, [activeLots, showQualityFilter, showUpgradeFilter, effectiveQuality, effectiveUpgrade])
   const polyline = useMemo(
     () => (series.length === 0 ? '' : series.map((s) => `${s.x},${s.y}`).join(' ')),
     [series],
@@ -324,6 +339,12 @@ export function AuctionHistoryItemModal() {
     }
   }, [opened])
 
+  useEffect(() => {
+    if (!opened || viewMode !== 'activeLots') return
+    const id = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [opened, viewMode])
+
   return (
     <Modal
       opened={opened}
@@ -396,7 +417,7 @@ export function AuctionHistoryItemModal() {
           ))}
           </Group>
         ) : null}
-        {viewMode === 'history' && (showQualityFilter || showUpgradeFilter) ? (
+        {showQualityFilter || showUpgradeFilter ? (
           <Group gap="sm" wrap="nowrap" grow>
             {showQualityFilter ? (
               <Select
@@ -440,7 +461,11 @@ export function AuctionHistoryItemModal() {
         <Text size="sm" c="dimmed">
           {viewMode === 'history'
             ? `${latestPrice !== null ? `Текущая средняя цена: ${formatAuctionRub(latestPrice)} ₽` : 'Нет данных по цене'} · Лотов: ${totalTrades} · ZOOM x${zoom}`
-            : `Активных лотов: ${activeLots.length} · Объём: ${new Intl.NumberFormat('ru-RU').format(activeLotsTotalQty)} шт. · Общая стоимость: ${formatAuctionRub(activeLotsTotalValue)} ₽`}
+            : `Активных лотов: ${filteredActiveLots.length} · Объём: ${new Intl.NumberFormat('ru-RU').format(
+                filteredActiveLots.reduce((sum, lot) => sum + lot.amount, 0),
+              )} шт. · Общая стоимость: ${formatAuctionRub(
+                filteredActiveLots.reduce((sum, lot) => sum + lot.amount * lot.price, 0),
+              )} ₽`}
         </Text>
 
         {viewMode === 'history' ? (
@@ -657,44 +682,87 @@ export function AuctionHistoryItemModal() {
             bd="1px solid var(--mantine-color-default-border)"
             style={{ borderRadius: 8, width: '100%', minHeight: 330, position: 'relative' }}
           >
-            {!isLoading && activeLots.length === 0 ? (
+            {!isLoading && filteredActiveLots.length === 0 ? (
               <Text size="sm" c="dimmed">
                 Нет активных лотов.
               </Text>
             ) : null}
-            {!isLoading && activeLots.length > 0 ? (
+            {!isLoading && filteredActiveLots.length > 0 ? (
               <ScrollArea.Autosize mah={360}>
                 <Stack gap="xs">
-                  {activeLots.map((lot, idx) => (
-                    <Group
-                      key={`active-lot-${idx}-${lot.price}-${lot.amount}`}
-                      justify="space-between"
-                      align="flex-start"
-                      p="xs"
-                      bd="1px solid var(--mantine-color-default-border)"
-                      style={{ borderRadius: 8 }}
-                    >
-                      <Stack gap={2}>
-                        <Text size="sm" fw={600}>
-                          {formatAuctionRub(lot.price)} ₽ за шт.
+                  <Group
+                    justify="space-between"
+                    p="xs"
+                    style={{
+                      borderRadius: 8,
+                      border: '1px solid var(--mantine-color-default-border)',
+                      background: 'rgba(255,255,255,0.03)',
+                      fontSize: 12,
+                    }}
+                  >
+                    <Text size="xs" c="dimmed" style={{ width: 240 }}>
+                      Лот
+                    </Text>
+                    <Text size="xs" c="dimmed" style={{ width: 88, textAlign: 'right' }}>
+                      Осталось
+                    </Text>
+                    <Text size="xs" c="dimmed" style={{ width: 90, textAlign: 'right' }}>
+                      Кол-во
+                    </Text>
+                    <Text size="xs" c="dimmed" style={{ width: 110, textAlign: 'right' }}>
+                      Старт/шт
+                    </Text>
+                    <Text size="xs" c="dimmed" style={{ width: 120, textAlign: 'right' }}>
+                      Выкуп/шт
+                    </Text>
+                    <Text size="xs" c="dimmed" style={{ width: 120, textAlign: 'right' }}>
+                      Сумма лота
+                    </Text>
+                  </Group>
+                  {filteredActiveLots.map((lot, idx) => {
+                    const qualityGlow =
+                      lot.quality !== 'unknown'
+                        ? QUALITY_GLOW_BY_KEY[lot.quality as Exclude<AuctionHistoryQuality, 'all'>]
+                        : item?.color
+                    const displayName = isArtifact ? `${itemName || itemId} +${lot.upgrade}` : itemName || itemId || 'Лот'
+                    return (
+                      <Group
+                        key={`active-lot-${idx}-${lot.price}-${lot.amount}`}
+                        justify="space-between"
+                        align="center"
+                        p="xs"
+                        bd="1px solid var(--mantine-color-default-border)"
+                        style={{ borderRadius: 8 }}
+                        wrap="nowrap"
+                      >
+                        <Box style={{ width: 240, minWidth: 240 }}>
+                          <ItemBadge
+                            name={displayName}
+                            iconUrl={iconUrl}
+                            qualityColor={qualityGlow}
+                            size="ingredient"
+                            showFavoriteButton={false}
+                            openDetailsOnClick={false}
+                          />
+                        </Box>
+                        <Text size="sm" style={{ width: 88, textAlign: 'right' }}>
+                          {formatRemaining(lot.expiresAt, nowMs)}
                         </Text>
-                        <Text size="xs" c="dimmed">
-                          Кол-во: {new Intl.NumberFormat('ru-RU').format(lot.amount)} шт.
+                        <Text size="sm" style={{ width: 90, textAlign: 'right' }}>
+                          {new Intl.NumberFormat('ru-RU').format(lot.amount)}
                         </Text>
-                        <Text size="xs" c="dimmed">
-                          Сумма лота: {formatAuctionRub(lot.price * lot.amount)} ₽
+                        <Text size="sm" style={{ width: 110, textAlign: 'right' }}>
+                          {lot.startPrice !== null ? `${formatAuctionRub(lot.startPrice)} ₽` : '—'}
                         </Text>
-                      </Stack>
-                      <Stack gap={2} align="flex-end">
-                        <Text size="xs" c="dimmed">
-                          Редкость: {lot.quality}
+                        <Text size="sm" style={{ width: 120, textAlign: 'right' }}>
+                          {lot.buyoutPrice !== null ? `${formatAuctionRub(lot.buyoutPrice)} ₽` : `${formatAuctionRub(lot.price)} ₽`}
                         </Text>
-                        <Text size="xs" c="dimmed">
-                          Заточка: {lot.upgrade > 0 ? `+${lot.upgrade}` : '—'}
+                        <Text size="sm" fw={600} style={{ width: 120, textAlign: 'right' }}>
+                          {formatAuctionRub(lot.price * lot.amount)} ₽
                         </Text>
-                      </Stack>
-                    </Group>
-                  ))}
+                      </Group>
+                    )
+                  })}
                 </Stack>
               </ScrollArea.Autosize>
             ) : null}

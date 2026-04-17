@@ -968,22 +968,52 @@ function get_auction_item_active_lots(PDO $db, array $config, string $itemId, in
         }
     }
 
+    $normalizeTs = static function (mixed $raw): string {
+        if ($raw === null) return '';
+        if (is_int($raw) || is_float($raw) || (is_string($raw) && preg_match('/^\d+$/', trim($raw)))) {
+            $n = (int)$raw;
+            if ($n > 0) {
+                // Support milliseconds epoch if provided.
+                if ($n > 9999999999) {
+                    $n = (int)floor($n / 1000);
+                }
+                return gmdate('Y-m-d H:i:s', $n);
+            }
+        }
+        $s = trim((string)$raw);
+        if ($s === '') return '';
+        $t = strtotime($s);
+        if ($t === false || $t <= 0) return '';
+        return gmdate('Y-m-d H:i:s', $t);
+    };
+
     $normalized = [];
     foreach ($rows as $row) {
         if (!is_array($row)) {
             continue;
         }
         $amount = (int)($row['amount'] ?? $row['qty'] ?? 0);
-        $price = (float)($row['price'] ?? $row['buyoutPrice'] ?? $row['cost'] ?? 0);
+        $buyoutPriceTotal = (float)($row['price'] ?? $row['buyoutPrice'] ?? $row['buyout_cost'] ?? $row['cost'] ?? 0);
+        $startPriceTotal = (float)($row['startPrice'] ?? $row['start_price'] ?? $row['currentPrice'] ?? $row['minPrice'] ?? 0);
+        $price = $buyoutPriceTotal > 0 ? $buyoutPriceTotal : $startPriceTotal;
         if ($amount <= 0 || $price <= 0) {
             continue;
         }
-        $placedAt = (string)($row['time'] ?? $row['createdAt'] ?? $row['placedAt'] ?? '');
-        $expiresAt = (string)($row['expiresAt'] ?? $row['expireAt'] ?? $row['expirationTime'] ?? '');
+        $placedAt = $normalizeTs($row['time'] ?? $row['createdAt'] ?? $row['placedAt'] ?? $row['placed_at'] ?? null);
+        $expiresAt = $normalizeTs(
+            $row['expiresAt'] ?? $row['expireAt'] ?? $row['expirationTime'] ?? $row['expires_at'] ?? $row['endTime'] ?? null
+        );
+        if ($expiresAt === '' && isset($row['remainingTimeSec'])) {
+            $expiresAt = gmdate('Y-m-d H:i:s', time() + max(0, (int)$row['remainingTimeSec']));
+        }
         $additional = is_array($row['additional'] ?? null) ? $row['additional'] : null;
+        $buyoutPerUnit = $amount > 0 ? ($buyoutPriceTotal > 0 ? $buyoutPriceTotal / $amount : 0.0) : 0.0;
+        $startPerUnit = $amount > 0 ? ($startPriceTotal > 0 ? $startPriceTotal / $amount : 0.0) : 0.0;
         $normalized[] = [
             'amount' => $amount,
-            'price' => $price,
+            'price' => $price / $amount,
+            'startPrice' => $startPerUnit > 0 ? $startPerUnit : null,
+            'buyoutPrice' => $buyoutPerUnit > 0 ? $buyoutPerUnit : null,
             'placedAt' => $placedAt,
             'expiresAt' => $expiresAt,
             'quality' => normalize_quality_key_from_trade_row($row),
