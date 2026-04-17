@@ -908,3 +908,91 @@ function sync_recent_auction_raw_for_item(
     ];
 }
 
+function get_auction_item_active_lots(PDO $db, array $config, string $itemId, int $limit = 100): array
+{
+    $normalizedItemId = trim($itemId);
+    if ($normalizedItemId === '') {
+        throw new InvalidArgumentException('itemId required');
+    }
+
+    $base = rtrim((string)($config['auction_api_base_url'] ?? ''), '/');
+    $region = strtolower(trim((string)($config['auction_region'] ?? 'ru')));
+    $clientId = trim((string)($config['exbo_client_id'] ?? ''));
+    $clientSecret = trim((string)($config['exbo_client_secret'] ?? ''));
+    if ($base === '' || $clientId === '' || $clientSecret === '') {
+        throw new RuntimeException('Missing auction API credentials');
+    }
+
+    $headers = [
+        'Accept: application/json',
+        'Client-Id: ' . $clientId,
+        'Client-Secret: ' . $clientSecret,
+    ];
+    $safeLimit = max(1, min(200, $limit));
+    $url = sprintf(
+        '%s/%s/auction/%s/lots?offset=0&limit=%d&additional=true',
+        $base,
+        $region,
+        rawurlencode($normalizedItemId),
+        $safeLimit
+    );
+    $ctx = stream_context_create([
+        'http' => [
+            'method' => 'GET',
+            'header' => implode("\r\n", $headers),
+            'timeout' => 25,
+            'ignore_errors' => true,
+        ],
+    ]);
+    $raw = @file_get_contents($url, false, $ctx);
+    if ($raw === false) {
+        throw new RuntimeException('Auction API request failed while loading active lots');
+    }
+    $statusLine = (string)($http_response_header[0] ?? '');
+    if (preg_match('/\s(\d{3})\s/', $statusLine, $m)) {
+        $statusCode = (int)$m[1];
+        if ($statusCode >= 400) {
+            throw new RuntimeException('Auction API returned HTTP ' . $statusCode . ' while loading active lots');
+        }
+    }
+    $payload = json_decode($raw, true);
+    if (!is_array($payload)) {
+        throw new RuntimeException('Auction API returned invalid JSON while loading active lots');
+    }
+
+    $rows = [];
+    foreach (['lots', 'items', 'offers'] as $key) {
+        if (is_array($payload[$key] ?? null)) {
+            $rows = $payload[$key];
+            break;
+        }
+    }
+
+    $normalized = [];
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $amount = (int)($row['amount'] ?? $row['qty'] ?? 0);
+        $price = (float)($row['price'] ?? $row['buyoutPrice'] ?? $row['cost'] ?? 0);
+        if ($amount <= 0 || $price <= 0) {
+            continue;
+        }
+        $placedAt = (string)($row['time'] ?? $row['createdAt'] ?? $row['placedAt'] ?? '');
+        $expiresAt = (string)($row['expiresAt'] ?? $row['expireAt'] ?? $row['expirationTime'] ?? '');
+        $additional = is_array($row['additional'] ?? null) ? $row['additional'] : null;
+        $normalized[] = [
+            'amount' => $amount,
+            'price' => $price,
+            'placedAt' => $placedAt,
+            'expiresAt' => $expiresAt,
+            'quality' => normalize_quality_key_from_trade_row($row),
+            'upgrade' => normalize_upgrade_level_from_trade_row($row),
+            'additional' => $additional,
+        ];
+    }
+
+    usort($normalized, static fn(array $a, array $b): int => (int)($a['price'] <=> $b['price']));
+    return $normalized;
+}
+

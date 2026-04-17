@@ -42,6 +42,8 @@ function normalize_auction_item_name_key(string $name): string
         return '';
     }
     $singleSpaced = preg_replace('/\s+/u', ' ', $trimmed);
+    $singleSpaced = str_replace(['Ё', 'ё'], ['Е', 'е'], (string)$singleSpaced);
+    $singleSpaced = preg_replace('/[«»"\'`]+/u', '', (string)$singleSpaced);
     return mb_strtolower((string)$singleSpaced, 'UTF-8');
 }
 
@@ -196,7 +198,19 @@ function resolve_auction_item_id_by_exact_name(string $name): string
     $archiveIndex = build_auction_item_name_index_from_archive();
     save_auction_item_name_cache($archiveIndex);
     if (!isset($archiveIndex[$key])) {
-        throw new RuntimeException('Item with exact name not found');
+        $candidates = [];
+        foreach ($archiveIndex as $candidateName => $candidateId) {
+            if (str_contains($candidateName, $key) || str_contains($key, $candidateName)) {
+                $candidates[] = $candidateName;
+            }
+            if (count($candidates) >= 8) {
+                break;
+            }
+        }
+        if (count($candidates) > 0) {
+            throw new RuntimeException('Item with exact name not found. Similar: ' . implode(', ', $candidates));
+        }
+        throw new RuntimeException('Item with exact name not found in official item database');
     }
     return (string)$archiveIndex[$key];
 }

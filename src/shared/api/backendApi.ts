@@ -36,6 +36,15 @@ export type AuctionHistoryPoint = {
   totalRevenue: number
   tradeCount: number
 }
+export type AuctionActiveLot = {
+  amount: number
+  price: number
+  placedAt: string
+  expiresAt: string
+  quality: AuctionHistoryQuality
+  upgrade: number
+  additional?: Record<string, unknown> | null
+}
 type AuctionHistoryResponse = {
   itemId?: string
   range?: AuctionHistoryRange
@@ -43,6 +52,10 @@ type AuctionHistoryResponse = {
   zoom?: AuctionHistoryZoom
   upgrade?: AuctionHistoryUpgrade
   points?: AuctionHistoryPoint[]
+}
+type AuctionActiveLotsResponse = {
+  itemId?: string
+  lots?: AuctionActiveLot[]
 }
 
 type UserBuyPricesResponse = {
@@ -257,6 +270,25 @@ export async function fetchAuctionItemHistory(
   })
   const payload = await parseJsonOrThrow<AuctionHistoryResponse>(response)
   return payload.points ?? []
+}
+
+export async function fetchAuctionItemActiveLots(itemId: string, limit = 100): Promise<AuctionActiveLot[]> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const safeLimit = Math.max(1, Math.min(200, Math.trunc(limit)))
+  const url = buildApiUrl(
+    `/auction/active-lots?itemId=${encodeURIComponent(itemId)}&limit=${encodeURIComponent(String(safeLimit))}`,
+  )
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+  })
+  const payload = await parseJsonOrThrow<AuctionActiveLotsResponse>(response)
+  return payload.lots ?? []
 }
 
 export async function removeTrackedAuctionItem(itemId: string): Promise<void> {

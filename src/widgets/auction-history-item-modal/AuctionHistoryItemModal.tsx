@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Box, Button, Group, Loader, Modal, Select, Stack, Text } from '@mantine/core'
+import { ActionIcon, Alert, Box, Button, Group, Loader, Modal, ScrollArea, Select, Stack, Text } from '@mantine/core'
 import { useEffect, useMemo, useState, type MouseEvent, type WheelEvent } from 'react'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { useHideoutStore } from '../../entities/hideout/store'
@@ -8,6 +8,8 @@ import { useAuctionHistoryItemModalStore } from '../../shared/store/auctionHisto
 import { useAuthStore } from '../../shared/store/authStore'
 import {
   fetchAuctionItemHistory,
+  fetchAuctionItemActiveLots,
+  type AuctionActiveLot,
   type AuctionHistoryPoint,
   type AuctionHistoryQuality,
   type AuctionHistoryRange,
@@ -67,6 +69,7 @@ const QUALITY_GLOW_BY_KEY: Record<Exclude<AuctionHistoryQuality, 'all'>, string>
 }
 
 type ChartSeriesEntry = { point: AuctionHistoryPoint; x: number; y: number }
+type AuctionModalViewMode = 'history' | 'activeLots'
 
 function isArtifactDataPath(dataPath: string | undefined): boolean {
   const normalized = (dataPath ?? '').toLowerCase()
@@ -181,6 +184,8 @@ export function AuctionHistoryItemModal() {
   const [quality, setQuality] = useState<AuctionHistoryQuality>('all')
   const [upgrade, setUpgrade] = useState<AuctionHistoryUpgrade>('all')
   const [points, setPoints] = useState<AuctionHistoryPoint[]>([])
+  const [activeLots, setActiveLots] = useState<AuctionActiveLot[]>([])
+  const [viewMode, setViewMode] = useState<AuctionModalViewMode>('history')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [zoom, setZoom] = useState<AuctionHistoryZoom>(1)
@@ -222,6 +227,11 @@ export function AuctionHistoryItemModal() {
     [points],
   )
   const { series, min: minPrice, max: maxPrice } = useMemo(() => buildChartSeries(visiblePoints), [visiblePoints])
+  const activeLotsTotalQty = useMemo(() => activeLots.reduce((sum, lot) => sum + lot.amount, 0), [activeLots])
+  const activeLotsTotalValue = useMemo(
+    () => activeLots.reduce((sum, lot) => sum + lot.amount * lot.price, 0),
+    [activeLots],
+  )
   const polyline = useMemo(
     () => (series.length === 0 ? '' : series.map((s) => `${s.x},${s.y}`).join(' ')),
     [series],
@@ -273,16 +283,24 @@ export function AuctionHistoryItemModal() {
       setIsLoading(true)
       setError(null)
       try {
-        const rows = await fetchAuctionItemHistory(itemId, range, effectiveQuality, zoom, effectiveUpgrade)
-        setPoints(rows)
+        if (viewMode === 'history') {
+          const rows = await fetchAuctionItemHistory(itemId, range, effectiveQuality, zoom, effectiveUpgrade)
+          setPoints(rows)
+          setActiveLots([])
+        } else {
+          const lots = await fetchAuctionItemActiveLots(itemId, 150)
+          setActiveLots(lots)
+          setPoints([])
+        }
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Не удалось загрузить историю')
+        setError(e instanceof Error ? e.message : 'Не удалось загрузить данные')
         setPoints([])
+        setActiveLots([])
       } finally {
         setIsLoading(false)
       }
     })()
-  }, [opened, itemId, range, effectiveQuality, zoom, effectiveUpgrade])
+  }, [opened, itemId, range, effectiveQuality, zoom, effectiveUpgrade, viewMode])
 
   useEffect(() => {
     setChartHover(null)
@@ -298,9 +316,11 @@ export function AuctionHistoryItemModal() {
       setQuality('all')
       setUpgrade('all')
       setPoints([])
+      setActiveLots([])
       setError(null)
       setIsLoading(false)
       setZoom(1)
+      setViewMode('history')
     }
   }, [opened])
 
@@ -347,6 +367,23 @@ export function AuctionHistoryItemModal() {
           </Group>
         ) : null}
         <Group gap="xs" wrap="wrap">
+          <Button
+            size="xs"
+            variant={viewMode === 'history' ? 'filled' : 'default'}
+            onClick={() => setViewMode('history')}
+          >
+            История аукциона
+          </Button>
+          <Button
+            size="xs"
+            variant={viewMode === 'activeLots' ? 'filled' : 'default'}
+            onClick={() => setViewMode('activeLots')}
+          >
+            Активные лоты
+          </Button>
+        </Group>
+        {viewMode === 'history' ? (
+          <Group gap="xs" wrap="wrap">
           {RANGE_OPTIONS.map((option) => (
             <Button
               key={option}
@@ -357,8 +394,9 @@ export function AuctionHistoryItemModal() {
               {option}
             </Button>
           ))}
-        </Group>
-        {showQualityFilter || showUpgradeFilter ? (
+          </Group>
+        ) : null}
+        {viewMode === 'history' && (showQualityFilter || showUpgradeFilter) ? (
           <Group gap="sm" wrap="nowrap" grow>
             {showQualityFilter ? (
               <Select
@@ -400,19 +438,21 @@ export function AuctionHistoryItemModal() {
         {error ? <Alert color="red">{error}</Alert> : null}
 
         <Text size="sm" c="dimmed">
-          {latestPrice !== null ? `Текущая средняя цена: ${formatAuctionRub(latestPrice)} ₽` : 'Нет данных по цене'}
-          {` · Лотов: ${totalTrades} · ZOOM x${zoom}`}
+          {viewMode === 'history'
+            ? `${latestPrice !== null ? `Текущая средняя цена: ${formatAuctionRub(latestPrice)} ₽` : 'Нет данных по цене'} · Лотов: ${totalTrades} · ZOOM x${zoom}`
+            : `Активных лотов: ${activeLots.length} · Объём: ${new Intl.NumberFormat('ru-RU').format(activeLotsTotalQty)} шт. · Общая стоимость: ${formatAuctionRub(activeLotsTotalValue)} ₽`}
         </Text>
 
-        <Box
-          pos="relative"
-          style={{
-            minHeight: 350,
-            display: 'flex',
-            alignItems: 'stretch',
-          }}
-        >
-          {series.length >= 1 ? (
+        {viewMode === 'history' ? (
+          <Box
+            pos="relative"
+            style={{
+              minHeight: 350,
+              display: 'flex',
+              alignItems: 'stretch',
+            }}
+          >
+            {series.length >= 1 ? (
             <Box
               pos="relative"
               p="xs"
@@ -576,7 +616,7 @@ export function AuctionHistoryItemModal() {
                   </Text>
                 </Group>
             </Box>
-          ) : (
+            ) : (
             <Box
               p="xs"
               bd="1px solid var(--mantine-color-default-border)"
@@ -593,8 +633,8 @@ export function AuctionHistoryItemModal() {
                 Недостаточно точек для графика.
               </Text>
             </Box>
-          )}
-          {isLoading ? (
+            )}
+            {isLoading ? (
             <Box
               style={{
                 position: 'absolute',
@@ -609,8 +649,73 @@ export function AuctionHistoryItemModal() {
             >
               <Loader size="sm" />
             </Box>
-          ) : null}
-        </Box>
+            ) : null}
+          </Box>
+        ) : (
+          <Box
+            p="xs"
+            bd="1px solid var(--mantine-color-default-border)"
+            style={{ borderRadius: 8, width: '100%', minHeight: 330, position: 'relative' }}
+          >
+            {!isLoading && activeLots.length === 0 ? (
+              <Text size="sm" c="dimmed">
+                Нет активных лотов.
+              </Text>
+            ) : null}
+            {!isLoading && activeLots.length > 0 ? (
+              <ScrollArea.Autosize mah={360}>
+                <Stack gap="xs">
+                  {activeLots.map((lot, idx) => (
+                    <Group
+                      key={`active-lot-${idx}-${lot.price}-${lot.amount}`}
+                      justify="space-between"
+                      align="flex-start"
+                      p="xs"
+                      bd="1px solid var(--mantine-color-default-border)"
+                      style={{ borderRadius: 8 }}
+                    >
+                      <Stack gap={2}>
+                        <Text size="sm" fw={600}>
+                          {formatAuctionRub(lot.price)} ₽ за шт.
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          Кол-во: {new Intl.NumberFormat('ru-RU').format(lot.amount)} шт.
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          Сумма лота: {formatAuctionRub(lot.price * lot.amount)} ₽
+                        </Text>
+                      </Stack>
+                      <Stack gap={2} align="flex-end">
+                        <Text size="xs" c="dimmed">
+                          Редкость: {lot.quality}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          Заточка: {lot.upgrade > 0 ? `+${lot.upgrade}` : '—'}
+                        </Text>
+                      </Stack>
+                    </Group>
+                  ))}
+                </Stack>
+              </ScrollArea.Autosize>
+            ) : null}
+            {isLoading ? (
+              <Box
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'color-mix(in srgb, var(--mantine-color-body) 75%, transparent)',
+                  borderRadius: 8,
+                  zIndex: 6,
+                }}
+              >
+                <Loader size="sm" />
+              </Box>
+            ) : null}
+          </Box>
+        )}
       </Stack>
     </Modal>
   )
