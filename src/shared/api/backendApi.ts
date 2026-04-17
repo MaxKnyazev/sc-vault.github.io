@@ -12,6 +12,9 @@ type AuctionBlacklistResponse = {
 type TrackedAuctionItemsResponse = {
   itemIds?: string[]
 }
+type ResolveItemByNameResponse = {
+  itemId?: string
+}
 
 export type AuctionHistoryRange = '30m' | '1h' | '12h' | '24h' | '7d' | '30d' | '90d'
 export type AuctionHistoryZoom = 1 | 2 | 4
@@ -210,6 +213,26 @@ export async function addTrackedAuctionItem(itemId: string): Promise<void> {
     body: JSON.stringify({ itemId }),
   })
   await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function resolveAuctionItemIdByExactName(name: string): Promise<string> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const normalized = name.trim()
+  if (!normalized) throw new Error('Введите название предмета')
+  const url = buildApiUrl(`/auction/resolve-item-by-name?name=${encodeURIComponent(normalized)}`)
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+  })
+  const payload = await parseJsonOrThrow<ResolveItemByNameResponse>(response)
+  const itemId = (payload.itemId ?? '').trim()
+  if (!itemId) throw new Error('Не удалось определить ID предмета')
+  return itemId
 }
 
 export async function fetchAuctionItemHistory(

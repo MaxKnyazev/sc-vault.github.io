@@ -20,6 +20,7 @@ import {
   addTrackedAuctionItem,
   fetchTrackedAuctionItems,
   removeTrackedAuctionItem,
+  resolveAuctionItemIdByExactName,
 } from '../../shared/api/backendApi'
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
@@ -33,6 +34,7 @@ export function AuctionHistoryPage() {
   const [search, setSearch] = useState('')
   const [isModalOpened, setIsModalOpened] = useState(false)
   const [modalSearch, setModalSearch] = useState('')
+  const [manualItemName, setManualItemName] = useState('')
   const [isAddingItemId, setIsAddingItemId] = useState<string | null>(null)
   const [isRemovingItemId, setIsRemovingItemId] = useState<string | null>(null)
   const [pendingDeleteItemId, setPendingDeleteItemId] = useState<string | null>(null)
@@ -119,6 +121,7 @@ export function AuctionHistoryPage() {
             <Button
               onClick={() => {
                 setModalSearch('')
+                setManualItemName('')
                 setTrackedError(null)
                 setIsModalOpened(true)
               }}
@@ -206,6 +209,39 @@ export function AuctionHistoryPage() {
             value={modalSearch}
             onChange={(event) => setModalSearch(event.currentTarget.value)}
           />
+          <Group align="flex-end" wrap="nowrap">
+            <TextInput
+              label="Добавить по точному названию"
+              placeholder="Например: Дар шепота"
+              value={manualItemName}
+              onChange={(event) => setManualItemName(event.currentTarget.value)}
+              style={{ flex: 1 }}
+            />
+            <Button
+              loading={isAddingItemId === '__manual__'}
+              disabled={manualItemName.trim() === ''}
+              onClick={async () => {
+                const normalized = manualItemName.trim()
+                if (!normalized) return
+                setIsAddingItemId('__manual__')
+                setTrackedError(null)
+                try {
+                  const resolvedItemId = await resolveAuctionItemIdByExactName(normalized)
+                  await addTrackedAuctionItem(resolvedItemId)
+                  setTrackedItemIds((prev) => [...new Set([...prev, resolvedItemId])])
+                  setManualItemName('')
+                } catch (e) {
+                  setTrackedError(
+                    e instanceof Error ? e.message : 'Не удалось добавить предмет в отслеживание',
+                  )
+                } finally {
+                  setIsAddingItemId(null)
+                }
+              }}
+            >
+              Добавить
+            </Button>
+          </Group>
           <ScrollArea.Autosize mah="60vh">
             <Stack gap="xs">
               {filteredModalItems.map((item) => (

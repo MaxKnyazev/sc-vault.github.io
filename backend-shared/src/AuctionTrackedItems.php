@@ -35,3 +35,169 @@ function remove_tracked_auction_item(PDO $db, string $itemId): void
     $stmt->execute([$normalized]);
 }
 
+function normalize_auction_item_name_key(string $name): string
+{
+    $trimmed = trim($name);
+    if ($trimmed === '') {
+        return '';
+    }
+    $singleSpaced = preg_replace('/\s+/u', ' ', $trimmed);
+    return mb_strtolower((string)$singleSpaced, 'UTF-8');
+}
+
+function auction_item_name_cache_path(): string
+{
+    $dir = sys_get_temp_dir() . '/sctool-auction-item-name-cache';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
+    }
+    return $dir . '/ru-items-name-index.json';
+}
+
+function load_auction_item_name_cache(int $maxAgeSeconds = 86400): ?array
+{
+    $path = auction_item_name_cache_path();
+    if (!is_file($path)) {
+        return null;
+    }
+    $raw = @file_get_contents($path);
+    if (!is_string($raw) || trim($raw) === '') {
+        return null;
+    }
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return null;
+    }
+    $builtAt = (int)($decoded['builtAt'] ?? 0);
+    if ($builtAt <= 0 || (time() - $builtAt) > $maxAgeSeconds) {
+        return null;
+    }
+    $items = $decoded['items'] ?? null;
+    return is_array($items) ? $items : null;
+}
+
+function save_auction_item_name_cache(array $items): void
+{
+    $path = auction_item_name_cache_path();
+    @file_put_contents($path, json_encode([
+        'builtAt' => time(),
+        'items' => $items,
+    ], JSON_UNESCAPED_UNICODE));
+}
+
+function build_auction_item_name_index_from_listing(): array
+{
+    $url = 'https://raw.githubusercontent.com/EXBO-Studio/stalcraft-database/main/ru/listing.json';
+    $raw = @file_get_contents($url);
+    if (!is_string($raw) || trim($raw) === '') {
+        throw new RuntimeException('Failed to load listing.json');
+    }
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        throw new RuntimeException('Invalid listing.json');
+    }
+    $index = [];
+    foreach ($decoded as $entry) {
+        if (!is_array($entry)) {
+            continue;
+        }
+        $id = '';
+        $data = (string)($entry['data'] ?? '');
+        if (preg_match('#/items/.+/([A-Za-z0-9]+)\.json$#', $data, $m)) {
+            $id = (string)$m[1];
+        }
+        if ($id === '') {
+            continue;
+        }
+        $ruName = (string)($entry['name']['lines']['ru'] ?? '');
+        $key = normalize_auction_item_name_key($ruName);
+        if ($key === '' || isset($index[$key])) {
+            continue;
+        }
+        $index[$key] = $id;
+    }
+    return $index;
+}
+
+function build_auction_item_name_index_from_archive(): array
+{
+    if (!class_exists('ZipArchive')) {
+        throw new RuntimeException('ZipArchive extension is required for name-based lookup');
+    }
+    $zipUrl = 'https://codeload.github.com/EXBO-Studio/stalcraft-database/zip/refs/heads/main';
+    $archiveBody = @file_get_contents($zipUrl);
+    if (!is_string($archiveBody) || $archiveBody === '') {
+        throw new RuntimeException('Failed to download item archive');
+    }
+    $tmp = tempnam(sys_get_temp_dir(), 'scdb-zip-');
+    if ($tmp === false) {
+        throw new RuntimeException('Failed to create temp file for item archive');
+    }
+    @file_put_contents($tmp, $archiveBody);
+
+    $zip = new ZipArchive();
+    $opened = $zip->open($tmp);
+    if ($opened !== true) {
+        @unlink($tmp);
+        throw new RuntimeException('Failed to open item archive');
+    }
+
+    $index = [];
+    for ($i = 0; $i < $zip->numFiles; $i += 1) {
+        $name = (string)$zip->getNameIndex($i);
+        if ($name === '' || !str_starts_with($name, 'stalcraft-database-main/ru/items/') || !str_ends_with($name, '.json')) {
+            continue;
+        }
+        $rawItem = $zip->getFromIndex($i);
+        if (!is_string($rawItem) || trim($rawItem) === '') {
+            continue;
+        }
+        $decoded = json_decode($rawItem, true);
+        if (!is_array($decoded)) {
+            continue;
+        }
+        $id = trim((string)($decoded['id'] ?? ''));
+        $ruName = (string)($decoded['name']['lines']['ru'] ?? '');
+        $key = normalize_auction_item_name_key($ruName);
+        if ($id === '' || $key === '' || isset($index[$key])) {
+            continue;
+        }
+        $index[$key] = $id;
+    }
+
+    $zip->close();
+    @unlink($tmp);
+    return $index;
+}
+
+function resolve_auction_item_id_by_exact_name(string $name): string
+{
+    $key = normalize_auction_item_name_key($name);
+    if ($key === '') {
+        throw new InvalidArgumentException('name required');
+    }
+
+    $cached = load_auction_item_name_cache();
+    if (is_array($cached) && isset($cached[$key])) {
+        return (string)$cached[$key];
+    }
+
+    // Fast path: listing.json.
+    try {
+        $listingIndex = build_auction_item_name_index_from_listing();
+        if (isset($listingIndex[$key])) {
+            return (string)$listingIndex[$key];
+        }
+    } catch (Throwable $e) {
+        // Fallback to archive index.
+    }
+
+    // Full fallback: build index from ru/items archive and cache it.
+    $archiveIndex = build_auction_item_name_index_from_archive();
+    save_auction_item_name_cache($archiveIndex);
+    if (!isset($archiveIndex[$key])) {
+        throw new RuntimeException('Item with exact name not found');
+    }
+    return (string)$archiveIndex[$key];
+}
+
