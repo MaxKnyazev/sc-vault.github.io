@@ -1,5 +1,23 @@
 export function getQualityGlowColor(qualityColor?: string): string {
-  switch (qualityColor) {
+  const normalized = (qualityColor ?? '').trim()
+  if (normalized && /^#[0-9a-f]{6}$/i.test(normalized)) {
+    return normalized
+  }
+  switch (normalized.toUpperCase()) {
+    case 'NORMAL':
+      return '#ffffff'
+    case 'UNCOMMON':
+      return '#22c55e'
+    case 'SPECIAL':
+      return '#3b82f6'
+    case 'RARE':
+      return '#a855f7'
+    case 'EXCLUSIVE':
+      return '#ec4899'
+    case 'LEGENDARY':
+      return '#f59e0b'
+    case 'UNIQUE':
+      return '#B57EDC'
     case 'RANK_NEWBIE':
       return '#3fbf4f'
     case 'RANK_STALKER':
@@ -8,8 +26,11 @@ export function getQualityGlowColor(qualityColor?: string): string {
       return '#ec4899'
     case 'RANK_MASTER':
       return '#ef4444'
-    case 'DEFAULT':
+    case 'RANK_LEGENDARY':
+      return '#f59e0b'
     case 'RANK_LOCKPICK':
+      return '#f59e0b'
+    case 'DEFAULT':
     default:
       return '#ffffff'
   }

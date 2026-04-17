@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Box, Button, Group, Loader, Modal, Stack, Text } from '@mantine/core'
+import { ActionIcon, Alert, Box, Button, Group, Loader, Modal, Select, Stack, Text } from '@mantine/core'
 import { useEffect, useMemo, useState, type MouseEvent, type WheelEvent } from 'react'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { useHideoutStore } from '../../entities/hideout/store'
@@ -47,11 +47,50 @@ const UPGRADE_OPTIONS: Array<{ value: AuctionHistoryUpgrade; label: string }> = 
   { value: 14, label: '+14' },
   { value: 15, label: '+15' },
 ]
+const QUALITY_SELECT_OPTIONS = QUALITY_OPTIONS.map((option) => ({ value: option.value, label: option.label }))
+const UPGRADE_SELECT_OPTIONS = UPGRADE_OPTIONS.map((option) => ({
+  value: String(option.value),
+  label: option.label,
+}))
 
 const CHART_VB = { w: 640, h: 280 }
 const CHART_MARGIN = { left: 48, right: 12, top: 14, bottom: 54 }
+const QUALITY_GLOW_BY_KEY: Record<Exclude<AuctionHistoryQuality, 'all'>, string> = {
+  normal: '#ffffff',
+  uncommon: '#22c55e',
+  special: '#3b82f6',
+  rare: '#a855f7',
+  exclusive: '#ec4899',
+  legendary: '#f59e0b',
+  unique: '#B57EDC',
+  unknown: '#9ca3af',
+}
 
 type ChartSeriesEntry = { point: AuctionHistoryPoint; x: number; y: number }
+
+function isArtifactDataPath(dataPath: string | undefined): boolean {
+  const normalized = (dataPath ?? '').toLowerCase()
+  return normalized.includes('/artefact/') || normalized.includes('/artifact/')
+}
+
+function isModuleCoreItem(dataPath: string | undefined, itemName: string): boolean {
+  const normalizedPath = (dataPath ?? '').toLowerCase()
+  const normalizedName = itemName.toLowerCase()
+  return (
+    normalizedPath.includes('/module/core/') ||
+    normalizedPath.includes('/modules/core/') ||
+    normalizedName.includes('ядро модуля') ||
+    normalizedName.includes('module core')
+  )
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '')
+  const r = Number.parseInt(h.slice(0, 2), 16)
+  const g = Number.parseInt(h.slice(2, 4), 16)
+  const b = Number.parseInt(h.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
 
 function buildChartSeries(points: AuctionHistoryPoint[]): {
   series: ChartSeriesEntry[]
@@ -148,8 +187,28 @@ export function AuctionHistoryItemModal() {
   const item = itemId ? itemsById[itemId] : undefined
   const itemName = getItemName(item?.name?.lines)
   const iconUrl = item ? buildItemIconUrl(item.icon, realm) : undefined
+  const isArtifact = isArtifactDataPath(item?.data)
+  const isModuleCore = isModuleCoreItem(item?.data, itemName || '')
+  const showQualityFilter = isArtifact || isModuleCore
+  const showUpgradeFilter = isArtifact
+  const effectiveQuality: AuctionHistoryQuality = showQualityFilter ? quality : 'all'
+  const effectiveUpgrade: AuctionHistoryUpgrade = showUpgradeFilter ? upgrade : 'all'
+  const qualitySelectValue = quality
+  const upgradeSelectValue = String(upgrade)
+  const selectedQualityGlowColor =
+    showQualityFilter && effectiveQuality !== 'all' ? QUALITY_GLOW_BY_KEY[effectiveQuality] : undefined
+  const badgeQualityColor = selectedQualityGlowColor ?? item?.color
   const qualityForGlow = item?.color
-  const modalGlow = useMemo(() => getQualityModalGlowBoxShadow(qualityForGlow), [qualityForGlow])
+  const modalGlow = useMemo(() => {
+    if (selectedQualityGlowColor) {
+      return [
+        `0 0 0 1px ${hexToRgba(selectedQualityGlowColor, 0.45)}`,
+        `0 0 28px ${hexToRgba(selectedQualityGlowColor, 0.55)}`,
+        `0 0 56px ${hexToRgba(selectedQualityGlowColor, 0.28)}`,
+      ].join(', ')
+    }
+    return getQualityModalGlowBoxShadow(qualityForGlow)
+  }, [qualityForGlow, selectedQualityGlowColor])
   const latestPrice = useMemo(() => {
     const last = [...points].reverse().find((point) => point.avgPerUnit !== null)
     return last?.avgPerUnit ?? null
@@ -214,7 +273,7 @@ export function AuctionHistoryItemModal() {
       setIsLoading(true)
       setError(null)
       try {
-        const rows = await fetchAuctionItemHistory(itemId, range, quality, zoom, upgrade)
+        const rows = await fetchAuctionItemHistory(itemId, range, effectiveQuality, zoom, effectiveUpgrade)
         setPoints(rows)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Не удалось загрузить историю')
@@ -223,7 +282,7 @@ export function AuctionHistoryItemModal() {
         setIsLoading(false)
       }
     })()
-  }, [opened, itemId, range, quality, zoom, upgrade])
+  }, [opened, itemId, range, effectiveQuality, zoom, effectiveUpgrade])
 
   useEffect(() => {
     setChartHover(null)
@@ -270,7 +329,7 @@ export function AuctionHistoryItemModal() {
               <ItemBadge
                 name={itemName || itemId}
                 iconUrl={iconUrl}
-                qualityColor={item?.color}
+                qualityColor={badgeQualityColor}
                 size="result"
                 showFavoriteButton={false}
               />
@@ -299,30 +358,44 @@ export function AuctionHistoryItemModal() {
             </Button>
           ))}
         </Group>
-        <Group gap="xs" wrap="wrap">
-          {QUALITY_OPTIONS.map((option) => (
-            <Button
-              key={option.value}
-              size="xs"
-              variant={quality === option.value ? 'filled' : 'default'}
-              onClick={() => setQuality(option.value)}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </Group>
-        <Group gap="xs" wrap="wrap">
-          {UPGRADE_OPTIONS.map((option) => (
-            <Button
-              key={`upgrade-${String(option.value)}`}
-              size="xs"
-              variant={upgrade === option.value ? 'filled' : 'default'}
-              onClick={() => setUpgrade(option.value)}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </Group>
+        {showQualityFilter || showUpgradeFilter ? (
+          <Group gap="sm" wrap="nowrap" grow>
+            {showQualityFilter ? (
+              <Select
+                label="Редкость"
+                data={QUALITY_SELECT_OPTIONS}
+                value={qualitySelectValue}
+                onChange={(value) => setQuality((value as AuctionHistoryQuality) ?? 'all')}
+                allowDeselect={false}
+              />
+            ) : (
+              <Box />
+            )}
+            {showUpgradeFilter ? (
+              <Select
+                label="Заточка"
+                data={UPGRADE_SELECT_OPTIONS}
+                value={upgradeSelectValue}
+                onChange={(value) => {
+                  const raw = value ?? 'all'
+                  if (raw === 'all') {
+                    setUpgrade('all')
+                    return
+                  }
+                  const parsed = Number.parseInt(raw, 10)
+                  if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 15) {
+                    setUpgrade(parsed as AuctionHistoryUpgrade)
+                  } else {
+                    setUpgrade('all')
+                  }
+                }}
+                allowDeselect={false}
+              />
+            ) : (
+              <Box />
+            )}
+          </Group>
+        ) : null}
 
         {error ? <Alert color="red">{error}</Alert> : null}
 
