@@ -3,22 +3,26 @@ import { persist } from 'zustand/middleware'
 import {
   fetchBackendUserBuyPrices,
   saveBackendUserBuyPrice,
+  saveBackendUserDefaultBuyPrice,
   saveBackendUserEnergyBuyPrice,
 } from '../api/backendApi'
 import { getBackendApiBaseUrl, getBackendAuthToken } from '../config/backendApi'
 
 type IngredientPricesState = {
   buyPricesByItemId: Record<string, string>
+  defaultBuyPricesByItemId: Record<string, string>
   energyPrice: string
   setBuyPrice: (itemId: string, value: string) => void
+  setDefaultBuyPrice: (itemId: string, value: string) => Promise<void>
   loadRemoteBuyPrices: () => Promise<void>
   setEnergyPrice: (value: string) => void
 }
 
 export const useIngredientPricesStore = create<IngredientPricesState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       buyPricesByItemId: {},
+      defaultBuyPricesByItemId: {},
       energyPrice: '',
       setBuyPrice: (itemId, value) => {
         set((state) => ({
@@ -31,14 +35,23 @@ export const useIngredientPricesStore = create<IngredientPricesState>()(
           void saveBackendUserBuyPrice(itemId, value)
         }
       },
+      setDefaultBuyPrice: async (itemId, value) => {
+        if (!getBackendApiBaseUrl() || !getBackendAuthToken()) return
+        await saveBackendUserDefaultBuyPrice(itemId, value)
+        await get().loadRemoteBuyPrices()
+      },
       loadRemoteBuyPrices: async () => {
         if (!getBackendApiBaseUrl()) return
         if (!getBackendAuthToken()) {
-          set({ buyPricesByItemId: {}, energyPrice: '' })
+          set({ buyPricesByItemId: {}, defaultBuyPricesByItemId: {}, energyPrice: '' })
           return
         }
         const remote = await fetchBackendUserBuyPrices()
-        set({ buyPricesByItemId: remote.itemPrices, energyPrice: remote.energyBuyPrice })
+        set({
+          buyPricesByItemId: remote.itemPrices,
+          defaultBuyPricesByItemId: remote.defaultPrices,
+          energyPrice: remote.energyBuyPrice,
+        })
       },
       setEnergyPrice: (value) => {
         set({ energyPrice: value })

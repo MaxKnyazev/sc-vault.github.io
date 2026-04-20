@@ -23,7 +23,6 @@ import { useFavoritesStore } from '../../shared/store/favoritesStore'
 import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
 import { AdminAuctionTrackingButton } from '../../components/admin-auction-ignore/AdminAuctionTrackingButton'
 import { useAuthStore } from '../../shared/store/authStore'
-import { fetchBackendDefaultBuyPrices, saveBackendDefaultBuyPrice } from '../../shared/api/backendApi'
 import { normalizeDecimalPriceForSubmit, sanitizeDecimalInput } from '../../shared/lib/sanitizeDecimalInput'
 
 function createEnergyIconSvg(fillColor: string): string {
@@ -40,7 +39,8 @@ export function IngredientsPage() {
   const favoriteItemIds = useFavoritesStore((state) => state.favoriteItemIds)
   const user = useAuthStore((s) => s.user)
   const isAdmin = user?.role === 'admin'
-  const { buyPricesByItemId, setBuyPrice, loadRemoteBuyPrices, energyPrice, setEnergyPrice } =
+  const defaultBuyPricesByItemId = useIngredientPricesStore((s) => s.defaultBuyPricesByItemId)
+  const { buyPricesByItemId, setBuyPrice, setDefaultBuyPrice, loadRemoteBuyPrices, energyPrice, setEnergyPrice } =
     useIngredientPricesStore()
   const [draftEnergyPrice, setDraftEnergyPrice] = useState('')
   const [search, setSearch] = useState('')
@@ -62,15 +62,8 @@ export function IngredientsPage() {
       setDraftDefaultBuyPricesByItemId({})
       return
     }
-    void (async () => {
-      try {
-        const defaults = await fetchBackendDefaultBuyPrices()
-        setDraftDefaultBuyPricesByItemId(defaults)
-      } catch {
-        setDraftDefaultBuyPricesByItemId({})
-      }
-    })()
-  }, [isAdmin])
+    setDraftDefaultBuyPricesByItemId(defaultBuyPricesByItemId)
+  }, [isAdmin, defaultBuyPricesByItemId])
 
   useEffect(() => {
     setDraftBuyPricesByItemId(buyPricesByItemId)
@@ -326,11 +319,7 @@ export function IngredientsPage() {
                                   '',
                                 )
                                 try {
-                                  await saveBackendDefaultBuyPrice(item.itemId, value)
-                                  const next = await fetchBackendDefaultBuyPrices()
-                                  setDraftDefaultBuyPricesByItemId(next)
-                                  await loadRemoteBuyPrices()
-                                  setDraftBuyPricesByItemId(useIngredientPricesStore.getState().buyPricesByItemId)
+                                  await setDefaultBuyPrice(item.itemId, value)
                                 } catch {
                                   // ignore
                                 }

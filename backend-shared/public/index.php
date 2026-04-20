@@ -558,12 +558,41 @@ if ($path === '/user/buy-prices') {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
         $prices = get_effective_buy_prices_for_user($db, $userId);
         $energyBuyPrice = get_user_energy_buy_price($db, $userId);
-        send_json(200, ['prices' => $prices, 'energyBuyPrice' => $energyBuyPrice]);
+        $payload = ['prices' => $prices, 'energyBuyPrice' => $energyBuyPrice];
+        if (role_at_least($user, 'admin')) {
+            $payload['defaults'] = get_default_buy_prices($db);
+        }
+        send_json(200, $payload);
         exit;
     }
 
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $body = read_json_body();
+        $rawDefaultFlag = $body['defaultForAll'] ?? false;
+        $defaultForAll = $rawDefaultFlag === true
+            || $rawDefaultFlag === 1
+            || $rawDefaultFlag === '1'
+            || $rawDefaultFlag === 'true';
+        if ($defaultForAll) {
+            if (!role_at_least($user, 'admin')) {
+                send_json(403, ['error' => 'Недостаточно прав']);
+                exit;
+            }
+            $itemId = trim((string)($body['itemId'] ?? ''));
+            $value = trim((string)($body['value'] ?? ''));
+            if ($itemId === '') {
+                send_json(400, ['error' => 'itemId required']);
+                exit;
+            }
+            if ($value === '') {
+                delete_default_buy_price($db, $itemId);
+            } else {
+                upsert_default_buy_price($db, $itemId, $value);
+            }
+            send_json(200, ['ok' => true]);
+            exit;
+        }
+
         $itemId = trim((string)($body['itemId'] ?? ''));
         $value = trim((string)($body['value'] ?? ''));
         if ($itemId === '') {

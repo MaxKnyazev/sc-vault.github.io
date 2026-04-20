@@ -63,11 +63,14 @@ type AuctionActiveLotsResponse = {
 type UserBuyPricesResponse = {
   prices?: Record<string, { value?: string }>
   energyBuyPrice?: string
+  /** Только для admin: глобальные дефолты по предметам */
+  defaults?: Record<string, { value?: string }>
 }
 
 export type FetchUserBuyPricesResult = {
   itemPrices: Record<string, string>
   energyBuyPrice: string
+  defaultPrices: Record<string, string>
 }
 
 export type RecipeResultOverride = {
@@ -318,7 +321,7 @@ export async function removeTrackedAuctionItem(itemId: string): Promise<void> {
 
 export async function fetchBackendUserBuyPrices(): Promise<FetchUserBuyPricesResult> {
   const token = getBackendAuthToken()
-  if (!token) return { itemPrices: {}, energyBuyPrice: '' }
+  if (!token) return { itemPrices: {}, energyBuyPrice: '', defaultPrices: {} }
   const url = buildApiUrl('/user/buy-prices')
   const response = await fetch(url, {
     method: 'GET',
@@ -332,6 +335,7 @@ export async function fetchBackendUserBuyPrices(): Promise<FetchUserBuyPricesRes
   return {
     itemPrices: parseBuyPricesPayload(payload.prices),
     energyBuyPrice: typeof payload.energyBuyPrice === 'string' ? payload.energyBuyPrice : '',
+    defaultPrices: parseBuyPricesPayload(payload.defaults),
   }
 }
 
@@ -369,34 +373,11 @@ export async function saveBackendUserEnergyBuyPrice(value: string): Promise<void
   await parseJsonOrThrow<{ ok?: boolean }>(response)
 }
 
-function parseBuyPricesPayload(prices: UserBuyPricesResponse['prices']): Record<string, string> {
-  const result: Record<string, string> = {}
-  for (const [itemId, row] of Object.entries(prices ?? {})) {
-    result[itemId] = typeof row?.value === 'string' ? row.value : ''
-  }
-  return result
-}
-
-export async function fetchBackendDefaultBuyPrices(): Promise<Record<string, string>> {
-  const token = getBackendAuthToken()
-  if (!token) return {}
-  const url = buildApiUrl('/admin/default-buy-prices')
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-      'X-Auth-Token': token,
-    },
-  })
-  const payload = await parseJsonOrThrow<UserBuyPricesResponse>(response)
-  return parseBuyPricesPayload(payload.prices)
-}
-
-export async function saveBackendDefaultBuyPrice(itemId: string, value: string): Promise<void> {
+/** Сохранение дефолтной цены скупа для всех (только admin). Идёт в `/user/buy-prices`, чтобы не зависеть от пути `/admin/*` на прокси. */
+export async function saveBackendUserDefaultBuyPrice(itemId: string, value: string): Promise<void> {
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация')
-  const url = buildApiUrl('/admin/default-buy-prices')
+  const url = buildApiUrl('/user/buy-prices')
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -405,9 +386,17 @@ export async function saveBackendDefaultBuyPrice(itemId: string, value: string):
       Authorization: `Bearer ${token}`,
       'X-Auth-Token': token,
     },
-    body: JSON.stringify({ itemId, value }),
+    body: JSON.stringify({ itemId, value, defaultForAll: true }),
   })
   await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+function parseBuyPricesPayload(prices: UserBuyPricesResponse['prices']): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const [itemId, row] of Object.entries(prices ?? {})) {
+    result[itemId] = typeof row?.value === 'string' ? row.value : ''
+  }
+  return result
 }
 
 export async function loginBackendUser(nickname: string, password: string): Promise<AuthResponse> {
