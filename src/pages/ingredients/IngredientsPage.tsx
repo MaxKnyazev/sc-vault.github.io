@@ -12,7 +12,7 @@ import {
 } from '@mantine/core'
 import { useEffect, useMemo, useState } from 'react'
 import { AuctionPrice24hLine } from '../../components/auction-price-24h/AuctionPrice24hLine'
-import { AuctionRefreshToolbar } from '../../components/auction-refresh-toolbar/AuctionRefreshToolbar'
+import { AuctionRefreshStatus } from '../../components/auction-refresh-status/AuctionRefreshStatus'
 import { PageContainer } from '../../components/page-container/PageContainer'
 import { SectionCard } from '../../components/section-card/SectionCard'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
@@ -109,7 +109,7 @@ export function IngredientsPage() {
             Ингредиенты
           </Text>
 
-          {!isLoading && !error ? <AuctionRefreshToolbar itemIds={auctionItemIds} /> : null}
+          {!isLoading && !error ? <AuctionRefreshStatus itemIds={auctionItemIds} /> : null}
 
           {isLoading ? (
             <Stack gap="xs">

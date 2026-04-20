@@ -12,7 +12,7 @@ import {
 } from '@mantine/core'
 import { useEffect, useMemo, useState } from 'react'
 import { useHideoutStore } from '../../entities/hideout/store'
-import { AuctionRefreshToolbar } from '../../components/auction-refresh-toolbar/AuctionRefreshToolbar'
+import { AuctionRefreshStatus } from '../../components/auction-refresh-status/AuctionRefreshStatus'
 import { SectionCard } from '../../components/section-card/SectionCard'
 import { RecipeCard } from '../../components/recipe-card/RecipeCard'
 import { collectHideoutItemIds } from '../../shared/lib/collectHideoutItemIds'
@@ -173,7 +173,7 @@ export function RecipesOverview() {
             <Text size="xl" fw={700}>
               Крафты
             </Text>
-            <AuctionRefreshToolbar itemIds={auctionItemIds} />
+            <AuctionRefreshStatus itemIds={auctionItemIds} />
             <Group align="flex-end" wrap="wrap">
               <TextInput
                 placeholder="Поиск по названию итогового предмета..."
