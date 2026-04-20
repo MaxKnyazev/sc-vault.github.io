@@ -208,6 +208,7 @@ export function AuctionHistoryItemModal() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [zoom, setZoom] = useState<AuctionHistoryZoom>(1)
+  const [hoveredZoom, setHoveredZoom] = useState<AuctionHistoryZoom | null>(null)
   const item = itemId ? itemsById[itemId] : undefined
   const itemName = getItemName(item?.name?.lines)
   const iconUrl = item ? buildItemIconUrl(item.icon, realm) : undefined
@@ -508,13 +509,43 @@ export function AuctionHistoryItemModal() {
 
         <Text size="sm" c="dimmed">
           {viewMode === 'history'
-            ? `${latestPrice !== null ? `Текущая средняя цена: ${formatAuctionRub(latestPrice)} ₽` : 'Нет данных по цене'} · Лотов: ${totalTrades} · ZOOM x${zoom}`
+            ? `${latestPrice !== null ? `Текущая средняя цена: ${formatAuctionRub(latestPrice)} ₽` : 'Нет данных по цене'} · Лотов: ${totalTrades}`
             : `Активных лотов: ${sortedActiveLots.length} · Объём: ${new Intl.NumberFormat('ru-RU').format(
                 sortedActiveLots.reduce((sum, lot) => sum + lot.amount, 0),
               )} шт. · Общая стоимость: ${formatAuctionRub(
                 sortedActiveLots.reduce((sum, lot) => sum + lot.amount * lot.price, 0),
               )} ₽`}
         </Text>
+        {viewMode === 'history' ? (
+          <Group gap="xs" align="center" wrap="wrap">
+            <Text size="sm" c="dimmed">
+              ZOOM x{zoom}
+            </Text>
+            {ZOOM_LEVELS.map((level) => {
+              const isActive = zoom === level
+              const isHovered = hoveredZoom === level
+              return (
+                <Button
+                  key={`zoom-btn-${level}`}
+                  size="compact-xs"
+                  radius="md"
+                  variant={isActive || isHovered ? 'filled' : 'light'}
+                  color={isActive || isHovered ? 'blue' : 'gray'}
+                  onMouseEnter={() => setHoveredZoom(level)}
+                  onMouseLeave={() => setHoveredZoom(null)}
+                  onClick={() => setZoom(level)}
+                  style={{
+                    minWidth: 34,
+                    backgroundColor: isActive || isHovered ? undefined : 'rgba(255,255,255,0.10)',
+                    transition: 'background-color 140ms ease, color 140ms ease, transform 140ms ease',
+                  }}
+                >
+                  {level}x
+                </Button>
+              )
+            })}
+          </Group>
+        ) : null}
 
         {viewMode === 'history' ? (
           <Box
