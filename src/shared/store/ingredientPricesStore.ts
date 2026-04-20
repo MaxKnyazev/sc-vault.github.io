@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { fetchBackendUserBuyPrices, saveBackendUserBuyPrice } from '../api/backendApi'
+import {
+  fetchBackendUserBuyPrices,
+  saveBackendUserBuyPrice,
+  saveBackendUserEnergyBuyPrice,
+} from '../api/backendApi'
 import { getBackendApiBaseUrl, getBackendAuthToken } from '../config/backendApi'
 
 type IngredientPricesState = {
@@ -30,14 +34,17 @@ export const useIngredientPricesStore = create<IngredientPricesState>()(
       loadRemoteBuyPrices: async () => {
         if (!getBackendApiBaseUrl()) return
         if (!getBackendAuthToken()) {
-          set({ buyPricesByItemId: {} })
+          set({ buyPricesByItemId: {}, energyPrice: '' })
           return
         }
         const remote = await fetchBackendUserBuyPrices()
-        set({ buyPricesByItemId: remote })
+        set({ buyPricesByItemId: remote.itemPrices, energyPrice: remote.energyBuyPrice })
       },
       setEnergyPrice: (value) => {
         set({ energyPrice: value })
+        if (getBackendApiBaseUrl() && getBackendAuthToken()) {
+          void saveBackendUserEnergyBuyPrice(value)
+        }
       },
     }),
     {

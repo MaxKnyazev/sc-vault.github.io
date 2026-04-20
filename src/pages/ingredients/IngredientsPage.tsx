@@ -24,6 +24,7 @@ import { useIngredientPricesStore } from '../../shared/store/ingredientPricesSto
 import { AdminAuctionTrackingButton } from '../../components/admin-auction-ignore/AdminAuctionTrackingButton'
 import { useAuthStore } from '../../shared/store/authStore'
 import { fetchBackendDefaultBuyPrices, saveBackendDefaultBuyPrice } from '../../shared/api/backendApi'
+import { normalizeDecimalPriceForSubmit, sanitizeDecimalInput } from '../../shared/lib/sanitizeDecimalInput'
 
 function createEnergyIconSvg(fillColor: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -225,17 +226,17 @@ export function IngredientsPage() {
                   </Text>
                   <Group wrap="nowrap" align="flex-end">
                     <TextInput
-                      placeholder="Цена скупа за 1 ед."
+                      placeholder="Цена скупа за 1 ед. (можно с копейками)"
                       value={draftEnergyPrice}
                       onChange={(event) =>
-                        setDraftEnergyPrice(event.currentTarget.value.replace(/[^\d]/g, ''))
+                        setDraftEnergyPrice(sanitizeDecimalInput(event.currentTarget.value))
                       }
                       style={{ flex: 1 }}
                     />
                     <Button
                       variant="default"
                       color="gray"
-                      onClick={() => setEnergyPrice(draftEnergyPrice.replace(/[^\d]/g, ''))}
+                      onClick={() => setEnergyPrice(normalizeDecimalPriceForSubmit(draftEnergyPrice))}
                     >
                       Сохранить
                     </Button>

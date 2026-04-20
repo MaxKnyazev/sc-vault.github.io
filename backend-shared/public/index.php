@@ -24,6 +24,7 @@ require $baseDir . '/src/Auction.php';
 require $baseDir . '/src/AuctionTrackedItems.php';
 require $baseDir . '/src/AuctionBlacklist.php';
 require $baseDir . '/src/UserBuyPrices.php';
+require $baseDir . '/src/UserEnergyBuyPrice.php';
 require $baseDir . '/src/DefaultBuyPrices.php';
 require $baseDir . '/src/RecipeOverrides.php';
 
@@ -556,7 +557,8 @@ if ($path === '/user/buy-prices') {
 
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
         $prices = get_effective_buy_prices_for_user($db, $userId);
-        send_json(200, ['prices' => $prices]);
+        $energyBuyPrice = get_user_energy_buy_price($db, $userId);
+        send_json(200, ['prices' => $prices, 'energyBuyPrice' => $energyBuyPrice]);
         exit;
     }
 
@@ -573,6 +575,45 @@ if ($path === '/user/buy-prices') {
         } else {
             upsert_user_buy_price($db, $userId, $itemId, $value);
         }
+        send_json(200, ['ok' => true]);
+        exit;
+    }
+
+    send_json(405, ['error' => 'Method not allowed']);
+    exit;
+}
+
+if ($path === '/user/energy-buy-price') {
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    enforce_auth_user($user);
+    $userId = (int)$user['id'];
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+        require_method('GET');
+        send_json(200, ['value' => get_user_energy_buy_price($db, $userId)]);
+        exit;
+    }
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        require_method('POST');
+        $body = read_json_body();
+        $raw = (string)($body['value'] ?? '');
+        try {
+            $normalized = normalize_energy_buy_price_input($raw);
+        } catch (Throwable $e) {
+            send_json(400, ['error' => $e->getMessage()]);
+            exit;
+        }
+        set_user_energy_buy_price($db, $userId, $normalized);
         send_json(200, ['ok' => true]);
         exit;
     }

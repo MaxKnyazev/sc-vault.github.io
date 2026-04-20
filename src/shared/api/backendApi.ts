@@ -62,6 +62,12 @@ type AuctionActiveLotsResponse = {
 
 type UserBuyPricesResponse = {
   prices?: Record<string, { value?: string }>
+  energyBuyPrice?: string
+}
+
+export type FetchUserBuyPricesResult = {
+  itemPrices: Record<string, string>
+  energyBuyPrice: string
 }
 
 export type RecipeResultOverride = {
@@ -310,9 +316,9 @@ export async function removeTrackedAuctionItem(itemId: string): Promise<void> {
   await parseJsonOrThrow<{ ok?: boolean }>(response)
 }
 
-export async function fetchBackendUserBuyPrices(): Promise<Record<string, string>> {
+export async function fetchBackendUserBuyPrices(): Promise<FetchUserBuyPricesResult> {
   const token = getBackendAuthToken()
-  if (!token) return {}
+  if (!token) return { itemPrices: {}, energyBuyPrice: '' }
   const url = buildApiUrl('/user/buy-prices')
   const response = await fetch(url, {
     method: 'GET',
@@ -323,7 +329,10 @@ export async function fetchBackendUserBuyPrices(): Promise<Record<string, string
     },
   })
   const payload = await parseJsonOrThrow<UserBuyPricesResponse>(response)
-  return parseBuyPricesPayload(payload.prices)
+  return {
+    itemPrices: parseBuyPricesPayload(payload.prices),
+    energyBuyPrice: typeof payload.energyBuyPrice === 'string' ? payload.energyBuyPrice : '',
+  }
 }
 
 export async function saveBackendUserBuyPrice(itemId: string, value: string): Promise<void> {
@@ -339,6 +348,23 @@ export async function saveBackendUserBuyPrice(itemId: string, value: string): Pr
       'X-Auth-Token': token,
     },
     body: JSON.stringify({ itemId, value }),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function saveBackendUserEnergyBuyPrice(value: string): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) return
+  const url = buildApiUrl('/user/energy-buy-price')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify({ value }),
   })
   await parseJsonOrThrow<{ ok?: boolean }>(response)
 }
