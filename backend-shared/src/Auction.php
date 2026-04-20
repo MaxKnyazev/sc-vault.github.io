@@ -936,6 +936,8 @@ function get_auction_item_active_lots(PDO $db, array $config, string $itemId, in
         rawurlencode($normalizedItemId),
         $safeLimit
     );
+    $headers[] = 'Cache-Control: no-cache';
+    $headers[] = 'Pragma: no-cache';
     $ctx = stream_context_create([
         'http' => [
             'method' => 'GET',
@@ -962,9 +964,20 @@ function get_auction_item_active_lots(PDO $db, array $config, string $itemId, in
 
     $rows = [];
     foreach (['lots', 'items', 'offers'] as $key) {
-        if (is_array($payload[$key] ?? null)) {
-            $rows = $payload[$key];
+        $candidate = $payload[$key] ?? null;
+        if (is_array($candidate) && count($candidate) > 0) {
+            $rows = $candidate;
             break;
+        }
+    }
+    if (count($rows) === 0 && isset($payload['data']) && is_array($payload['data'])) {
+        $inner = $payload['data'];
+        foreach (['lots', 'items', 'offers'] as $key) {
+            $candidate = $inner[$key] ?? null;
+            if (is_array($candidate) && count($candidate) > 0) {
+                $rows = $candidate;
+                break;
+            }
         }
     }
 
@@ -1006,6 +1019,28 @@ function get_auction_item_active_lots(PDO $db, array $config, string $itemId, in
         if ($expiresAt === '' && isset($row['remainingTimeSec'])) {
             $expiresAt = gmdate('Y-m-d H:i:s', time() + max(0, (int)$row['remainingTimeSec']));
         }
+
+        $statusRaw = strtolower(trim((string)($row['status'] ?? $row['state'] ?? $row['lotStatus'] ?? '')));
+        if (
+            $statusRaw !== '' &&
+            in_array($statusRaw, ['sold', 'closed', 'cancelled', 'expired', 'finished', 'removed', 'bought'], true)
+        ) {
+            continue;
+        }
+        if (array_key_exists('active', $row) && $row['active'] === false) {
+            continue;
+        }
+        if (!empty($row['removed']) || !empty($row['isRemoved'])) {
+            continue;
+        }
+
+        if ($expiresAt !== '') {
+            $exp = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $expiresAt, new \DateTimeZone('UTC'));
+            if ($exp instanceof \DateTimeImmutable && $exp->getTimestamp() < time() - 30) {
+                continue;
+            }
+        }
+
         $additional = is_array($row['additional'] ?? null) ? $row['additional'] : null;
         $buyoutPerUnit = $amount > 0 ? ($buyoutPriceTotal > 0 ? $buyoutPriceTotal / $amount : 0.0) : 0.0;
         $startPerUnit = $amount > 0 ? ($startPriceTotal > 0 ? $startPriceTotal / $amount : 0.0) : 0.0;

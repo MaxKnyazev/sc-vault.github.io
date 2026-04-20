@@ -219,7 +219,7 @@ export function IngredientsPage() {
                   </Text>
                   <Group wrap="nowrap" align="flex-end">
                     <TextInput
-                      placeholder="Цена скупа за 1 ед. (можно с копейками)"
+                      placeholder="Цена скупа за 1 ед."
                       value={draftEnergyPrice}
                       onChange={(event) =>
                         setDraftEnergyPrice(sanitizeDecimalInput(event.currentTarget.value))
@@ -286,10 +286,6 @@ export function IngredientsPage() {
                         Сохранить
                       </Button>
                     </Group>
-                    <Text size="xs" c="dimmed">
-                      Пустое значение и «Сохранить» сбрасывает вашу цену: подставится значение по умолчанию,
-                      если администратор его задал.
-                    </Text>
                     {isAdmin ? (
                       <>
                         <Text size="xs" fw={600} mt={4}>
@@ -297,7 +293,7 @@ export function IngredientsPage() {
                         </Text>
                         <Group wrap="nowrap" align="flex-end">
                           <TextInput
-                            placeholder="Дефолт на предмет для всех пользователей"
+                            placeholder="Цена скупа за 1 ед. по-дефолту"
                             value={draftDefaultBuyPricesByItemId[item.itemId] ?? ''}
                             onChange={(event) => {
                               const raw = event.currentTarget.value

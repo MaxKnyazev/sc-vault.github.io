@@ -1,5 +1,5 @@
 import { ActionIcon, Alert, Box, Button, Group, Loader, Modal, ScrollArea, Select, Stack, Text } from '@mantine/core'
-import { useEffect, useMemo, useState, type MouseEvent, type WheelEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type MouseEvent, type WheelEvent } from 'react'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
@@ -206,6 +206,8 @@ export function AuctionHistoryItemModal() {
   const [activeLotsSortKey, setActiveLotsSortKey] = useState<ActiveLotsSortKey>('buyoutPrice')
   const [activeLotsSortDirection, setActiveLotsSortDirection] = useState<ActiveLotsSortDirection>('asc')
   const [isLoading, setIsLoading] = useState(false)
+  const [isRefreshingActiveLots, setIsRefreshingActiveLots] = useState(false)
+  const [activeLotsRefreshHovered, setActiveLotsRefreshHovered] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [zoom, setZoom] = useState<AuctionHistoryZoom>(1)
   const [hoveredZoom, setHoveredZoom] = useState<AuctionHistoryZoom | null>(null)
@@ -220,6 +222,20 @@ export function AuctionHistoryItemModal() {
   const effectiveUpgrade: AuctionHistoryUpgrade = showUpgradeFilter ? upgrade : 'all'
   const qualitySelectValue = quality
   const upgradeSelectValue = String(upgrade)
+
+  const handleRefreshActiveLots = useCallback(async () => {
+    if (!itemId) return
+    setIsRefreshingActiveLots(true)
+    setError(null)
+    try {
+      const lots = await fetchAuctionItemActiveLots(itemId, 150)
+      setActiveLots(lots)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось обновить лоты')
+    } finally {
+      setIsRefreshingActiveLots(false)
+    }
+  }, [itemId])
   const selectedQualityGlowColor =
     showQualityFilter && effectiveQuality !== 'all' ? QUALITY_GLOW_BY_KEY[effectiveQuality] : undefined
   const badgeQualityColor = selectedQualityGlowColor ?? item?.color
@@ -249,11 +265,13 @@ export function AuctionHistoryItemModal() {
   const { series, min: minPrice, max: maxPrice } = useMemo(() => buildChartSeries(visiblePoints), [visiblePoints])
   const filteredActiveLots = useMemo(() => {
     return activeLots.filter((lot) => {
+      const end = parseUtcDate(lot.expiresAt)
+      if (end && end.getTime() <= nowMs) return false
       if (showQualityFilter && effectiveQuality !== 'all' && lot.quality !== effectiveQuality) return false
       if (showUpgradeFilter && effectiveUpgrade !== 'all' && lot.upgrade !== effectiveUpgrade) return false
       return true
     })
-  }, [activeLots, showQualityFilter, showUpgradeFilter, effectiveQuality, effectiveUpgrade])
+  }, [activeLots, nowMs, showQualityFilter, showUpgradeFilter, effectiveQuality, effectiveUpgrade])
   const sortedActiveLots = useMemo(() => {
     const getNumeric = (lot: AuctionActiveLot, key: ActiveLotsSortKey): number => {
       if (key === 'remaining') {
@@ -379,6 +397,22 @@ export function AuctionHistoryItemModal() {
     const id = setInterval(() => setNowMs(Date.now()), 1000)
     return () => clearInterval(id)
   }, [opened, viewMode])
+
+  useEffect(() => {
+    if (!opened || !itemId || viewMode !== 'activeLots') return
+    const intervalMs = 90_000
+    const id = window.setInterval(() => {
+      void (async () => {
+        try {
+          const lots = await fetchAuctionItemActiveLots(itemId, 150)
+          setActiveLots(lots)
+        } catch {
+          // keep previous rows
+        }
+      })()
+    }, intervalMs)
+    return () => window.clearInterval(id)
+  }, [opened, itemId, viewMode])
 
   const toggleActiveLotsSort = (key: ActiveLotsSortKey) => {
     if (activeLotsSortKey === key) {
@@ -507,15 +541,58 @@ export function AuctionHistoryItemModal() {
 
         {error ? <Alert color="red">{error}</Alert> : null}
 
-        <Text size="sm" c="dimmed">
-          {viewMode === 'history'
-            ? `${latestPrice !== null ? `Текущая средняя цена: ${formatAuctionRub(latestPrice)} ₽` : 'Нет данных по цене'} · Лотов: ${totalTrades}`
-            : `Активных лотов: ${sortedActiveLots.length} · Объём: ${new Intl.NumberFormat('ru-RU').format(
+        {viewMode === 'history' ? (
+          <Text size="sm" c="dimmed">
+            {`${latestPrice !== null ? `Текущая средняя цена: ${formatAuctionRub(latestPrice)} ₽` : 'Нет данных по цене'} · Лотов: ${totalTrades}`}
+          </Text>
+        ) : (
+          <Group
+            gap="xs"
+            align="center"
+            wrap="nowrap"
+            onMouseEnter={() => setActiveLotsRefreshHovered(true)}
+            onMouseLeave={() => setActiveLotsRefreshHovered(false)}
+          >
+            <ActionIcon
+              variant={activeLotsRefreshHovered ? 'filled' : 'light'}
+              color={activeLotsRefreshHovered ? 'blue' : 'gray'}
+              radius="md"
+              size={26}
+              loading={isRefreshingActiveLots}
+              onClick={() => void handleRefreshActiveLots()}
+              aria-label="Обновить активные лоты"
+              title="Обновить активные лоты"
+              style={{
+                backgroundColor: activeLotsRefreshHovered ? undefined : 'rgba(255,255,255,0.10)',
+                transition: 'background-color 140ms ease, color 140ms ease, transform 140ms ease',
+                flexShrink: 0,
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </ActionIcon>
+            <Text
+              size="sm"
+              c={activeLotsRefreshHovered ? 'gray.3' : 'dimmed'}
+              onClick={() => void handleRefreshActiveLots()}
+              style={{ cursor: 'pointer', transition: 'color 120ms ease' }}
+              title="Обновить активные лоты"
+            >
+              {`Активных лотов: ${sortedActiveLots.length} · Объём: ${new Intl.NumberFormat('ru-RU').format(
                 sortedActiveLots.reduce((sum, lot) => sum + lot.amount, 0),
               )} шт. · Общая стоимость: ${formatAuctionRub(
                 sortedActiveLots.reduce((sum, lot) => sum + lot.amount * lot.price, 0),
               )} ₽`}
-        </Text>
+            </Text>
+          </Group>
+        )}
         {viewMode === 'history' ? (
           <Group gap="xs" align="center" wrap="wrap">
             <Text size="sm" c="dimmed">
