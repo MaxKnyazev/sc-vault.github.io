@@ -1,4 +1,5 @@
 import { ActionIcon, Group, Text } from '@mantine/core'
+import { useState } from 'react'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 import { useAuctionPricesStore } from '../../shared/store/auctionPricesStore'
 import { useAuctionBlacklistStore } from '../../shared/store/auctionBlacklistStore'
@@ -20,21 +21,24 @@ export function AuctionPrice24hLine({
   const stat = useAuctionPricesStore((s) => s.byItemId[itemId])
   const isBlacklisted = useAuctionBlacklistStore((s) => s.blacklist.has(itemId))
   const openHistoryModal = useAuctionHistoryItemModalStore((s) => s.open)
+  const [isTextHovered, setIsTextHovered] = useState(false)
+  const openByTextOrIcon = (event?: { stopPropagation?: () => void }) => {
+    event?.stopPropagation?.()
+    openHistoryModal(itemId)
+  }
 
   const line = (content: string) => (
     <Group gap={6} wrap="nowrap" align="center">
       <ActionIcon
-        size={18}
-        variant="subtle"
-        color="gray"
+        size={30}
+        radius="sm"
+        variant="light"
+        color="blue"
         aria-label="Открыть историю аукциона"
         title="Открыть историю аукциона"
-        onClick={(event) => {
-          event.stopPropagation()
-          openHistoryModal(itemId)
-        }}
+        onClick={openByTextOrIcon}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path
             d="M4 17L9.5 11.5L13 15L20 8"
             stroke="currentColor"
@@ -51,7 +55,16 @@ export function AuctionPrice24hLine({
           />
         </svg>
       </ActionIcon>
-      <Text size={size} c="dimmed" lh={1.35}>
+      <Text
+        size={size}
+        c={isTextHovered ? 'gray.3' : 'dimmed'}
+        lh={1.35}
+        onClick={openByTextOrIcon}
+        onMouseEnter={() => setIsTextHovered(true)}
+        onMouseLeave={() => setIsTextHovered(false)}
+        style={{ cursor: 'pointer', transition: 'color 120ms ease' }}
+        title="Открыть историю аукциона"
+      >
         {content}
       </Text>
     </Group>

@@ -1,6 +1,7 @@
 import { ActionIcon, Alert, Box, Group, Stack, Text } from '@mantine/core'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuctionPricesStore } from '../../shared/store/auctionPricesStore'
+import { useAuthStore } from '../../shared/store/authStore'
 
 type AuctionRefreshStatusProps = {
   itemIds: string[]
@@ -8,16 +9,19 @@ type AuctionRefreshStatusProps = {
 
 const AUTO_REFRESH_MS = 5 * 60 * 1000
 
-function formatLastUpdatedLabel(iso: string | null): string {
+function formatLastUpdatedLabel(iso: string | null, timezoneOffsetHours: number): string {
   if (!iso) return 'еще не обновлялись'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return 'еще не обновлялись'
-  return d.toLocaleString('ru-RU', {
+  const source = new Date(iso)
+  if (Number.isNaN(source.getTime())) return 'еще не обновлялись'
+  const shifted = new Date(source.getTime() + timezoneOffsetHours * 60 * 60 * 1000)
+  return shifted.toLocaleString('ru-RU', {
     day: '2-digit',
     month: '2-digit',
+    year: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
+    timeZone: 'UTC',
   })
 }
 
@@ -28,6 +32,8 @@ export function AuctionRefreshStatus({ itemIds }: AuctionRefreshStatusProps) {
   const progress = useAuctionPricesStore((s) => s.progress)
   const error = useAuctionPricesStore((s) => s.error)
   const resetError = useAuctionPricesStore((s) => s.resetError)
+  const timezoneOffsetHours = useAuthStore((s) => s.user?.timezoneOffsetHours ?? 0)
+  const [isTextHovered, setIsTextHovered] = useState(false)
 
   const uniqueItemIds = useMemo(() => [...new Set(itemIds)].filter(Boolean), [itemIds])
   const lastUpdatedIso = useMemo(() => {
@@ -45,6 +51,9 @@ export function AuctionRefreshStatus({ itemIds }: AuctionRefreshStatusProps) {
     }
     return bestIso
   }, [byItemId, uniqueItemIds])
+  const triggerRefresh = () => {
+    if (uniqueItemIds.length > 0) void refreshAll(uniqueItemIds)
+  }
 
   useEffect(() => {
     if (uniqueItemIds.length === 0) return
@@ -84,11 +93,10 @@ export function AuctionRefreshStatus({ itemIds }: AuctionRefreshStatusProps) {
         <ActionIcon
           variant="light"
           color="blue"
-          radius="xl"
+          radius="sm"
+          size={30}
           loading={isRefreshing}
-          onClick={() => {
-            if (uniqueItemIds.length > 0) void refreshAll(uniqueItemIds)
-          }}
+          onClick={triggerRefresh}
           aria-label="Обновить цены аукциона"
           title="Обновить цены аукциона"
         >
@@ -102,8 +110,16 @@ export function AuctionRefreshStatus({ itemIds }: AuctionRefreshStatusProps) {
             />
           </svg>
         </ActionIcon>
-        <Text size="xs" c="dimmed">
-          Цены обновлены в {formatLastUpdatedLabel(lastUpdatedIso)}
+        <Text
+          size="xs"
+          c={isTextHovered ? 'gray.3' : 'dimmed'}
+          onClick={triggerRefresh}
+          onMouseEnter={() => setIsTextHovered(true)}
+          onMouseLeave={() => setIsTextHovered(false)}
+          style={{ cursor: 'pointer', transition: 'color 120ms ease' }}
+          title="Обновить цены аукциона"
+        >
+          Последнее обновление {formatLastUpdatedLabel(lastUpdatedIso, timezoneOffsetHours)}
         </Text>
         {progress ? (
           <Text size="xs" c="dimmed">
