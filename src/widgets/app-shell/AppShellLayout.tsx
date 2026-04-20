@@ -58,6 +58,7 @@ export function AppShellLayout() {
       '/': 'Главная',
       '/crafts': 'Крафты',
       '/ingredients': 'Ингредиенты',
+      '/cost-price': 'Себестоимость',
       '/auction-history': 'История аукциона',
       '/profile': 'Профиль',
       '/users': 'Пользователи',
@@ -67,6 +68,7 @@ export function AppShellLayout() {
     if (!pageTitle) {
       if (location.pathname.startsWith('/crafts')) pageTitle = 'Крафты'
       else if (location.pathname.startsWith('/ingredients')) pageTitle = 'Ингредиенты'
+      else if (location.pathname.startsWith('/cost-price')) pageTitle = 'Себестоимость'
       else if (location.pathname.startsWith('/auction-history')) pageTitle = 'История аукциона'
       else if (location.pathname.startsWith('/profile')) pageTitle = 'Профиль'
       else if (location.pathname.startsWith('/users')) pageTitle = 'Пользователи'
@@ -149,6 +151,16 @@ export function AppShellLayout() {
               label="Ингредиенты"
               active={location.pathname.startsWith('/ingredients')}
               styles={getNavItemStyles(location.pathname.startsWith('/ingredients'))}
+            />
+          ) : null}
+          {canUseCoreFeatures ? (
+            <NavLink
+              component={Link}
+              to="/cost-price"
+              onClick={close}
+              label="Себестоимость"
+              active={location.pathname.startsWith('/cost-price')}
+              styles={getNavItemStyles(location.pathname.startsWith('/cost-price'))}
             />
           ) : null}
           {canUseCoreFeatures ? (
