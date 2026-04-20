@@ -27,3 +27,9 @@ function upsert_user_buy_price(PDO $db, int $userId, string $itemId, string $val
     $stmt->execute([$userId, $itemId, $value]);
 }
 
+function delete_user_buy_price(PDO $db, int $userId, string $itemId): void
+{
+    $stmt = $db->prepare('DELETE FROM user_buy_prices WHERE user_id = ? AND item_id = ?');
+    $stmt->execute([$userId, $itemId]);
+}
+

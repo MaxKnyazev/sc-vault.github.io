@@ -323,17 +323,54 @@ export async function fetchBackendUserBuyPrices(): Promise<Record<string, string
     },
   })
   const payload = await parseJsonOrThrow<UserBuyPricesResponse>(response)
-  const result: Record<string, string> = {}
-  for (const [itemId, row] of Object.entries(payload.prices ?? {})) {
-    result[itemId] = typeof row?.value === 'string' ? row.value : ''
-  }
-  return result
+  return parseBuyPricesPayload(payload.prices)
 }
 
 export async function saveBackendUserBuyPrice(itemId: string, value: string): Promise<void> {
   const token = getBackendAuthToken()
   if (!token) return
   const url = buildApiUrl('/user/buy-prices')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify({ itemId, value }),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+function parseBuyPricesPayload(prices: UserBuyPricesResponse['prices']): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const [itemId, row] of Object.entries(prices ?? {})) {
+    result[itemId] = typeof row?.value === 'string' ? row.value : ''
+  }
+  return result
+}
+
+export async function fetchBackendDefaultBuyPrices(): Promise<Record<string, string>> {
+  const token = getBackendAuthToken()
+  if (!token) return {}
+  const url = buildApiUrl('/admin/default-buy-prices')
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+  })
+  const payload = await parseJsonOrThrow<UserBuyPricesResponse>(response)
+  return parseBuyPricesPayload(payload.prices)
+}
+
+export async function saveBackendDefaultBuyPrice(itemId: string, value: string): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl('/admin/default-buy-prices')
   const response = await fetch(url, {
     method: 'POST',
     headers: {

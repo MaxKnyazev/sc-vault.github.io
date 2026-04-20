@@ -24,6 +24,7 @@ require $baseDir . '/src/Auction.php';
 require $baseDir . '/src/AuctionTrackedItems.php';
 require $baseDir . '/src/AuctionBlacklist.php';
 require $baseDir . '/src/UserBuyPrices.php';
+require $baseDir . '/src/DefaultBuyPrices.php';
 require $baseDir . '/src/RecipeOverrides.php';
 
 function resolve_allowed_origin_header(array $config): string
@@ -554,7 +555,7 @@ if ($path === '/user/buy-prices') {
     $userId = (int)$user['id'];
 
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
-        $prices = get_user_buy_prices($db, $userId);
+        $prices = get_effective_buy_prices_for_user($db, $userId);
         send_json(200, ['prices' => $prices]);
         exit;
     }
@@ -567,7 +568,56 @@ if ($path === '/user/buy-prices') {
             send_json(400, ['error' => 'itemId required']);
             exit;
         }
-        upsert_user_buy_price($db, $userId, $itemId, $value);
+        if ($value === '') {
+            delete_user_buy_price($db, $userId, $itemId);
+        } else {
+            upsert_user_buy_price($db, $userId, $itemId, $value);
+        }
+        send_json(200, ['ok' => true]);
+        exit;
+    }
+
+    send_json(405, ['error' => 'Method not allowed']);
+    exit;
+}
+
+if ($path === '/admin/default-buy-prices' || $path === '/default-buy-prices-admin') {
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    if (!role_at_least($user, 'admin')) {
+        send_json(403, ['error' => 'Недостаточно прав']);
+        exit;
+    }
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+        require_method('GET');
+        $prices = get_default_buy_prices($db);
+        send_json(200, ['prices' => $prices]);
+        exit;
+    }
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        require_method('POST');
+        $body = read_json_body();
+        $itemId = trim((string)($body['itemId'] ?? ''));
+        $value = trim((string)($body['value'] ?? ''));
+        if ($itemId === '') {
+            send_json(400, ['error' => 'itemId required']);
+            exit;
+        }
+        if ($value === '') {
+            delete_default_buy_price($db, $itemId);
+        } else {
+            upsert_default_buy_price($db, $itemId, $value);
+        }
         send_json(200, ['ok' => true]);
         exit;
     }

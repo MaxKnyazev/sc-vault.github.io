@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { fetchBackendUserBuyPrices, saveBackendUserBuyPrice } from '../api/backendApi'
-import { getBackendApiBaseUrl } from '../config/backendApi'
+import { getBackendApiBaseUrl, getBackendAuthToken } from '../config/backendApi'
 
 type IngredientPricesState = {
   buyPricesByItemId: Record<string, string>
@@ -29,21 +29,20 @@ export const useIngredientPricesStore = create<IngredientPricesState>()(
       },
       loadRemoteBuyPrices: async () => {
         if (!getBackendApiBaseUrl()) return
+        if (!getBackendAuthToken()) {
+          set({ buyPricesByItemId: {} })
+          return
+        }
         const remote = await fetchBackendUserBuyPrices()
-        if (Object.keys(remote).length === 0) return
-        set((state) => ({
-          buyPricesByItemId: {
-            ...state.buyPricesByItemId,
-            ...remote,
-          },
-        }))
+        set({ buyPricesByItemId: remote })
       },
       setEnergyPrice: (value) => {
         set({ energyPrice: value })
       },
     }),
     {
-      name: 'sc-vault-ingredient-prices',
+      name: 'sc-vault-ingredient-prices-v2',
+      partialize: (state) => ({ energyPrice: state.energyPrice }),
     },
   ),
 )

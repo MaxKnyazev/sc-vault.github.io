@@ -22,6 +22,8 @@ import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import { useFavoritesStore } from '../../shared/store/favoritesStore'
 import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
 import { AdminAuctionTrackingButton } from '../../components/admin-auction-ignore/AdminAuctionTrackingButton'
+import { useAuthStore } from '../../shared/store/authStore'
+import { fetchBackendDefaultBuyPrices, saveBackendDefaultBuyPrice } from '../../shared/api/backendApi'
 
 function createEnergyIconSvg(fillColor: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -35,12 +37,15 @@ export function IngredientsPage() {
   const colorScheme = useComputedColorScheme('dark')
   const { recipes, itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
   const favoriteItemIds = useFavoritesStore((state) => state.favoriteItemIds)
+  const user = useAuthStore((s) => s.user)
+  const isAdmin = user?.role === 'admin'
   const { buyPricesByItemId, setBuyPrice, loadRemoteBuyPrices, energyPrice, setEnergyPrice } =
     useIngredientPricesStore()
   const [draftEnergyPrice, setDraftEnergyPrice] = useState('')
   const [search, setSearch] = useState('')
   const [activeFilter, setActiveFilter] = useState<'all' | 'base' | 'favorites'>('all')
   const [draftBuyPricesByItemId, setDraftBuyPricesByItemId] = useState<Record<string, string>>({})
+  const [draftDefaultBuyPricesByItemId, setDraftDefaultBuyPricesByItemId] = useState<Record<string, string>>({})
   const energyIconSvg = createEnergyIconSvg(colorScheme === 'light' ? '#4b5563' : '#ffffff')
 
   useEffect(() => {
@@ -50,6 +55,21 @@ export function IngredientsPage() {
   useEffect(() => {
     void loadRemoteBuyPrices()
   }, [loadRemoteBuyPrices])
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setDraftDefaultBuyPricesByItemId({})
+      return
+    }
+    void (async () => {
+      try {
+        const defaults = await fetchBackendDefaultBuyPrices()
+        setDraftDefaultBuyPricesByItemId(defaults)
+      } catch {
+        setDraftDefaultBuyPricesByItemId({})
+      }
+    })()
+  }, [isAdmin])
 
   useEffect(() => {
     setDraftBuyPricesByItemId(buyPricesByItemId)
@@ -272,6 +292,55 @@ export function IngredientsPage() {
                         Сохранить
                       </Button>
                     </Group>
+                    <Text size="xs" c="dimmed">
+                      Пустое значение и «Сохранить» сбрасывает вашу цену: подставится значение по умолчанию,
+                      если администратор его задал.
+                    </Text>
+                    {isAdmin ? (
+                      <>
+                        <Text size="xs" fw={600} mt={4}>
+                          Цена по умолчанию для всех
+                        </Text>
+                        <Group wrap="nowrap" align="flex-end">
+                          <TextInput
+                            placeholder="Дефолт на предмет для всех пользователей"
+                            value={draftDefaultBuyPricesByItemId[item.itemId] ?? ''}
+                            onChange={(event) => {
+                              const raw = event.currentTarget.value
+                              const sanitized = raw.replace(/[^\d]/g, '')
+                              setDraftDefaultBuyPricesByItemId((state) => ({
+                                ...state,
+                                [item.itemId]: sanitized,
+                              }))
+                            }}
+                            style={{ flex: 1 }}
+                          />
+                          <Button
+                            variant="default"
+                            color="gray"
+                            onClick={() => {
+                              void (async () => {
+                                const value = (draftDefaultBuyPricesByItemId[item.itemId] ?? '').replace(
+                                  /[^\d]/g,
+                                  '',
+                                )
+                                try {
+                                  await saveBackendDefaultBuyPrice(item.itemId, value)
+                                  const next = await fetchBackendDefaultBuyPrices()
+                                  setDraftDefaultBuyPricesByItemId(next)
+                                  await loadRemoteBuyPrices()
+                                  setDraftBuyPricesByItemId(useIngredientPricesStore.getState().buyPricesByItemId)
+                                } catch {
+                                  // ignore
+                                }
+                              })()
+                            }}
+                          >
+                            Сохранить
+                          </Button>
+                        </Group>
+                      </>
+                    ) : null}
                   </Stack>
                 ))}
               </SimpleGrid>
