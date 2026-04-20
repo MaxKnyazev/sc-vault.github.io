@@ -104,13 +104,17 @@ export function AuctionRefreshStatus({ itemIds }: AuctionRefreshStatusProps) {
       >
         <ActionIcon
           variant={isHovered ? 'filled' : 'light'}
-          color="blue"
+          color={isHovered ? 'blue' : 'gray'}
           radius="md"
           size={26}
           loading={isRefreshing}
           onClick={triggerRefresh}
           aria-label="Обновить цены аукциона"
           title="Обновить цены аукциона"
+          style={{
+            backgroundColor: isHovered ? undefined : 'rgba(255,255,255,0.10)',
+            transition: 'background-color 140ms ease, color 140ms ease, transform 140ms ease',
+          }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path

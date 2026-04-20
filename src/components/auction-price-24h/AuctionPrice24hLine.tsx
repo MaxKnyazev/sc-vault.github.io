@@ -39,10 +39,14 @@ export function AuctionPrice24hLine({
         size={26}
         radius="md"
         variant={isHovered ? 'filled' : 'light'}
-        color="blue"
+        color={isHovered ? 'blue' : 'gray'}
         aria-label="Открыть историю аукциона"
         title="Открыть историю аукциона"
         onClick={openByTextOrIcon}
+        style={{
+          backgroundColor: isHovered ? undefined : 'rgba(255,255,255,0.10)',
+          transition: 'background-color 140ms ease, color 140ms ease, transform 140ms ease',
+        }}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path
