@@ -840,7 +840,7 @@ export function AuctionHistoryItemModal() {
             style={{
               borderRadius: 8,
               width: '100%',
-              minHeight: 330,
+              height: 330,
               position: 'relative',
               display: 'flex',
               flexDirection: 'column',
@@ -921,12 +921,16 @@ export function AuctionHistoryItemModal() {
                   </Text>
                 </Group>
                 <ScrollArea
-                  type="auto"
-                  offsetScrollbars
-                  scrollbarSize={8}
-                  style={{ flex: '1 1 auto', minHeight: 0 }}
-                  styles={{ viewport: { paddingBottom: 2 } }}
-                  mah={292}
+                  scrollbars="y"
+                  type="scroll"
+                  scrollbarSize={5}
+                  style={{ flex: 1, minHeight: 0 }}
+                  styles={{
+                    root: { flex: 1, minHeight: 0, padding: 0 },
+                    viewport: { paddingBottom: 0, paddingRight: 2 },
+                    corner: { display: 'none' },
+                    scrollbar: { width: 5, padding: 0 },
+                  }}
                 >
                   <Stack gap={0}>
                   {sortedActiveLots.map((lot, idx) => {
