@@ -38,6 +38,7 @@ type AuctionPricesState = {
   byItemId: Record<string, AuctionAgg24h>
   isRefreshing: boolean
   error: string | null
+  lastRefreshAt: string | null
   progress: { done: number; total: number } | null
   refreshAll: (itemIds: string[]) => Promise<void>
   clearCache: () => void
@@ -51,9 +52,10 @@ export const useAuctionPricesStore = create<AuctionPricesState>()(
       byItemId: {},
       isRefreshing: false,
       error: null,
+      lastRefreshAt: null,
       progress: null,
       clearCache: () => {
-        set({ byItemId: {}, error: null, progress: null, isRefreshing: false })
+        set({ byItemId: {}, error: null, progress: null, isRefreshing: false, lastRefreshAt: null })
       },
       resetError: () => set({ error: null }),
       removeItemFromCache: (itemId: string) => {
@@ -76,7 +78,13 @@ export const useAuctionPricesStore = create<AuctionPricesState>()(
         }
 
         if (!tracked.length) {
-          set({ byItemId: baseByItemId, isRefreshing: false, error: null, progress: null })
+          set({
+            byItemId: baseByItemId,
+            isRefreshing: false,
+            error: null,
+            progress: null,
+            lastRefreshAt: new Date().toISOString(),
+          })
           return
         }
 
@@ -103,6 +111,7 @@ export const useAuctionPricesStore = create<AuctionPricesState>()(
                 isRefreshing: false,
                 progress: null,
                 error: null,
+                lastRefreshAt: new Date().toISOString(),
               })
               return
             } catch (err) {
@@ -153,6 +162,7 @@ export const useAuctionPricesStore = create<AuctionPricesState>()(
             isRefreshing: false,
             progress: null,
             error: failed.length ? formatAuctionFailures(failed, tracked.length) : null,
+            lastRefreshAt: new Date().toISOString(),
           })
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Auction refresh failed'

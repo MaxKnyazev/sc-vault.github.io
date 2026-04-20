@@ -32,11 +32,12 @@ export function AuctionRefreshStatus({ itemIds }: AuctionRefreshStatusProps) {
   const progress = useAuctionPricesStore((s) => s.progress)
   const error = useAuctionPricesStore((s) => s.error)
   const resetError = useAuctionPricesStore((s) => s.resetError)
+  const lastRefreshAt = useAuctionPricesStore((s) => s.lastRefreshAt)
   const timezoneOffsetHours = useAuthStore((s) => s.user?.timezoneOffsetHours ?? 0)
-  const [isTextHovered, setIsTextHovered] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
 
   const uniqueItemIds = useMemo(() => [...new Set(itemIds)].filter(Boolean), [itemIds])
-  const lastUpdatedIso = useMemo(() => {
+  const lastUpdatedFromDataIso = useMemo(() => {
     let bestTs = 0
     let bestIso: string | null = null
     for (const id of uniqueItemIds) {
@@ -51,16 +52,21 @@ export function AuctionRefreshStatus({ itemIds }: AuctionRefreshStatusProps) {
     }
     return bestIso
   }, [byItemId, uniqueItemIds])
+  const lastUpdatedIso = useMemo(() => {
+    const dataTs = lastUpdatedFromDataIso ? Date.parse(lastUpdatedFromDataIso) : 0
+    const manualTs = lastRefreshAt ? Date.parse(lastRefreshAt) : 0
+    return manualTs > dataTs ? lastRefreshAt : lastUpdatedFromDataIso
+  }, [lastRefreshAt, lastUpdatedFromDataIso])
   const triggerRefresh = () => {
     if (uniqueItemIds.length > 0) void refreshAll(uniqueItemIds)
   }
 
   useEffect(() => {
     if (uniqueItemIds.length === 0) return
-    if (!lastUpdatedIso && !isRefreshing) {
+    if (!lastUpdatedFromDataIso && !isRefreshing) {
       void refreshAll(uniqueItemIds)
     }
-  }, [isRefreshing, lastUpdatedIso, refreshAll, uniqueItemIds])
+  }, [isRefreshing, lastUpdatedFromDataIso, refreshAll, uniqueItemIds])
 
   useEffect(() => {
     if (uniqueItemIds.length === 0) return
@@ -89,12 +95,18 @@ export function AuctionRefreshStatus({ itemIds }: AuctionRefreshStatusProps) {
           </Box>
         </Alert>
       ) : null}
-      <Group gap="xs" align="center" wrap="wrap">
+      <Group
+        gap="xs"
+        align="center"
+        wrap="wrap"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
         <ActionIcon
-          variant="light"
+          variant={isHovered ? 'filled' : 'light'}
           color="blue"
-          radius="sm"
-          size={30}
+          radius="md"
+          size={26}
           loading={isRefreshing}
           onClick={triggerRefresh}
           aria-label="Обновить цены аукциона"
@@ -112,10 +124,8 @@ export function AuctionRefreshStatus({ itemIds }: AuctionRefreshStatusProps) {
         </ActionIcon>
         <Text
           size="xs"
-          c={isTextHovered ? 'gray.3' : 'dimmed'}
+          c={isHovered ? 'gray.3' : 'dimmed'}
           onClick={triggerRefresh}
-          onMouseEnter={() => setIsTextHovered(true)}
-          onMouseLeave={() => setIsTextHovered(false)}
           style={{ cursor: 'pointer', transition: 'color 120ms ease' }}
           title="Обновить цены аукциона"
         >

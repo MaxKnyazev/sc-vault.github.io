@@ -21,18 +21,24 @@ export function AuctionPrice24hLine({
   const stat = useAuctionPricesStore((s) => s.byItemId[itemId])
   const isBlacklisted = useAuctionBlacklistStore((s) => s.blacklist.has(itemId))
   const openHistoryModal = useAuctionHistoryItemModalStore((s) => s.open)
-  const [isTextHovered, setIsTextHovered] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
   const openByTextOrIcon = (event?: { stopPropagation?: () => void }) => {
     event?.stopPropagation?.()
     openHistoryModal(itemId)
   }
 
   const line = (content: string) => (
-    <Group gap={6} wrap="nowrap" align="center">
+    <Group
+      gap={6}
+      wrap="nowrap"
+      align="center"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <ActionIcon
-        size={30}
-        radius="sm"
-        variant="light"
+        size={26}
+        radius="md"
+        variant={isHovered ? 'filled' : 'light'}
         color="blue"
         aria-label="Открыть историю аукциона"
         title="Открыть историю аукциона"
@@ -57,11 +63,9 @@ export function AuctionPrice24hLine({
       </ActionIcon>
       <Text
         size={size}
-        c={isTextHovered ? 'gray.3' : 'dimmed'}
+        c={isHovered ? 'gray.3' : 'dimmed'}
         lh={1.35}
         onClick={openByTextOrIcon}
-        onMouseEnter={() => setIsTextHovered(true)}
-        onMouseLeave={() => setIsTextHovered(false)}
         style={{ cursor: 'pointer', transition: 'color 120ms ease' }}
         title="Открыть историю аукциона"
       >
