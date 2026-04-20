@@ -200,9 +200,6 @@ export function IngredientsPage() {
                     size="result"
                     disableGlow
                   />
-                  <Text size="sm" c="dimmed">
-                    Средняя цена аукциона (вручную):
-                  </Text>
                   <Text size="xs" c="dimmed">
                     История выкупов по энергии в API не привязана к предмету.
                   </Text>
@@ -248,9 +245,6 @@ export function IngredientsPage() {
                       qualityColor={item.qualityColor}
                       size="result"
                     />
-                    <Text size="sm" c="dimmed">
-                      Средняя цена аукциона (вручную):
-                    </Text>
                     <AuctionPrice24hLine itemId={item.itemId} size="sm" />
                     <AdminAuctionTrackingButton itemId={item.itemId} itemName={item.name} />
                     <Group wrap="nowrap" align="flex-end">
