@@ -834,76 +834,101 @@ export function AuctionHistoryItemModal() {
           </Box>
         ) : (
           <Box
-            p="xs"
+            mt="xs"
+            p={0}
             bd="1px solid var(--mantine-color-default-border)"
-            style={{ borderRadius: 8, width: '100%', minHeight: 330, position: 'relative' }}
+            style={{
+              borderRadius: 8,
+              width: '100%',
+              minHeight: 330,
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
           >
             {!isLoading && sortedActiveLots.length === 0 ? (
-              <Text size="sm" c="dimmed">
-                Нет активных лотов.
-              </Text>
+              <Box
+                px="sm"
+                py="lg"
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}
+              >
+                <Text size="sm" c="dimmed">
+                  Нет активных лотов.
+                </Text>
+              </Box>
             ) : null}
             {!isLoading && sortedActiveLots.length > 0 ? (
-              <ScrollArea.Autosize mah={360}>
-                <Stack gap={0}>
-                  <Group
-                    justify="space-between"
-                    style={{
-                      background: 'rgba(255,255,255,0.03)',
-                      fontSize: 12,
-                      padding: '6px 10px',
-                    }}
-                    wrap="nowrap"
+              <>
+                <Group
+                  justify="space-between"
+                  wrap="nowrap"
+                  style={{
+                    flexShrink: 0,
+                    background: 'rgba(255,255,255,0.03)',
+                    fontSize: 12,
+                    padding: '6px 10px',
+                    borderBottom: '1px solid var(--mantine-color-default-border)',
+                  }}
+                >
+                  <Text
+                    size="xs"
+                    c="dimmed"
+                    style={{ width: 240, cursor: 'pointer' }}
+                    onClick={() => toggleActiveLotsSort('name')}
                   >
-                    <Text
-                      size="xs"
-                      c="dimmed"
-                      style={{ width: 240, cursor: 'pointer' }}
-                      onClick={() => toggleActiveLotsSort('name')}
-                    >
-                      Лот{sortMarker('name')}
-                    </Text>
-                    <Text
-                      size="xs"
-                      c="dimmed"
-                      style={{ width: 88, textAlign: 'right', cursor: 'pointer' }}
-                      onClick={() => toggleActiveLotsSort('remaining')}
-                    >
-                      Осталось{sortMarker('remaining')}
-                    </Text>
-                    <Text
-                      size="xs"
-                      c="dimmed"
-                      style={{ width: 90, textAlign: 'right', cursor: 'pointer' }}
-                      onClick={() => toggleActiveLotsSort('amount')}
-                    >
-                      Кол-во{sortMarker('amount')}
-                    </Text>
-                    <Text
-                      size="xs"
-                      c="dimmed"
-                      style={{ width: 110, textAlign: 'right', cursor: 'pointer' }}
-                      onClick={() => toggleActiveLotsSort('startPrice')}
-                    >
-                      Старт{sortMarker('startPrice')}
-                    </Text>
-                    <Text
-                      size="xs"
-                      c="dimmed"
-                      style={{ width: 120, textAlign: 'right', cursor: 'pointer' }}
-                      onClick={() => toggleActiveLotsSort('buyoutPrice')}
-                    >
-                      Выкуп{sortMarker('buyoutPrice')}
-                    </Text>
-                    <Text
-                      size="xs"
-                      c="dimmed"
-                      style={{ width: 120, textAlign: 'right', cursor: 'pointer' }}
-                      onClick={() => toggleActiveLotsSort('pricePerUnit')}
-                    >
-                      Цена/шт{sortMarker('pricePerUnit')}
-                    </Text>
-                  </Group>
+                    Лот{sortMarker('name')}
+                  </Text>
+                  <Text
+                    size="xs"
+                    c="dimmed"
+                    style={{ width: 88, textAlign: 'right', cursor: 'pointer' }}
+                    onClick={() => toggleActiveLotsSort('remaining')}
+                  >
+                    Осталось{sortMarker('remaining')}
+                  </Text>
+                  <Text
+                    size="xs"
+                    c="dimmed"
+                    style={{ width: 90, textAlign: 'right', cursor: 'pointer' }}
+                    onClick={() => toggleActiveLotsSort('amount')}
+                  >
+                    Кол-во{sortMarker('amount')}
+                  </Text>
+                  <Text
+                    size="xs"
+                    c="dimmed"
+                    style={{ width: 110, textAlign: 'right', cursor: 'pointer' }}
+                    onClick={() => toggleActiveLotsSort('startPrice')}
+                  >
+                    Старт{sortMarker('startPrice')}
+                  </Text>
+                  <Text
+                    size="xs"
+                    c="dimmed"
+                    style={{ width: 120, textAlign: 'right', cursor: 'pointer' }}
+                    onClick={() => toggleActiveLotsSort('buyoutPrice')}
+                  >
+                    Выкуп{sortMarker('buyoutPrice')}
+                  </Text>
+                  <Text
+                    size="xs"
+                    c="dimmed"
+                    style={{ width: 120, textAlign: 'right', cursor: 'pointer' }}
+                    onClick={() => toggleActiveLotsSort('pricePerUnit')}
+                  >
+                    Цена/шт{sortMarker('pricePerUnit')}
+                  </Text>
+                </Group>
+                <ScrollArea
+                  type="auto"
+                  offsetScrollbars
+                  scrollbarSize={8}
+                  style={{ flex: '1 1 auto', minHeight: 0 }}
+                  styles={{ viewport: { paddingBottom: 2 } }}
+                  mah={292}
+                >
+                  <Stack gap={0}>
                   {sortedActiveLots.map((lot, idx) => {
                     const qualityGlow =
                       lot.quality !== 'unknown'
@@ -951,8 +976,9 @@ export function AuctionHistoryItemModal() {
                       </Group>
                     )
                   })}
-                </Stack>
-              </ScrollArea.Autosize>
+                  </Stack>
+                </ScrollArea>
+              </>
             ) : null}
             {isLoading ? (
               <Box
