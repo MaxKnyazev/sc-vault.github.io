@@ -8,6 +8,9 @@ export function applyRecipeResultOverride(
   byRecipeId: Record<string, RecipeResultOverride>,
   craftBranchLevels?: CraftBranchLevels | null,
 ): HideoutRecipe {
+  if (recipe.requirements?.features?.includes('manual_unpack_no_bonus')) {
+    return recipe
+  }
   const recipeId = getRecipeFavoriteId(recipe)
   const override = byRecipeId[recipeId]
   if (!override) return recipe

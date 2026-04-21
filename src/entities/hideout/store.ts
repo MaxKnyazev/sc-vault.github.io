@@ -7,6 +7,7 @@ import { toItemsById } from '../item/lib'
 import type { ListingItemWithId } from '../item/types'
 import { appConfig, type Realm } from '../../shared/config/app'
 import { collectMissingCraftBoostFactors } from './bonus'
+import { buildCustomManualRecipes } from '../../shared/lib/customManualRecipes'
 
 type HideoutStoreState = {
   realm: Realm
@@ -35,8 +36,10 @@ export const useHideoutStore = create<HideoutStoreState>((set) => ({
       ])
 
       const itemsById = toItemsById(listingResponse)
-      const craftableItemIds = extractUniqueCraftableItemIds(recipesResponse.recipes)
-      const missingCraftBoostReport = collectMissingCraftBoostFactors(recipesResponse.recipes)
+      const customManualRecipes = buildCustomManualRecipes(itemsById)
+      const mergedRecipes = [...recipesResponse.recipes, ...customManualRecipes]
+      const craftableItemIds = extractUniqueCraftableItemIds(mergedRecipes)
+      const missingCraftBoostReport = collectMissingCraftBoostFactors(mergedRecipes)
 
       if (missingCraftBoostReport.craftedItemsWithoutExplicitFactor.length > 0) {
         console.warn(
@@ -47,7 +50,7 @@ export const useHideoutStore = create<HideoutStoreState>((set) => ({
       }
 
       set({
-        recipes: recipesResponse.recipes,
+        recipes: mergedRecipes,
         craftableItemIds,
         itemsById,
         isLoading: false,
