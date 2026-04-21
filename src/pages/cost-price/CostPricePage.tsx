@@ -21,6 +21,8 @@ type CostResolvedCard = {
   craftCostPerUnit: number | null
   buyCostPerUnit: number | null
   effectiveCostPerUnit: number | null
+  status: 'ok' | 'insufficient' | 'cycle'
+  statusMessage?: string
 }
 
 function parsePositiveNumber(raw: string | null | undefined): number | null {
@@ -40,6 +42,8 @@ function buildCraftCostModel(
   effectiveCostByItemId: Map<string, number>
   craftCostByItemId: Map<string, number>
   outputAmountByItemId: Map<string, number>
+  cyclicItemIds: Set<string>
+  unresolvedItemIds: Set<string>
 } {
   const buyCostByItemId = new Map<string, number>()
   for (const [itemId, raw] of Object.entries(buyPricesByItemId)) {
@@ -53,6 +57,49 @@ function buildCraftCostModel(
   const effectiveCostByItemId = new Map<string, number>(buyCostByItemId)
   const craftCostByItemId = new Map<string, number>()
   const outputAmountByItemId = new Map<string, number>()
+  const cyclicItemIds = new Set<string>()
+
+  // Build craft dependency graph: result item -> ingredient item (craftable only).
+  const graph = new Map<string, Set<string>>()
+  const craftableSet = new Set<string>()
+  for (const recipe of recipes) {
+    for (const entry of recipe.result) {
+      if (entry.amount > 0) craftableSet.add(entry.item)
+    }
+  }
+  for (const recipe of recipes) {
+    for (const result of recipe.result) {
+      if (result.amount <= 0) continue
+      if (!graph.has(result.item)) graph.set(result.item, new Set<string>())
+      for (const ingredient of recipe.ingredients) {
+        if (craftableSet.has(ingredient.item)) {
+          graph.get(result.item)!.add(ingredient.item)
+        }
+      }
+    }
+  }
+
+  const visitState = new Map<string, 0 | 1 | 2>()
+  const path: string[] = []
+  const dfs = (node: string) => {
+    const state = visitState.get(node) ?? 0
+    if (state === 1) {
+      const idx = path.lastIndexOf(node)
+      if (idx >= 0) {
+        for (let i = idx; i < path.length; i += 1) cyclicItemIds.add(path[i]!)
+      }
+      cyclicItemIds.add(node)
+      return
+    }
+    if (state === 2) return
+    visitState.set(node, 1)
+    path.push(node)
+    const next = graph.get(node) ?? new Set<string>()
+    for (const child of next) dfs(child)
+    path.pop()
+    visitState.set(node, 2)
+  }
+  for (const node of graph.keys()) dfs(node)
 
   const maxIterations = Math.max(1, recipes.length * 4)
   for (let iter = 0; iter < maxIterations; iter += 1) {
@@ -99,7 +146,19 @@ function buildCraftCostModel(
     if (!changed) break
   }
 
-  return { effectiveCostByItemId, craftCostByItemId, outputAmountByItemId }
+  // Cycle guard: if node is cyclic and has no explicit buy anchor, don't trust propagated value.
+  for (const itemId of cyclicItemIds) {
+    if (!buyCostByItemId.has(itemId)) {
+      effectiveCostByItemId.delete(itemId)
+    }
+  }
+
+  const unresolvedItemIds = new Set<string>()
+  for (const id of craftableSet) {
+    if (!effectiveCostByItemId.has(id)) unresolvedItemIds.add(id)
+  }
+
+  return { effectiveCostByItemId, craftCostByItemId, outputAmountByItemId, cyclicItemIds, unresolvedItemIds }
 }
 
 export function CostPricePage() {
@@ -127,7 +186,7 @@ export function CostPricePage() {
     const adjustedRecipes = recipes.map((recipe) =>
       applyRecipeResultOverride(recipe, recipeOverridesById, craftBranchLevels),
     )
-    const { effectiveCostByItemId, craftCostByItemId, outputAmountByItemId } = buildCraftCostModel(
+    const { effectiveCostByItemId, craftCostByItemId, outputAmountByItemId, cyclicItemIds, unresolvedItemIds } = buildCraftCostModel(
       adjustedRecipes,
       buyPricesByItemId,
       energyPrice,
@@ -147,6 +206,21 @@ export function CostPricePage() {
         const buyCostPerUnit = parsePositiveNumber(buyPricesByItemId[itemId] ?? null)
         const craftCostPerUnit = craftCostByItemId.get(itemId) ?? null
         const effectiveCostPerUnit = effectiveCostByItemId.get(itemId) ?? null
+        let status: CostResolvedCard['status'] = 'ok'
+        let statusMessage: string | undefined
+        if (effectiveCostPerUnit === null) {
+          status = cyclicItemIds.has(itemId) ? 'cycle' : 'insufficient'
+          statusMessage =
+            status === 'cycle'
+              ? 'Недостаточно данных для расчета себестоимости (обнаружен цикл зависимостей без цены скупа)'
+              : 'Недостаточно данных для расчета себестоимости'
+        } else if (cyclicItemIds.has(itemId)) {
+          status = 'cycle'
+          statusMessage = 'Рассчитано с учетом цикла (использован якорь цены скупа)'
+        } else if (unresolvedItemIds.has(itemId)) {
+          status = 'insufficient'
+          statusMessage = 'Недостаточно данных для расчета себестоимости'
+        }
         return {
           itemId,
           amount,
@@ -156,6 +230,8 @@ export function CostPricePage() {
           buyCostPerUnit,
           craftCostPerUnit,
           effectiveCostPerUnit,
+          status,
+          statusMessage,
         }
       })
       .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
@@ -206,6 +282,11 @@ export function CostPricePage() {
                       ? `${formatAuctionRub(item.effectiveCostPerUnit)} ₽/шт`
                       : 'Недостаточно данных для расчета себестоимости'}
                   </Text>
+                  {item.statusMessage ? (
+                    <Text size="xs" c={item.status === 'cycle' ? 'yellow' : 'dimmed'}>
+                      {item.statusMessage}
+                    </Text>
+                  ) : null}
                   <Text size="xs" c="dimmed">
                     {item.effectiveCostPerUnit !== null
                       ? `   · Скуп: ${item.buyCostPerUnit !== null ? `${formatAuctionRub(item.buyCostPerUnit)} ₽/шт` : '—'} · Крафт: ${item.craftCostPerUnit !== null ? `${formatAuctionRub(item.craftCostPerUnit)} ₽/шт` : '—'}`
