@@ -104,6 +104,7 @@ function buildCraftCostModel(
   const maxIterations = Math.max(1, recipes.length * 4)
   for (let iter = 0; iter < maxIterations; iter += 1) {
     let changed = false
+    const bestCraftCandidateByItemId = new Map<string, { costPerUnit: number; outputAmount: number }>()
     for (const recipe of recipes) {
       let totalInputCost = 0
       let canResolve = true
@@ -125,22 +126,29 @@ function buildCraftCostModel(
       for (const resultEntry of recipe.result) {
         if (resultEntry.amount <= 0) continue
         const craftPerUnit = totalInputCost / resultEntry.amount
-        const prevCraft = craftCostByItemId.get(resultEntry.item)
-        if (prevCraft === undefined || craftPerUnit < prevCraft) {
-          craftCostByItemId.set(resultEntry.item, craftPerUnit)
-          outputAmountByItemId.set(resultEntry.item, resultEntry.amount)
-          changed = true
+        const prevBest = bestCraftCandidateByItemId.get(resultEntry.item)
+        if (!prevBest || craftPerUnit < prevBest.costPerUnit) {
+          bestCraftCandidateByItemId.set(resultEntry.item, {
+            costPerUnit: craftPerUnit,
+            outputAmount: resultEntry.amount,
+          })
         }
-        const buyPerUnit = buyCostByItemId.get(resultEntry.item)
-        const nextEffective =
-          buyPerUnit === undefined
-            ? craftCostByItemId.get(resultEntry.item)!
-            : Math.min(buyPerUnit, craftCostByItemId.get(resultEntry.item)!)
-        const prevEffective = effectiveCostByItemId.get(resultEntry.item)
-        if (prevEffective === undefined || Math.abs(prevEffective - nextEffective) > 1e-9) {
-          effectiveCostByItemId.set(resultEntry.item, nextEffective)
-          changed = true
-        }
+      }
+    }
+
+    for (const [itemId, bestCraft] of bestCraftCandidateByItemId.entries()) {
+      const prevCraft = craftCostByItemId.get(itemId)
+      if (prevCraft === undefined || Math.abs(prevCraft - bestCraft.costPerUnit) > 1e-9) {
+        craftCostByItemId.set(itemId, bestCraft.costPerUnit)
+        outputAmountByItemId.set(itemId, bestCraft.outputAmount)
+        changed = true
+      }
+      const buyPerUnit = buyCostByItemId.get(itemId)
+      const nextEffective = buyPerUnit === undefined ? bestCraft.costPerUnit : Math.min(buyPerUnit, bestCraft.costPerUnit)
+      const prevEffective = effectiveCostByItemId.get(itemId)
+      if (prevEffective === undefined || Math.abs(prevEffective - nextEffective) > 1e-9) {
+        effectiveCostByItemId.set(itemId, nextEffective)
+        changed = true
       }
     }
     if (!changed) break
