@@ -10,7 +10,7 @@ import {
   TextInput,
   useComputedColorScheme,
 } from '@mantine/core'
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { AuctionPrice24hLine } from '../../components/auction-price-24h/AuctionPrice24hLine'
 import { AuctionRefreshStatus } from '../../components/auction-refresh-status/AuctionRefreshStatus'
 import { PageContainer } from '../../components/page-container/PageContainer'
@@ -33,6 +33,106 @@ function createEnergyIconSvg(fillColor: string): string {
   )}`
 }
 
+type IngredientCardItem = {
+  itemId: string
+  name: string
+  iconUrl?: string
+  qualityColor?: string
+  isBase: boolean
+}
+
+const IngredientCard = memo(function IngredientCard({
+  item,
+  isAdmin,
+  buyPrice,
+  defaultBuyPrice,
+  setBuyPrice,
+  setDefaultBuyPrice,
+}: {
+  item: IngredientCardItem
+  isAdmin: boolean
+  buyPrice: string
+  defaultBuyPrice: string
+  setBuyPrice: (itemId: string, value: string) => void
+  setDefaultBuyPrice: (itemId: string, value: string) => Promise<void>
+}) {
+  const [draftBuyPrice, setDraftBuyPrice] = useState(buyPrice)
+  const [draftDefaultBuyPrice, setDraftDefaultBuyPrice] = useState(defaultBuyPrice)
+
+  useEffect(() => {
+    setDraftBuyPrice(buyPrice)
+  }, [buyPrice])
+
+  useEffect(() => {
+    setDraftDefaultBuyPrice(defaultBuyPrice)
+  }, [defaultBuyPrice])
+
+  return (
+    <Stack gap={8} p="md" bd="1px solid var(--mantine-color-default-border)" style={{ borderRadius: 8 }}>
+      <ItemBadge
+        itemId={item.itemId}
+        name={item.name}
+        iconUrl={item.iconUrl}
+        qualityColor={item.qualityColor}
+        size="result"
+      />
+      <AuctionPrice24hLine itemId={item.itemId} size="sm" />
+      <AdminAuctionTrackingButton itemId={item.itemId} itemName={item.name} />
+      <Group wrap="nowrap" align="flex-end">
+        <TextInput
+          placeholder="Цена скупа за 1 ед."
+          value={draftBuyPrice}
+          onChange={(event) => {
+            const sanitized = event.currentTarget.value.replace(/[^\d]/g, '')
+            setDraftBuyPrice(sanitized)
+          }}
+          style={{ flex: 1 }}
+        />
+        <Button
+          variant="default"
+          color="gray"
+          onClick={() => setBuyPrice(item.itemId, draftBuyPrice.replace(/[^\d]/g, ''))}
+        >
+          Сохранить
+        </Button>
+      </Group>
+      {isAdmin ? (
+        <>
+          <Text size="xs" fw={600} mt={4}>
+            Цена по умолчанию для всех
+          </Text>
+          <Group wrap="nowrap" align="flex-end">
+            <TextInput
+              placeholder="Цена скупа за 1 ед. по-дефолту"
+              value={draftDefaultBuyPrice}
+              onChange={(event) => {
+                const sanitized = event.currentTarget.value.replace(/[^\d]/g, '')
+                setDraftDefaultBuyPrice(sanitized)
+              }}
+              style={{ flex: 1 }}
+            />
+            <Button
+              variant="default"
+              color="gray"
+              onClick={() => {
+                void (async () => {
+                  try {
+                    await setDefaultBuyPrice(item.itemId, draftDefaultBuyPrice.replace(/[^\d]/g, ''))
+                  } catch {
+                    // ignore
+                  }
+                })()
+              }}
+            >
+              Сохранить
+            </Button>
+          </Group>
+        </>
+      ) : null}
+    </Stack>
+  )
+})
+
 export function IngredientsPage() {
   const colorScheme = useComputedColorScheme('dark')
   const { recipes, itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
@@ -40,13 +140,15 @@ export function IngredientsPage() {
   const user = useAuthStore((s) => s.user)
   const isAdmin = user?.role === 'admin'
   const defaultBuyPricesByItemId = useIngredientPricesStore((s) => s.defaultBuyPricesByItemId)
-  const { buyPricesByItemId, setBuyPrice, setDefaultBuyPrice, loadRemoteBuyPrices, energyPrice, setEnergyPrice } =
-    useIngredientPricesStore()
+  const buyPricesByItemId = useIngredientPricesStore((s) => s.buyPricesByItemId)
+  const setBuyPrice = useIngredientPricesStore((s) => s.setBuyPrice)
+  const setDefaultBuyPrice = useIngredientPricesStore((s) => s.setDefaultBuyPrice)
+  const loadRemoteBuyPrices = useIngredientPricesStore((s) => s.loadRemoteBuyPrices)
+  const energyPrice = useIngredientPricesStore((s) => s.energyPrice)
+  const setEnergyPrice = useIngredientPricesStore((s) => s.setEnergyPrice)
   const [draftEnergyPrice, setDraftEnergyPrice] = useState('')
   const [search, setSearch] = useState('')
   const [activeFilter, setActiveFilter] = useState<'all' | 'base' | 'favorites'>('all')
-  const [draftBuyPricesByItemId, setDraftBuyPricesByItemId] = useState<Record<string, string>>({})
-  const [draftDefaultBuyPricesByItemId, setDraftDefaultBuyPricesByItemId] = useState<Record<string, string>>({})
   const energyIconSvg = createEnergyIconSvg(colorScheme === 'light' ? '#4b5563' : '#ffffff')
 
   useEffect(() => {
@@ -56,18 +158,6 @@ export function IngredientsPage() {
   useEffect(() => {
     void loadRemoteBuyPrices()
   }, [loadRemoteBuyPrices])
-
-  useEffect(() => {
-    if (!isAdmin) {
-      setDraftDefaultBuyPricesByItemId({})
-      return
-    }
-    setDraftDefaultBuyPricesByItemId(defaultBuyPricesByItemId)
-  }, [isAdmin, defaultBuyPricesByItemId])
-
-  useEffect(() => {
-    setDraftBuyPricesByItemId(buyPricesByItemId)
-  }, [buyPricesByItemId])
 
   useEffect(() => {
     setDraftEnergyPrice(energyPrice)
@@ -245,89 +335,15 @@ export function IngredientsPage() {
                 pb={16}
               >
                 {filteredIngredients.map((item) => (
-                  <Stack
+                  <IngredientCard
                     key={item.itemId}
-                    gap={8}
-                    p="md"
-                    bd="1px solid var(--mantine-color-default-border)"
-                    style={{ borderRadius: 8 }}
-                  >
-                    <ItemBadge
-                      itemId={item.itemId}
-                      name={item.name}
-                      iconUrl={item.iconUrl}
-                      qualityColor={item.qualityColor}
-                      size="result"
-                    />
-                    <AuctionPrice24hLine itemId={item.itemId} size="sm" />
-                    <AdminAuctionTrackingButton itemId={item.itemId} itemName={item.name} />
-                    <Group wrap="nowrap" align="flex-end">
-                      <TextInput
-                        placeholder="Цена скупа за 1 ед."
-                        value={draftBuyPricesByItemId[item.itemId] ?? ''}
-                        onChange={(event) => {
-                          const raw = event.currentTarget.value
-                          const sanitized = raw.replace(/[^\d]/g, '')
-                          setDraftBuyPricesByItemId((state) => ({
-                            ...state,
-                            [item.itemId]: sanitized,
-                          }))
-                        }}
-                        style={{ flex: 1 }}
-                      />
-                      <Button
-                        variant="default"
-                        color="gray"
-                        onClick={() => {
-                          const value = (draftBuyPricesByItemId[item.itemId] ?? '').replace(/[^\d]/g, '')
-                          setBuyPrice(item.itemId, value)
-                        }}
-                      >
-                        Сохранить
-                      </Button>
-                    </Group>
-                    {isAdmin ? (
-                      <>
-                        <Text size="xs" fw={600} mt={4}>
-                          Цена по умолчанию для всех
-                        </Text>
-                        <Group wrap="nowrap" align="flex-end">
-                          <TextInput
-                            placeholder="Цена скупа за 1 ед. по-дефолту"
-                            value={draftDefaultBuyPricesByItemId[item.itemId] ?? ''}
-                            onChange={(event) => {
-                              const raw = event.currentTarget.value
-                              const sanitized = raw.replace(/[^\d]/g, '')
-                              setDraftDefaultBuyPricesByItemId((state) => ({
-                                ...state,
-                                [item.itemId]: sanitized,
-                              }))
-                            }}
-                            style={{ flex: 1 }}
-                          />
-                          <Button
-                            variant="default"
-                            color="gray"
-                            onClick={() => {
-                              void (async () => {
-                                const value = (draftDefaultBuyPricesByItemId[item.itemId] ?? '').replace(
-                                  /[^\d]/g,
-                                  '',
-                                )
-                                try {
-                                  await setDefaultBuyPrice(item.itemId, value)
-                                } catch {
-                                  // ignore
-                                }
-                              })()
-                            }}
-                          >
-                            Сохранить
-                          </Button>
-                        </Group>
-                      </>
-                    ) : null}
-                  </Stack>
+                    item={item}
+                    isAdmin={isAdmin}
+                    buyPrice={buyPricesByItemId[item.itemId] ?? ''}
+                    defaultBuyPrice={defaultBuyPricesByItemId[item.itemId] ?? ''}
+                    setBuyPrice={setBuyPrice}
+                    setDefaultBuyPrice={setDefaultBuyPrice}
+                  />
                 ))}
               </SimpleGrid>
             </>
