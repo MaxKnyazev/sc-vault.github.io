@@ -1,5 +1,5 @@
-import { Alert, Loader, SimpleGrid, Stack, Text } from '@mantine/core'
-import { useEffect, useMemo } from 'react'
+import { Alert, Box, Button, Divider, Loader, Modal, ScrollArea, SimpleGrid, Stack, Text } from '@mantine/core'
+import { useEffect, useMemo, useState } from 'react'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { PageContainer } from '../../components/page-container/PageContainer'
 import { SectionCard } from '../../components/section-card/SectionCard'
@@ -25,6 +25,12 @@ type CostResolvedCard = {
   statusMessage?: string
 }
 
+type RecipeOption = {
+  recipe: HideoutRecipe
+  outputAmount: number
+  craftPerUnit: number
+}
+
 function parsePositiveNumber(raw: string | null | undefined): number | null {
   if (!raw) return null
   const normalized = raw.replace(',', '.').trim()
@@ -42,6 +48,8 @@ function buildCraftCostModel(
   effectiveCostByItemId: Map<string, number>
   craftCostByItemId: Map<string, number>
   outputAmountByItemId: Map<string, number>
+  bestRecipeOptionByItemId: Map<string, RecipeOption>
+  recipeOptionsByItemId: Map<string, RecipeOption[]>
   cyclicItemIds: Set<string>
   unresolvedItemIds: Set<string>
 } {
@@ -166,7 +174,52 @@ function buildCraftCostModel(
     if (!effectiveCostByItemId.has(id)) unresolvedItemIds.add(id)
   }
 
-  return { effectiveCostByItemId, craftCostByItemId, outputAmountByItemId, cyclicItemIds, unresolvedItemIds }
+  const recipeOptionsByItemId = new Map<string, RecipeOption[]>()
+  for (const recipe of recipes) {
+    let totalInputCost = 0
+    let canResolve = true
+    for (const ingredient of recipe.ingredients) {
+      const perUnit = effectiveCostByItemId.get(ingredient.item)
+      if (perUnit === undefined) {
+        canResolve = false
+        break
+      }
+      totalInputCost += perUnit * ingredient.amount
+    }
+    if (!canResolve) continue
+    if (recipe.energy > 0) {
+      if (energyCost === null) continue
+      totalInputCost += energyCost * recipe.energy
+    }
+    for (const resultEntry of recipe.result) {
+      if (resultEntry.amount <= 0) continue
+      const option: RecipeOption = {
+        recipe,
+        outputAmount: resultEntry.amount,
+        craftPerUnit: totalInputCost / resultEntry.amount,
+      }
+      const current = recipeOptionsByItemId.get(resultEntry.item) ?? []
+      current.push(option)
+      recipeOptionsByItemId.set(resultEntry.item, current)
+    }
+  }
+  for (const list of recipeOptionsByItemId.values()) {
+    list.sort((a, b) => a.craftPerUnit - b.craftPerUnit)
+  }
+  const bestRecipeOptionByItemId = new Map<string, RecipeOption>()
+  for (const [itemId, list] of recipeOptionsByItemId.entries()) {
+    if (list.length > 0) bestRecipeOptionByItemId.set(itemId, list[0]!)
+  }
+
+  return {
+    effectiveCostByItemId,
+    craftCostByItemId,
+    outputAmountByItemId,
+    bestRecipeOptionByItemId,
+    recipeOptionsByItemId,
+    cyclicItemIds,
+    unresolvedItemIds,
+  }
 }
 
 export function CostPricePage() {
@@ -177,6 +230,7 @@ export function CostPricePage() {
   const buyPricesByItemId = useIngredientPricesStore((s) => s.buyPricesByItemId)
   const energyPrice = useIngredientPricesStore((s) => s.energyPrice)
   const loadRemoteBuyPrices = useIngredientPricesStore((s) => s.loadRemoteBuyPrices)
+  const [treeItemId, setTreeItemId] = useState<string | null>(null)
 
   useEffect(() => {
     void fetchRecipes()
@@ -190,16 +244,25 @@ export function CostPricePage() {
     void loadRemoteBuyPrices()
   }, [loadRemoteBuyPrices])
 
-  const craftedItems = useMemo<CostResolvedCard[]>(() => {
-    const adjustedRecipes = recipes.map((recipe) =>
-      applyRecipeResultOverride(recipe, recipeOverridesById, craftBranchLevels),
-    )
-    const { effectiveCostByItemId, craftCostByItemId, outputAmountByItemId, cyclicItemIds, unresolvedItemIds } = buildCraftCostModel(
-      adjustedRecipes,
-      buyPricesByItemId,
-      energyPrice,
-    )
+  const adjustedRecipes = useMemo(
+    () => recipes.map((recipe) => applyRecipeResultOverride(recipe, recipeOverridesById, craftBranchLevels)),
+    [recipes, recipeOverridesById, craftBranchLevels],
+  )
 
+  const costModel = useMemo(
+    () => buildCraftCostModel(adjustedRecipes, buyPricesByItemId, energyPrice),
+    [adjustedRecipes, buyPricesByItemId, energyPrice],
+  )
+
+  const craftedItems = useMemo<CostResolvedCard[]>(() => {
+    const {
+      effectiveCostByItemId,
+      craftCostByItemId,
+      outputAmountByItemId,
+      bestRecipeOptionByItemId,
+      cyclicItemIds,
+      unresolvedItemIds,
+    } = costModel
     const craftableItemIds = new Set<string>()
     for (const recipe of adjustedRecipes) {
       for (const entry of recipe.result) {
@@ -210,7 +273,7 @@ export function CostPricePage() {
     return [...craftableItemIds]
       .map((itemId) => {
         const item = itemsById[itemId]
-        const amount = outputAmountByItemId.get(itemId) ?? 1
+        const amount = bestRecipeOptionByItemId.get(itemId)?.outputAmount ?? outputAmountByItemId.get(itemId) ?? 1
         const buyCostPerUnit = parsePositiveNumber(buyPricesByItemId[itemId] ?? null)
         const craftCostPerUnit = craftCostByItemId.get(itemId) ?? null
         const effectiveCostPerUnit = effectiveCostByItemId.get(itemId) ?? null
@@ -243,7 +306,74 @@ export function CostPricePage() {
         }
       })
       .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
-  }, [recipes, recipeOverridesById, craftBranchLevels, itemsById, realm, buyPricesByItemId, energyPrice])
+  }, [adjustedRecipes, buyPricesByItemId, costModel, itemsById, realm])
+
+  const treeItemName = useMemo(() => {
+    if (!treeItemId) return ''
+    return getItemName(itemsById[treeItemId]?.name?.lines) || treeItemId
+  }, [itemsById, treeItemId])
+
+  const renderTreeNode = (itemId: string, depth: number, amountNeeded: number, path: string[]): JSX.Element => {
+    const item = itemsById[itemId]
+    const itemName = getItemName(item?.name?.lines) || itemId
+    const buyCostPerUnit = parsePositiveNumber(buyPricesByItemId[itemId] ?? null)
+    const effectiveCostPerUnit = costModel.effectiveCostByItemId.get(itemId) ?? null
+    const bestRecipe = costModel.bestRecipeOptionByItemId.get(itemId) ?? null
+    const allOptions = costModel.recipeOptionsByItemId.get(itemId) ?? []
+    const isCycle = path.includes(itemId)
+
+    const hasCraftChoice =
+      bestRecipe !== null &&
+      (buyCostPerUnit === null || bestRecipe.craftPerUnit <= buyCostPerUnit + 1e-9)
+
+    return (
+      <Stack
+        key={`${itemId}-${depth}-${amountNeeded}`}
+        gap={5}
+        p="xs"
+        style={{
+          marginLeft: depth * 18,
+          borderLeft: depth > 0 ? '1px dashed var(--mantine-color-default-border)' : undefined,
+        }}
+      >
+        <Text size="sm" fw={600}>
+          {itemName} x{Number(amountNeeded.toFixed(3))}
+        </Text>
+        <Text size="xs" c="dimmed">
+          Итог: {effectiveCostPerUnit !== null ? `${formatAuctionRub(effectiveCostPerUnit)} ₽/шт` : 'Недостаточно данных'}
+        </Text>
+        <Text size="xs" c="dimmed">
+          Скуп: {buyCostPerUnit !== null ? `${formatAuctionRub(buyCostPerUnit)} ₽/шт` : '—'} · Крафт:{' '}
+          {bestRecipe ? `${formatAuctionRub(bestRecipe.craftPerUnit)} ₽/шт` : '—'}
+        </Text>
+        {allOptions.length > 1 ? (
+          <Text size="xs" c="dimmed">
+            Вариантов крафта: {allOptions.length} (выбран самый дешевый)
+          </Text>
+        ) : null}
+        {isCycle ? (
+          <Text size="xs" c="yellow">
+            Обнаружен цикл зависимостей, ветка обрезана.
+          </Text>
+        ) : null}
+        {!isCycle && hasCraftChoice && bestRecipe ? (
+          <>
+            <Text size="xs" c="dimmed">
+              Рецепт: выход {bestRecipe.outputAmount} шт., энергия {bestRecipe.recipe.energy}
+            </Text>
+            {bestRecipe.recipe.ingredients.map((ingredient) => {
+              const childAmount = (amountNeeded * ingredient.amount) / bestRecipe.outputAmount
+              return renderTreeNode(ingredient.item, depth + 1, childAmount, [...path, itemId])
+            })}
+          </>
+        ) : (
+          <Text size="xs" c="dimmed">
+            Используется скуп (или недостаточно данных по крафту).
+          </Text>
+        )}
+      </Stack>
+    )
+  }
 
   return (
     <PageContainer>
@@ -306,12 +436,36 @@ export function CostPricePage() {
                   <Text size="xs" c="dimmed">
                     3) Гибридный вариант: Заглушка (будет реализовано далее)
                   </Text>
+                  <Button size="xs" variant="light" color="blue" onClick={() => setTreeItemId(item.itemId)}>
+                    Дерево крафтов
+                  </Button>
                 </Stack>
               ))}
             </SimpleGrid>
           ) : null}
         </Stack>
       </SectionCard>
+      <Modal
+        opened={treeItemId !== null}
+        onClose={() => setTreeItemId(null)}
+        title={treeItemId ? `Дерево крафтов: ${treeItemName}` : 'Дерево крафтов'}
+        size="xl"
+        centered
+      >
+        {treeItemId ? (
+          <ScrollArea.Autosize mah={620}>
+            <Stack gap="sm">
+              <Box>
+                <Text size="sm" c="dimmed">
+                  Ниже показан путь расчета себестоимости с выбором минимального варианта на каждом уровне.
+                </Text>
+              </Box>
+              <Divider />
+              {renderTreeNode(treeItemId, 0, 1, [])}
+            </Stack>
+          </ScrollArea.Autosize>
+        ) : null}
+      </Modal>
     </PageContainer>
   )
 }
