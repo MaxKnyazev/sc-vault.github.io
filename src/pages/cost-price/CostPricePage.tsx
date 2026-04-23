@@ -1,5 +1,5 @@
-import { Alert, Box, Button, Divider, Loader, Modal, ScrollArea, SimpleGrid, Stack, Text } from '@mantine/core'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Alert, Box, Button, Divider, Group, Loader, Modal, ScrollArea, SimpleGrid, Stack, Text } from '@mantine/core'
+import { useEffect, useMemo, useState } from 'react'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { PageContainer } from '../../components/page-container/PageContainer'
 import { SectionCard } from '../../components/section-card/SectionCard'
@@ -42,7 +42,13 @@ type UnresolvedMeta = {
   unstableCycle: boolean
 }
 
-type TreeViewMode = 'selected' | 'all'
+type IngredientFlowRow = {
+  itemId: string
+  amount: number
+  source: 'craft' | 'buy' | 'unknown'
+  perUnitCost: number | null
+  reasons: string[]
+}
 
 function parsePositiveNumber(raw: string | null | undefined): number | null {
   if (!raw) return null
@@ -404,7 +410,6 @@ export function CostPricePage() {
   const energyPrice = useIngredientPricesStore((s) => s.energyPrice)
   const loadRemoteBuyPrices = useIngredientPricesStore((s) => s.loadRemoteBuyPrices)
   const [treeItemId, setTreeItemId] = useState<string | null>(null)
-  const [treeViewMode, setTreeViewMode] = useState<TreeViewMode>('selected')
 
   useEffect(() => {
     void fetchRecipes()
@@ -511,232 +516,121 @@ export function CostPricePage() {
     return getItemName(itemsById[treeItemId]?.name?.lines) || treeItemId
   }, [itemsById, treeItemId])
 
-  const renderTreeNode = (itemId: string, depth: number, amountNeeded: number, path: string[]): ReactNode => {
-    const MAX_DEPTH = 8
-    const item = itemsById[itemId]
-    const itemName = getItemName(item?.name?.lines) || itemId
-    const buyCostPerUnit = parsePositiveNumber(buyPricesByItemId[itemId] ?? null)
-    const effectiveCostPerUnit = costModel.effectiveCostByItemId.get(itemId) ?? null
-    const bestRecipe = costModel.bestRecipeOptionByItemId.get(itemId) ?? null
-    const allOptions = costModel.recipeOptionsByItemId.get(itemId) ?? []
-    const unresolvedMeta = costModel.unresolvedMetaByItemId.get(itemId)
-    const isCycle = path.includes(itemId)
-    const isDepthLimitReached = depth >= MAX_DEPTH
+  const ingredientFlow = useMemo(() => {
+    if (!treeItemId) {
+      return {
+        rootSource: 'unknown' as const,
+        rootReasons: [] as string[],
+        rows: [] as IngredientFlowRow[],
+      }
+    }
 
-    const chosenSource: 'craft' | 'buy' | 'unknown' =
-      bestRecipe !== null &&
-      bestRecipe.craftPerUnit !== null &&
-      (buyCostPerUnit === null || bestRecipe.craftPerUnit <= buyCostPerUnit + 1e-9)
-        ? 'craft'
-        : buyCostPerUnit !== null
-          ? 'buy'
-          : 'unknown'
-    const hasResolvableCraftVariant = allOptions.some((entry) => entry.craftPerUnit !== null)
+    const rowsByItemId = new Map<string, IngredientFlowRow>()
 
-    return (
-      <Stack
-        key={`${itemId}-${depth}-${amountNeeded}`}
-        gap={8}
-        p="xs"
-        style={{
-          marginLeft: depth * 16,
-          borderLeft: depth > 0 ? '1px dashed var(--mantine-color-default-border)' : undefined,
-        }}
-      >
-        <Text size="sm" fw={700}>
-          {itemName} x{Number(amountNeeded.toFixed(3))}
-        </Text>
-        <Text size="xs" c="dimmed">
-          Итоговая себестоимость: {effectiveCostPerUnit !== null ? `${formatAuctionRub(effectiveCostPerUnit)} ₽/шт` : 'Недостаточно данных'}
-        </Text>
-        <Text size="lg" fw={800} c={chosenSource === 'craft' ? 'green.4' : chosenSource === 'buy' ? 'blue.3' : 'yellow.4'}>
-          ПУТЬ РАСЧЕТА: {chosenSource === 'craft' ? 'КРАФТ' : chosenSource === 'buy' ? 'СКУП' : 'НЕТ ДАННЫХ'}
-        </Text>
-        {isCycle ? (
-          <Text size="xs" c="yellow">
-            Обнаружен цикл зависимостей, ветка обрезана.
-          </Text>
-        ) : null}
-        {isDepthLimitReached ? (
-          <Text size="xs" c="yellow">
-            Достигнут лимит глубины дерева.
-          </Text>
-        ) : null}
-        {!isCycle && !isDepthLimitReached ? (
-          <Box>
-            <Divider my={4} />
-            <Text size="sm" fw={700} mb={6}>
-              {treeViewMode === 'all' ? 'Альтернативы' : 'Выбранная ветка'}
-            </Text>
-            {treeViewMode === 'all' ? (
-              <Stack gap={6}>
-                <Box
-                  p="xs"
-                  style={{
-                    borderRadius: 8,
-                    border: '1px solid var(--mantine-color-default-border)',
-                  }}
-                >
-                  <Text size="xs" fw={700} c={chosenSource === 'buy' ? 'green.4' : undefined}>
-                    Скуп {chosenSource === 'buy' ? '(выбран)' : ''}
-                  </Text>
-                  <Text size="xs" c={buyCostPerUnit !== null ? 'dimmed' : 'yellow'}>
-                    {buyCostPerUnit !== null ? `${formatAuctionRub(buyCostPerUnit)} ₽/шт` : 'Нет цены скупа'}
-                  </Text>
-                </Box>
-                {allOptions.length === 0 ? (
-                  <Text size="xs" c="yellow">
-                    Для предмета нет крафтовых рецептов.
-                  </Text>
-                ) : null}
-                {allOptions.length > 0 && !hasResolvableCraftVariant ? (
-                  <Box
-                    p="xs"
-                    style={{ borderRadius: 8, border: '1px solid var(--mantine-color-default-border)' }}
-                  >
-                    <Text size="xs" c="yellow">
-                      Нет данных для расчета крафта.
-                    </Text>
-                    {unresolvedMeta?.missingEnergy ? (
-                      <Text size="xs" c="yellow">
-                        Не хватает: цены энергии.
-                      </Text>
-                    ) : null}
-                    {(unresolvedMeta?.missingIngredientIds.length ?? 0) > 0 ? (
-                      <Text size="xs" c="yellow">
-                        Не хватает: себестоимости ингредиентов ({unresolvedMeta!.missingIngredientIds
-                          .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
-                          .join(', ')}).
-                      </Text>
-                    ) : null}
-                  </Box>
-                ) : null}
-                {allOptions.map((option, idx) => {
-                  const isBestRecipe =
-                    bestRecipe !== null &&
-                    bestRecipe.recipe === option.recipe &&
-                    Math.abs(bestRecipe.outputAmount - option.outputAmount) < 1e-9
-                  const isSelectedCraft = chosenSource === 'craft' && isBestRecipe
-                  const isInsufficient = option.craftPerUnit === null
-                  return (
-                    <Box
-                      key={`${itemId}-variant-${idx}-${option.outputAmount}`}
-                      p="xs"
-                      style={{
-                        borderRadius: 8,
-                        border: '1px solid var(--mantine-color-default-border)',
-                      }}
-                    >
-                      <Text size="xs" fw={700} c={isSelectedCraft ? 'green.4' : isInsufficient ? 'yellow' : undefined}>
-                        Крафт #{idx + 1} {isSelectedCraft ? '(выбран)' : ''}
-                      </Text>
-                      <Text size="xs" c={isInsufficient ? 'yellow' : 'dimmed'}>
-                        Выход: {option.outputAmount} шт. · Энергия: {option.recipe.energy} · Себестоимость:{' '}
-                        {option.craftPerUnit !== null
-                          ? `${formatAuctionRub(option.craftPerUnit)} ₽/шт`
-                          : 'Недостаточно данных'}
-                      </Text>
-                      {option.hasEnergyGap ? (
-                        <Text size="xs" c="yellow">
-                          Не хватает: цены энергии для этого крафта.
-                        </Text>
-                      ) : null}
-                      {option.missingIngredientIds.length > 0 ? (
-                        <Text size="xs" c="yellow">
-                          Не хватает: себестоимости ингредиентов ({option.missingIngredientIds
-                            .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
-                            .join(', ')}).
-                        </Text>
-                      ) : null}
-                      <Stack gap={5} mt={6}>
-                        {option.recipe.ingredients.map((ingredient) => {
-                          const childAmount = (amountNeeded * ingredient.amount) / option.outputAmount
-                          return renderTreeNode(ingredient.item, depth + 1, childAmount, [...path, itemId])
-                        })}
-                      </Stack>
-                    </Box>
-                  )
-                })}
-              </Stack>
-            ) : (
-              <Stack gap={6}>
-                {chosenSource === 'buy' ? (
-                  <Box
-                    p="xs"
-                    style={{
-                      borderRadius: 8,
-                      border: '1px solid var(--mantine-color-default-border)',
-                    }}
-                  >
-                    <Text size="xs" fw={700} c="green.4">
-                      Скуп (выбран)
-                    </Text>
-                    <Text size="xs" c={buyCostPerUnit !== null ? 'dimmed' : 'yellow'}>
-                      {buyCostPerUnit !== null ? `${formatAuctionRub(buyCostPerUnit)} ₽/шт` : 'Нет цены скупа'}
-                    </Text>
-                  </Box>
-                ) : null}
-                {chosenSource === 'craft' && bestRecipe ? (
-                  <Box
-                    p="xs"
-                    style={{
-                      borderRadius: 8,
-                      border: '1px solid var(--mantine-color-default-border)',
-                    }}
-                  >
-                    <Text size="xs" fw={700} c="green.4">
-                      Крафт (выбран)
-                    </Text>
-                    <Text size="xs" c="dimmed">
-                      Выход: {bestRecipe.outputAmount} шт. · Энергия: {bestRecipe.recipe.energy} · Себестоимость:{' '}
-                      {bestRecipe.craftPerUnit !== null
-                        ? `${formatAuctionRub(bestRecipe.craftPerUnit)} ₽/шт`
-                        : 'Недостаточно данных'}
-                    </Text>
-                    <Stack gap={5} mt={6}>
-                      {bestRecipe.recipe.ingredients.map((ingredient) => {
-                        const childAmount = (amountNeeded * ingredient.amount) / bestRecipe.outputAmount
-                        return renderTreeNode(ingredient.item, depth + 1, childAmount, [...path, itemId])
-                      })}
-                    </Stack>
-                  </Box>
-                ) : null}
-                {chosenSource === 'unknown' ? (
-                  <Box p="xs" style={{ borderRadius: 8, border: '1px solid var(--mantine-color-default-border)' }}>
-                    <Text size="xs" c="yellow">
-                      Нет данных для выбора пути.
-                    </Text>
-                    {unresolvedMeta?.missingEnergy ? (
-                      <Text size="xs" c="yellow">
-                        Не хватает: цены энергии.
-                      </Text>
-                    ) : null}
-                    {(unresolvedMeta?.missingIngredientIds.length ?? 0) > 0 ? (
-                      <Text size="xs" c="yellow">
-                        Не хватает: себестоимости ингредиентов ({unresolvedMeta!.missingIngredientIds
-                          .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
-                          .join(', ')}).
-                      </Text>
-                    ) : null}
-                    {unresolvedMeta?.noBuy ? (
-                      <Text size="xs" c="yellow">
-                        Не хватает: цены скупа.
-                      </Text>
-                    ) : null}
-                  </Box>
-                ) : null}
-              </Stack>
-            )}
-          </Box>
-        ) : null}
-        {!isCycle && isDepthLimitReached ? (
-          <Text size="xs" c="dimmed">
-            Вложенные альтернативы скрыты из-за лимита глубины.
-          </Text>
-        ) : null}
-      </Stack>
-    )
-  }
+    const getUnresolvedReasons = (itemId: string): string[] => {
+      const meta = costModel.unresolvedMetaByItemId.get(itemId)
+      if (!meta) return []
+      const reasons: string[] = []
+      if (meta.cycleUnanchored) reasons.push('цикл без ценового якоря')
+      if (meta.unstableCycle) reasons.push('цикл не сошелся')
+      if (meta.missingEnergy) reasons.push('нет цены энергии')
+      if (meta.missingIngredientIds.length > 0) {
+        reasons.push(
+          `нет цен ингредиентов: ${meta.missingIngredientIds
+            .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
+            .join(', ')}`,
+        )
+      }
+      if (meta.noRecipes) reasons.push('нет крафтовых рецептов')
+      if (meta.noBuy) reasons.push('нет цены скупа')
+      return reasons
+    }
+
+    const resolveSource = (itemId: string): {
+      source: IngredientFlowRow['source']
+      bestRecipe: RecipeOption | null
+      buyCost: number | null
+      reasons: string[]
+    } => {
+      const buyCost = parsePositiveNumber(buyPricesByItemId[itemId] ?? null)
+      const bestRecipe = costModel.bestRecipeOptionByItemId.get(itemId) ?? null
+      const canCraft = bestRecipe?.craftPerUnit !== null
+      if (canCraft && (buyCost === null || (bestRecipe?.craftPerUnit ?? Number.POSITIVE_INFINITY) <= buyCost + 1e-9)) {
+        return { source: 'craft', bestRecipe, buyCost, reasons: [] }
+      }
+      if (buyCost !== null) {
+        return { source: 'buy', bestRecipe, buyCost, reasons: [] }
+      }
+      return { source: 'unknown', bestRecipe, buyCost, reasons: getUnresolvedReasons(itemId) }
+    }
+
+    const addRow = (itemId: string, amount: number, source: IngredientFlowRow['source'], perUnitCost: number | null, reasons: string[]) => {
+      const prev = rowsByItemId.get(itemId)
+      if (!prev) {
+        rowsByItemId.set(itemId, {
+          itemId,
+          amount,
+          source,
+          perUnitCost,
+          reasons: [...new Set(reasons)],
+        })
+        return
+      }
+      const mergedSource: IngredientFlowRow['source'] = prev.source === source ? source : 'unknown'
+      const mergedReasons = [...new Set([...prev.reasons, ...reasons])]
+      rowsByItemId.set(itemId, {
+        itemId,
+        amount: prev.amount + amount,
+        source: mergedSource,
+        perUnitCost: prev.perUnitCost ?? perUnitCost,
+        reasons: mergedReasons,
+      })
+    }
+
+    const walkSelectedPath = (itemId: string, amountNeeded: number, path: string[]) => {
+      if (path.includes(itemId)) {
+        addRow(itemId, amountNeeded, 'unknown', null, ['обнаружен цикл в выбранной ветке'])
+        return
+      }
+      const resolved = resolveSource(itemId)
+      const perUnitCost =
+        resolved.source === 'craft'
+          ? resolved.bestRecipe?.craftPerUnit ?? null
+          : resolved.source === 'buy'
+            ? resolved.buyCost
+            : null
+      addRow(itemId, amountNeeded, resolved.source, perUnitCost, resolved.reasons)
+      if (resolved.source !== 'craft' || !resolved.bestRecipe) return
+      for (const ingredient of resolved.bestRecipe.recipe.ingredients) {
+        const childAmount = (amountNeeded * ingredient.amount) / resolved.bestRecipe.outputAmount
+        walkSelectedPath(ingredient.item, childAmount, [...path, itemId])
+      }
+    }
+
+    const rootResolved = resolveSource(treeItemId)
+    if (rootResolved.source === 'craft' && rootResolved.bestRecipe) {
+      for (const ingredient of rootResolved.bestRecipe.recipe.ingredients) {
+        const childAmount = ingredient.amount / rootResolved.bestRecipe.outputAmount
+        walkSelectedPath(ingredient.item, childAmount, [treeItemId])
+      }
+    }
+
+    const rows = [...rowsByItemId.values()].sort((a, b) => {
+      if (a.source !== b.source) {
+        const order: Record<IngredientFlowRow['source'], number> = { craft: 0, buy: 1, unknown: 2 }
+        return order[a.source] - order[b.source]
+      }
+      const aName = getItemName(itemsById[a.itemId]?.name?.lines) || a.itemId
+      const bName = getItemName(itemsById[b.itemId]?.name?.lines) || b.itemId
+      return aName.localeCompare(bName, 'ru')
+    })
+
+    return {
+      rootSource: rootResolved.source,
+      rootReasons: rootResolved.reasons,
+      rows,
+    }
+  }, [buyPricesByItemId, costModel, itemsById, treeItemId])
 
   return (
     <PageContainer>
@@ -814,35 +708,126 @@ export function CostPricePage() {
         title={treeItemId ? `Дерево крафтов: ${treeItemName}` : 'Дерево крафтов'}
         size="xl"
         centered
+        removeScrollProps={{
+          removeScrollBar: false,
+        }}
       >
         {treeItemId ? (
           <ScrollArea.Autosize mah={620}>
             <Stack gap="sm">
               <Box>
                 <Text size="sm" c="dimmed">
-                  Ниже показан путь расчета себестоимости с выбором минимального варианта на каждом уровне.
+                  Ниже перечислены ингредиенты, используемые в выбранной ветке расчета (для 1 шт. итогового предмета).
                 </Text>
               </Box>
-              <Box>
-                <Button.Group>
-                  <Button
-                    size="xs"
-                    variant={treeViewMode === 'selected' ? 'filled' : 'default'}
-                    onClick={() => setTreeViewMode('selected')}
-                  >
-                    Только выбранный путь
-                  </Button>
-                  <Button
-                    size="xs"
-                    variant={treeViewMode === 'all' ? 'filled' : 'default'}
-                    onClick={() => setTreeViewMode('all')}
-                  >
-                    Все альтернативы
-                  </Button>
-                </Button.Group>
-              </Box>
               <Divider />
-              {renderTreeNode(treeItemId, 0, 1, [])}
+              <Text
+                size="lg"
+                fw={800}
+                c={
+                  ingredientFlow.rootSource === 'craft'
+                    ? 'green.4'
+                    : ingredientFlow.rootSource === 'buy'
+                      ? 'blue.3'
+                      : 'yellow.4'
+                }
+              >
+                ПУТЬ ДЛЯ ИТОГОВОГО ПРЕДМЕТА:{' '}
+                {ingredientFlow.rootSource === 'craft'
+                  ? 'КРАФТ'
+                  : ingredientFlow.rootSource === 'buy'
+                    ? 'СКУП'
+                    : 'НЕТ ДАННЫХ'}
+              </Text>
+              {ingredientFlow.rootSource === 'buy' ? (
+                <Text size="sm" c="dimmed">
+                  Для итогового предмета выбран скуп. Дополнительные ингредиенты в цепочке крафта не используются.
+                </Text>
+              ) : null}
+              {ingredientFlow.rootSource === 'unknown' ? (
+                <Stack gap={4}>
+                  <Text size="sm" c="yellow">
+                    Не удалось определить путь получения итогового предмета.
+                  </Text>
+                  {ingredientFlow.rootReasons.map((reason, idx) => (
+                    <Text key={`root-reason-${idx}`} size="xs" c="yellow">
+                      - {reason}
+                    </Text>
+                  ))}
+                </Stack>
+              ) : null}
+              {ingredientFlow.rootSource === 'craft' ? (
+                <>
+                  {ingredientFlow.rows.length === 0 ? (
+                    <Text size="sm" c="dimmed">
+                      У выбранного крафта нет вложенных ингредиентов.
+                    </Text>
+                  ) : (
+                    <Stack gap={0}>
+                      <Group
+                        justify="space-between"
+                        wrap="nowrap"
+                        style={{
+                          background: 'rgba(255,255,255,0.03)',
+                          padding: '6px 10px',
+                        }}
+                      >
+                        <Text size="xs" c="dimmed" style={{ width: 250 }}>
+                          Ингредиент
+                        </Text>
+                        <Text size="xs" c="dimmed" style={{ width: 90, textAlign: 'right' }}>
+                          Кол-во
+                        </Text>
+                        <Text size="xs" c="dimmed" style={{ width: 110, textAlign: 'right' }}>
+                          Способ
+                        </Text>
+                        <Text size="xs" c="dimmed" style={{ width: 130, textAlign: 'right' }}>
+                          Цена/шт
+                        </Text>
+                      </Group>
+                      {ingredientFlow.rows.map((row, idx) => {
+                        const rowItem = itemsById[row.itemId]
+                        const rowName = getItemName(rowItem?.name?.lines) || row.itemId
+                        const sourceLabel = row.source === 'craft' ? 'Крафт' : row.source === 'buy' ? 'Скуп' : 'Нет данных'
+                        const sourceColor = row.source === 'craft' ? 'green.4' : row.source === 'buy' ? 'blue.3' : 'yellow.4'
+                        return (
+                          <Box
+                            key={`flow-row-${row.itemId}-${idx}`}
+                            style={{
+                              padding: '8px 10px',
+                              background: idx % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)',
+                            }}
+                          >
+                            <Group justify="space-between" wrap="nowrap" align="flex-start">
+                              <Text size="sm" style={{ width: 250 }}>
+                                {rowName}
+                              </Text>
+                              <Text size="sm" style={{ width: 90, textAlign: 'right' }}>
+                                {Number(row.amount.toFixed(3))}
+                              </Text>
+                              <Text size="sm" c={sourceColor} style={{ width: 110, textAlign: 'right' }}>
+                                {sourceLabel}
+                              </Text>
+                              <Text size="sm" style={{ width: 130, textAlign: 'right' }}>
+                                {row.perUnitCost !== null ? `${formatAuctionRub(row.perUnitCost)} ₽` : '—'}
+                              </Text>
+                            </Group>
+                            {row.reasons.length > 0 ? (
+                              <Stack gap={2} mt={4}>
+                                {row.reasons.map((reason, reasonIdx) => (
+                                  <Text key={`reason-${row.itemId}-${reasonIdx}`} size="xs" c="yellow">
+                                    - {reason}
+                                  </Text>
+                                ))}
+                              </Stack>
+                            ) : null}
+                          </Box>
+                        )
+                      })}
+                    </Stack>
+                  )}
+                </>
+              ) : null}
             </Stack>
           </ScrollArea.Autosize>
         ) : null}
