@@ -28,8 +28,21 @@ type CostResolvedCard = {
 type RecipeOption = {
   recipe: HideoutRecipe
   outputAmount: number
-  craftPerUnit: number
+  craftPerUnit: number | null
+  missingIngredientIds: string[]
+  hasEnergyGap: boolean
 }
+
+type UnresolvedMeta = {
+  missingIngredientIds: string[]
+  missingEnergy: boolean
+  noRecipes: boolean
+  noBuy: boolean
+  cycleUnanchored: boolean
+  unstableCycle: boolean
+}
+
+type TreeViewMode = 'selected' | 'all'
 
 function parsePositiveNumber(raw: string | null | undefined): number | null {
   if (!raw) return null
@@ -40,7 +53,7 @@ function parsePositiveNumber(raw: string | null | undefined): number | null {
   return n
 }
 
-function buildCraftCostModel(
+export function buildCraftCostModel(
   recipes: HideoutRecipe[],
   buyPricesByItemId: Record<string, string>,
   energyPriceRaw: string,
@@ -51,8 +64,11 @@ function buildCraftCostModel(
   bestRecipeOptionByItemId: Map<string, RecipeOption>
   recipeOptionsByItemId: Map<string, RecipeOption[]>
   cyclicItemIds: Set<string>
+  cycleAnchoredItemIds: Set<string>
   unresolvedItemIds: Set<string>
+  unresolvedMetaByItemId: Map<string, UnresolvedMeta>
 } {
+  const EPS = 1e-9
   const buyCostByItemId = new Map<string, number>()
   for (const [itemId, raw] of Object.entries(buyPricesByItemId)) {
     const parsed = parsePositiveNumber(raw)
@@ -65,20 +81,29 @@ function buildCraftCostModel(
   const effectiveCostByItemId = new Map<string, number>(buyCostByItemId)
   const craftCostByItemId = new Map<string, number>()
   const outputAmountByItemId = new Map<string, number>()
-  const cyclicItemIds = new Set<string>()
+  const recipeOptionsByItemId = new Map<string, RecipeOption[]>()
+  const bestRecipeOptionByItemId = new Map<string, RecipeOption>()
 
-  // Build craft dependency graph: result item -> ingredient item (craftable only).
-  const graph = new Map<string, Set<string>>()
+  const recipesByResultItemId = new Map<string, Array<{ recipe: HideoutRecipe; outputAmount: number }>>()
   const craftableSet = new Set<string>()
   for (const recipe of recipes) {
     for (const entry of recipe.result) {
-      if (entry.amount > 0) craftableSet.add(entry.item)
+      if (entry.amount <= 0) continue
+      craftableSet.add(entry.item)
+      const list = recipesByResultItemId.get(entry.item) ?? []
+      list.push({ recipe, outputAmount: entry.amount })
+      recipesByResultItemId.set(entry.item, list)
     }
+  }
+
+  // Build craft dependency graph: result item -> ingredient item (craftable only).
+  const graph = new Map<string, Set<string>>()
+  for (const itemId of craftableSet) {
+    graph.set(itemId, new Set<string>())
   }
   for (const recipe of recipes) {
     for (const result of recipe.result) {
       if (result.amount <= 0) continue
-      if (!graph.has(result.item)) graph.set(result.item, new Set<string>())
       for (const ingredient of recipe.ingredients) {
         if (craftableSet.has(ingredient.item)) {
           graph.get(result.item)!.add(ingredient.item)
@@ -87,128 +112,274 @@ function buildCraftCostModel(
     }
   }
 
-  const visitState = new Map<string, 0 | 1 | 2>()
-  const path: string[] = []
-  const dfs = (node: string) => {
-    const state = visitState.get(node) ?? 0
-    if (state === 1) {
-      const idx = path.lastIndexOf(node)
-      if (idx >= 0) {
-        for (let i = idx; i < path.length; i += 1) cyclicItemIds.add(path[i]!)
-      }
-      cyclicItemIds.add(node)
-      return
-    }
-    if (state === 2) return
-    visitState.set(node, 1)
-    path.push(node)
-    const next = graph.get(node) ?? new Set<string>()
-    for (const child of next) dfs(child)
-    path.pop()
-    visitState.set(node, 2)
-  }
-  for (const node of graph.keys()) dfs(node)
+  // Tarjan SCC decomposition.
+  const components: string[][] = []
+  const itemToComponentIndex = new Map<string, number>()
+  const tarjanIndex = new Map<string, number>()
+  const tarjanLow = new Map<string, number>()
+  const tarjanStack: string[] = []
+  const onStack = new Set<string>()
+  let indexCounter = 0
 
-  const maxIterations = Math.max(1, recipes.length * 4)
-  for (let iter = 0; iter < maxIterations; iter += 1) {
-    let changed = false
-    const bestCraftCandidateByItemId = new Map<string, { costPerUnit: number; outputAmount: number }>()
-    for (const recipe of recipes) {
-      let totalInputCost = 0
-      let canResolve = true
-      for (const ingredient of recipe.ingredients) {
-        const perUnit = effectiveCostByItemId.get(ingredient.item)
-        if (perUnit === undefined) {
-          canResolve = false
-          break
-        }
-        totalInputCost += perUnit * ingredient.amount
+  const tarjanDfs = (node: string) => {
+    tarjanIndex.set(node, indexCounter)
+    tarjanLow.set(node, indexCounter)
+    indexCounter += 1
+    tarjanStack.push(node)
+    onStack.add(node)
+
+    for (const next of graph.get(node) ?? []) {
+      if (!tarjanIndex.has(next)) {
+        tarjanDfs(next)
+        tarjanLow.set(node, Math.min(tarjanLow.get(node)!, tarjanLow.get(next)!))
+      } else if (onStack.has(next)) {
+        tarjanLow.set(node, Math.min(tarjanLow.get(node)!, tarjanIndex.get(next)!))
       }
-      if (!canResolve) continue
-      if (recipe.energy > 0) {
-        if (energyCost === null) {
-          continue
-        }
+    }
+
+    if (tarjanLow.get(node) !== tarjanIndex.get(node)) return
+    const component: string[] = []
+    while (tarjanStack.length > 0) {
+      const popped = tarjanStack.pop()!
+      onStack.delete(popped)
+      component.push(popped)
+      itemToComponentIndex.set(popped, components.length)
+      if (popped === node) break
+    }
+    components.push(component)
+  }
+
+  for (const node of craftableSet) {
+    if (!tarjanIndex.has(node)) {
+      tarjanDfs(node)
+    }
+  }
+
+  const componentDeps = new Map<number, Set<number>>()
+  for (let i = 0; i < components.length; i += 1) {
+    componentDeps.set(i, new Set<number>())
+  }
+  for (const [itemId, deps] of graph.entries()) {
+    const fromComp = itemToComponentIndex.get(itemId)!
+    for (const depItem of deps) {
+      const toComp = itemToComponentIndex.get(depItem)!
+      if (toComp !== fromComp) componentDeps.get(fromComp)!.add(toComp)
+    }
+  }
+
+  const componentOrder: number[] = []
+  const visitedComp = new Set<number>()
+  const visitComp = (compIdx: number) => {
+    if (visitedComp.has(compIdx)) return
+    visitedComp.add(compIdx)
+    for (const dep of componentDeps.get(compIdx) ?? []) {
+      visitComp(dep)
+    }
+    componentOrder.push(compIdx)
+  }
+  for (let i = 0; i < components.length; i += 1) {
+    visitComp(i)
+  }
+
+  const cyclicItemIds = new Set<string>()
+  const cycleAnchoredItemIds = new Set<string>()
+  const unstableCycleItemIds = new Set<string>()
+
+  const evaluateRecipeOption = (
+    recipe: HideoutRecipe,
+    outputAmount: number,
+    resolveCost: (itemId: string) => number | undefined,
+  ): RecipeOption => {
+    let totalInputCost = 0
+    const missingIngredientIds: string[] = []
+    for (const ingredient of recipe.ingredients) {
+      const perUnit = resolveCost(ingredient.item)
+      if (perUnit === undefined) {
+        missingIngredientIds.push(ingredient.item)
+        continue
+      }
+      totalInputCost += perUnit * ingredient.amount
+    }
+    let hasEnergyGap = false
+    if (recipe.energy > 0) {
+      if (energyCost === null) {
+        hasEnergyGap = true
+      } else {
         totalInputCost += energyCost * recipe.energy
       }
-      for (const resultEntry of recipe.result) {
-        if (resultEntry.amount <= 0) continue
-        const craftPerUnit = totalInputCost / resultEntry.amount
-        const prevBest = bestCraftCandidateByItemId.get(resultEntry.item)
-        if (!prevBest || craftPerUnit < prevBest.costPerUnit) {
-          bestCraftCandidateByItemId.set(resultEntry.item, {
-            costPerUnit: craftPerUnit,
-            outputAmount: resultEntry.amount,
-          })
-        }
-      }
     }
-
-    for (const [itemId, bestCraft] of bestCraftCandidateByItemId.entries()) {
-      const prevCraft = craftCostByItemId.get(itemId)
-      if (prevCraft === undefined || Math.abs(prevCraft - bestCraft.costPerUnit) > 1e-9) {
-        craftCostByItemId.set(itemId, bestCraft.costPerUnit)
-        outputAmountByItemId.set(itemId, bestCraft.outputAmount)
-        changed = true
-      }
-      const buyPerUnit = buyCostByItemId.get(itemId)
-      const nextEffective = buyPerUnit === undefined ? bestCraft.costPerUnit : Math.min(buyPerUnit, bestCraft.costPerUnit)
-      const prevEffective = effectiveCostByItemId.get(itemId)
-      if (prevEffective === undefined || Math.abs(prevEffective - nextEffective) > 1e-9) {
-        effectiveCostByItemId.set(itemId, nextEffective)
-        changed = true
-      }
+    const hasMissing = missingIngredientIds.length > 0 || hasEnergyGap
+    return {
+      recipe,
+      outputAmount,
+      craftPerUnit: hasMissing ? null : totalInputCost / outputAmount,
+      missingIngredientIds,
+      hasEnergyGap,
     }
-    if (!changed) break
   }
 
-  // Cycle guard: if node is cyclic and has no explicit buy anchor, don't trust propagated value.
-  for (const itemId of cyclicItemIds) {
-    if (!buyCostByItemId.has(itemId)) {
+  const chooseBestResolvedOption = (options: RecipeOption[]): RecipeOption | null => {
+    let best: RecipeOption | null = null
+    for (const option of options) {
+      if (option.craftPerUnit === null) continue
+      if (!best || option.craftPerUnit < (best.craftPerUnit ?? Number.POSITIVE_INFINITY)) {
+        best = option
+      }
+    }
+    return best
+  }
+
+  for (const compIdx of componentOrder) {
+    const compItems = components[compIdx] ?? []
+    if (compItems.length === 0) continue
+
+    const hasSelfLoop = compItems.some((itemId) => (graph.get(itemId) ?? new Set<string>()).has(itemId))
+    const isCyclicComponent = compItems.length > 1 || hasSelfLoop
+    if (isCyclicComponent) {
+      for (const itemId of compItems) cyclicItemIds.add(itemId)
+    }
+
+    if (isCyclicComponent) {
+      const localCost = new Map<string, number | undefined>()
+      for (const itemId of compItems) {
+        localCost.set(itemId, buyCostByItemId.get(itemId))
+      }
+
+      let reachedMaxIterations = true
+      const maxIter = Math.max(20, compItems.length * 24)
+      for (let iter = 0; iter < maxIter; iter += 1) {
+        let changed = false
+        for (const itemId of compItems) {
+          const variants = recipesByResultItemId.get(itemId) ?? []
+          let bestCraft = Number.POSITIVE_INFINITY
+          for (const variant of variants) {
+            const option = evaluateRecipeOption(variant.recipe, variant.outputAmount, (ingredientId) => {
+              if (compItems.includes(ingredientId)) return localCost.get(ingredientId)
+              return effectiveCostByItemId.get(ingredientId)
+            })
+            if (option.craftPerUnit !== null) {
+              bestCraft = Math.min(bestCraft, option.craftPerUnit)
+            }
+          }
+          const buy = buyCostByItemId.get(itemId)
+          const candidate = Math.min(
+            buy ?? Number.POSITIVE_INFINITY,
+            Number.isFinite(bestCraft) ? bestCraft : Number.POSITIVE_INFINITY,
+          )
+          if (!Number.isFinite(candidate)) continue
+          const prev = localCost.get(itemId)
+          if (prev === undefined || candidate < prev - EPS) {
+            localCost.set(itemId, candidate)
+            changed = true
+          }
+        }
+        if (!changed) {
+          reachedMaxIterations = false
+          break
+        }
+      }
+      if (reachedMaxIterations) {
+        for (const itemId of compItems) unstableCycleItemIds.add(itemId)
+      }
+
+      for (const itemId of compItems) {
+        const resolved = localCost.get(itemId)
+        if (resolved !== undefined && Number.isFinite(resolved)) {
+          effectiveCostByItemId.set(itemId, resolved)
+          cycleAnchoredItemIds.add(itemId)
+        } else {
+          effectiveCostByItemId.delete(itemId)
+        }
+      }
+      continue
+    }
+
+    const itemId = compItems[0]!
+    const variants = recipesByResultItemId.get(itemId) ?? []
+    let bestCraft = Number.POSITIVE_INFINITY
+    for (const variant of variants) {
+      const option = evaluateRecipeOption(variant.recipe, variant.outputAmount, (ingredientId) =>
+        effectiveCostByItemId.get(ingredientId),
+      )
+      if (option.craftPerUnit !== null) {
+        bestCraft = Math.min(bestCraft, option.craftPerUnit)
+      }
+    }
+    const buy = buyCostByItemId.get(itemId)
+    const nextEffective = Math.min(
+      buy ?? Number.POSITIVE_INFINITY,
+      Number.isFinite(bestCraft) ? bestCraft : Number.POSITIVE_INFINITY,
+    )
+    if (Number.isFinite(nextEffective)) {
+      effectiveCostByItemId.set(itemId, nextEffective)
+    } else {
       effectiveCostByItemId.delete(itemId)
     }
   }
 
-  const unresolvedItemIds = new Set<string>()
-  for (const id of craftableSet) {
-    if (!effectiveCostByItemId.has(id)) unresolvedItemIds.add(id)
+  // Build final options, selected options, and normalized effective/craft costs.
+  for (const itemId of craftableSet) {
+    const variants = recipesByResultItemId.get(itemId) ?? []
+    const options = variants.map((variant) =>
+      evaluateRecipeOption(variant.recipe, variant.outputAmount, (ingredientId) => effectiveCostByItemId.get(ingredientId)),
+    )
+    options.sort((a, b) => {
+      if (a.craftPerUnit === null && b.craftPerUnit === null) return 0
+      if (a.craftPerUnit === null) return 1
+      if (b.craftPerUnit === null) return -1
+      return a.craftPerUnit - b.craftPerUnit
+    })
+    recipeOptionsByItemId.set(itemId, options)
+
+    const best = chooseBestResolvedOption(options)
+    if (best) {
+      bestRecipeOptionByItemId.set(itemId, best)
+      craftCostByItemId.set(itemId, best.craftPerUnit!)
+      outputAmountByItemId.set(itemId, best.outputAmount)
+    } else {
+      craftCostByItemId.delete(itemId)
+      outputAmountByItemId.delete(itemId)
+    }
+
+    const buy = buyCostByItemId.get(itemId)
+    const bestCraft = best?.craftPerUnit ?? null
+    const nextEffective =
+      buy !== undefined && bestCraft !== null
+        ? Math.min(buy, bestCraft)
+        : buy !== undefined
+          ? buy
+          : bestCraft !== null
+            ? bestCraft
+            : null
+    if (nextEffective !== null) {
+      effectiveCostByItemId.set(itemId, nextEffective)
+    } else {
+      effectiveCostByItemId.delete(itemId)
+    }
   }
 
-  const recipeOptionsByItemId = new Map<string, RecipeOption[]>()
-  for (const recipe of recipes) {
-    let totalInputCost = 0
-    let canResolve = true
-    for (const ingredient of recipe.ingredients) {
-      const perUnit = effectiveCostByItemId.get(ingredient.item)
-      if (perUnit === undefined) {
-        canResolve = false
-        break
-      }
-      totalInputCost += perUnit * ingredient.amount
+  const unresolvedMetaByItemId = new Map<string, UnresolvedMeta>()
+  const unresolvedItemIds = new Set<string>()
+  for (const id of craftableSet) {
+    const options = recipeOptionsByItemId.get(id) ?? []
+    const missingIngredientIds = [...new Set(options.flatMap((option) => option.missingIngredientIds))]
+    const missingEnergy = options.some((option) => option.hasEnergyGap)
+    const noRecipes = options.length === 0
+    const noBuy = !buyCostByItemId.has(id)
+    const cycleUnanchored = cyclicItemIds.has(id) && !cycleAnchoredItemIds.has(id)
+    const unstableCycle = unstableCycleItemIds.has(id)
+    const meta: UnresolvedMeta = {
+      missingIngredientIds,
+      missingEnergy,
+      noRecipes,
+      noBuy,
+      cycleUnanchored,
+      unstableCycle,
     }
-    if (!canResolve) continue
-    if (recipe.energy > 0) {
-      if (energyCost === null) continue
-      totalInputCost += energyCost * recipe.energy
+    unresolvedMetaByItemId.set(id, meta)
+    if (!effectiveCostByItemId.has(id)) {
+      unresolvedItemIds.add(id)
     }
-    for (const resultEntry of recipe.result) {
-      if (resultEntry.amount <= 0) continue
-      const option: RecipeOption = {
-        recipe,
-        outputAmount: resultEntry.amount,
-        craftPerUnit: totalInputCost / resultEntry.amount,
-      }
-      const current = recipeOptionsByItemId.get(resultEntry.item) ?? []
-      current.push(option)
-      recipeOptionsByItemId.set(resultEntry.item, current)
-    }
-  }
-  for (const list of recipeOptionsByItemId.values()) {
-    list.sort((a, b) => a.craftPerUnit - b.craftPerUnit)
-  }
-  const bestRecipeOptionByItemId = new Map<string, RecipeOption>()
-  for (const [itemId, list] of recipeOptionsByItemId.entries()) {
-    if (list.length > 0) bestRecipeOptionByItemId.set(itemId, list[0]!)
   }
 
   return {
@@ -218,7 +389,9 @@ function buildCraftCostModel(
     bestRecipeOptionByItemId,
     recipeOptionsByItemId,
     cyclicItemIds,
+    cycleAnchoredItemIds,
     unresolvedItemIds,
+    unresolvedMetaByItemId,
   }
 }
 
@@ -231,6 +404,7 @@ export function CostPricePage() {
   const energyPrice = useIngredientPricesStore((s) => s.energyPrice)
   const loadRemoteBuyPrices = useIngredientPricesStore((s) => s.loadRemoteBuyPrices)
   const [treeItemId, setTreeItemId] = useState<string | null>(null)
+  const [treeViewMode, setTreeViewMode] = useState<TreeViewMode>('selected')
 
   useEffect(() => {
     void fetchRecipes()
@@ -261,7 +435,8 @@ export function CostPricePage() {
       outputAmountByItemId,
       bestRecipeOptionByItemId,
       cyclicItemIds,
-      unresolvedItemIds,
+      cycleAnchoredItemIds,
+      unresolvedMetaByItemId,
     } = costModel
     const craftableItemIds = new Set<string>()
     for (const recipe of adjustedRecipes) {
@@ -279,18 +454,41 @@ export function CostPricePage() {
         const effectiveCostPerUnit = effectiveCostByItemId.get(itemId) ?? null
         let status: CostResolvedCard['status'] = 'ok'
         let statusMessage: string | undefined
+        const unresolvedMeta = unresolvedMetaByItemId.get(itemId)
         if (effectiveCostPerUnit === null) {
           status = cyclicItemIds.has(itemId) ? 'cycle' : 'insufficient'
+          const reasons: string[] = []
+          if (unresolvedMeta?.cycleUnanchored) {
+            reasons.push('цикл без ценового якоря')
+          }
+          if (unresolvedMeta?.unstableCycle) {
+            reasons.push('цикл не сошелся')
+          }
+          if (unresolvedMeta?.missingEnergy) {
+            reasons.push('нет цены энергии')
+          }
+          if ((unresolvedMeta?.missingIngredientIds.length ?? 0) > 0) {
+            reasons.push(
+              `нет цен ингредиентов: ${unresolvedMeta!.missingIngredientIds
+                .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
+                .join(', ')}`,
+            )
+          }
+          if (unresolvedMeta?.noRecipes) {
+            reasons.push('нет доступных крафтовых рецептов')
+          }
+          if (unresolvedMeta?.noBuy) {
+            reasons.push('нет цены скупа')
+          }
           statusMessage =
-            status === 'cycle'
-              ? 'Недостаточно данных для расчета себестоимости (обнаружен цикл зависимостей без цены скупа)'
+            reasons.length > 0
+              ? `Недостаточно данных для расчета себестоимости (${reasons.join('; ')})`
               : 'Недостаточно данных для расчета себестоимости'
         } else if (cyclicItemIds.has(itemId)) {
           status = 'cycle'
-          statusMessage = 'Рассчитано с учетом цикла (использован якорь цены скупа)'
-        } else if (unresolvedItemIds.has(itemId)) {
-          status = 'insufficient'
-          statusMessage = 'Недостаточно данных для расчета себестоимости'
+          statusMessage = cycleAnchoredItemIds.has(itemId)
+            ? 'Рассчитано с учетом цикла (использован ценовой якорь)'
+            : 'Рассчитано в цикле (проверьте корректность якорей)'
         }
         return {
           itemId,
@@ -313,19 +511,6 @@ export function CostPricePage() {
     return getItemName(itemsById[treeItemId]?.name?.lines) || treeItemId
   }, [itemsById, treeItemId])
 
-  const recipeVariantsByItemId = useMemo(() => {
-    const byItemId = new Map<string, Array<{ recipe: HideoutRecipe; outputAmount: number }>>()
-    for (const recipe of adjustedRecipes) {
-      for (const resultEntry of recipe.result) {
-        if (resultEntry.amount <= 0) continue
-        const list = byItemId.get(resultEntry.item) ?? []
-        list.push({ recipe, outputAmount: resultEntry.amount })
-        byItemId.set(resultEntry.item, list)
-      }
-    }
-    return byItemId
-  }, [adjustedRecipes])
-
   const renderTreeNode = (itemId: string, depth: number, amountNeeded: number, path: string[]): ReactNode => {
     const MAX_DEPTH = 8
     const item = itemsById[itemId]
@@ -333,44 +518,20 @@ export function CostPricePage() {
     const buyCostPerUnit = parsePositiveNumber(buyPricesByItemId[itemId] ?? null)
     const effectiveCostPerUnit = costModel.effectiveCostByItemId.get(itemId) ?? null
     const bestRecipe = costModel.bestRecipeOptionByItemId.get(itemId) ?? null
-    const allVariants = recipeVariantsByItemId.get(itemId) ?? []
+    const allOptions = costModel.recipeOptionsByItemId.get(itemId) ?? []
+    const unresolvedMeta = costModel.unresolvedMetaByItemId.get(itemId)
     const isCycle = path.includes(itemId)
     const isDepthLimitReached = depth >= MAX_DEPTH
 
     const chosenSource: 'craft' | 'buy' | 'unknown' =
-      bestRecipe !== null && (buyCostPerUnit === null || bestRecipe.craftPerUnit <= buyCostPerUnit + 1e-9)
+      bestRecipe !== null &&
+      bestRecipe.craftPerUnit !== null &&
+      (buyCostPerUnit === null || bestRecipe.craftPerUnit <= buyCostPerUnit + 1e-9)
         ? 'craft'
         : buyCostPerUnit !== null
           ? 'buy'
           : 'unknown'
-
-    const evaluateVariant = (variant: { recipe: HideoutRecipe; outputAmount: number }) => {
-      let totalInputCost = 0
-      const missingIngredientIds: string[] = []
-      for (const ingredient of variant.recipe.ingredients) {
-        const perUnit = costModel.effectiveCostByItemId.get(ingredient.item)
-        if (perUnit === undefined) {
-          missingIngredientIds.push(ingredient.item)
-          continue
-        }
-        totalInputCost += perUnit * ingredient.amount
-      }
-      if (variant.recipe.energy > 0) {
-        const parsedEnergyPrice = parsePositiveNumber(energyPrice)
-        if (parsedEnergyPrice === null) {
-          return { craftPerUnit: null as number | null, missingIngredientIds, hasEnergyGap: true }
-        }
-        totalInputCost += parsedEnergyPrice * variant.recipe.energy
-      }
-      if (missingIngredientIds.length > 0) {
-        return { craftPerUnit: null as number | null, missingIngredientIds, hasEnergyGap: false }
-      }
-      return { craftPerUnit: totalInputCost / variant.outputAmount, missingIngredientIds, hasEnergyGap: false }
-    }
-    const variantEvaluations = allVariants.map((variant, idx) => ({ idx, variant, ...evaluateVariant(variant) }))
-    const hasResolvableCraftVariant = variantEvaluations.some((entry) => entry.craftPerUnit !== null)
-    const missingIngredientIds = [...new Set(variantEvaluations.flatMap((entry) => entry.missingIngredientIds))]
-    const hasEnergyGap = variantEvaluations.some((entry) => entry.hasEnergyGap)
+    const hasResolvableCraftVariant = allOptions.some((entry) => entry.craftPerUnit !== null)
 
     return (
       <Stack
@@ -405,94 +566,167 @@ export function CostPricePage() {
           <Box>
             <Divider my={4} />
             <Text size="sm" fw={700} mb={6}>
-              Альтернативы
+              {treeViewMode === 'all' ? 'Альтернативы' : 'Выбранная ветка'}
             </Text>
-            <Stack gap={6}>
-              <Box
-                p="xs"
-                style={{
-                  borderRadius: 8,
-                  border: '1px solid var(--mantine-color-default-border)',
-                }}
-              >
-                <Text size="xs" fw={700} c={chosenSource === 'buy' ? 'green.4' : undefined}>
-                  Скуп {chosenSource === 'buy' ? '(выбран)' : ''}
-                </Text>
-                <Text size="xs" c={buyCostPerUnit !== null ? 'dimmed' : 'yellow'}>
-                  {buyCostPerUnit !== null ? `${formatAuctionRub(buyCostPerUnit)} ₽/шт` : 'Нет цены скупа'}
-                </Text>
-              </Box>
-              {allVariants.length === 0 ? (
-                <Text size="xs" c="yellow">
-                  Для предмета нет крафтовых рецептов.
-                </Text>
-              ) : null}
-              {allVariants.length > 0 && !hasResolvableCraftVariant ? (
-                <Box p="xs" style={{ borderRadius: 8, border: '1px solid var(--mantine-color-default-border)' }}>
-                  <Text size="xs" c="yellow">
-                    Нет данных для расчета крафта.
+            {treeViewMode === 'all' ? (
+              <Stack gap={6}>
+                <Box
+                  p="xs"
+                  style={{
+                    borderRadius: 8,
+                    border: '1px solid var(--mantine-color-default-border)',
+                  }}
+                >
+                  <Text size="xs" fw={700} c={chosenSource === 'buy' ? 'green.4' : undefined}>
+                    Скуп {chosenSource === 'buy' ? '(выбран)' : ''}
                   </Text>
-                  {hasEnergyGap ? (
-                    <Text size="xs" c="yellow">
-                      Не хватает: цены энергии.
-                    </Text>
-                  ) : null}
-                  {missingIngredientIds.length > 0 ? (
-                    <Text size="xs" c="yellow">
-                      Не хватает: себестоимости ингредиентов ({missingIngredientIds
-                        .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
-                        .join(', ')}).
-                    </Text>
-                  ) : null}
+                  <Text size="xs" c={buyCostPerUnit !== null ? 'dimmed' : 'yellow'}>
+                    {buyCostPerUnit !== null ? `${formatAuctionRub(buyCostPerUnit)} ₽/шт` : 'Нет цены скупа'}
+                  </Text>
                 </Box>
-              ) : null}
-              {variantEvaluations.map(({ idx, variant, craftPerUnit, hasEnergyGap, missingIngredientIds }) => {
-                const isBestRecipe =
-                  bestRecipe !== null &&
-                  bestRecipe.recipe === variant.recipe &&
-                  Math.abs(bestRecipe.outputAmount - variant.outputAmount) < 1e-9
-                const isSelectedCraft = chosenSource === 'craft' && isBestRecipe
-                const isInsufficient = craftPerUnit === null
-                return (
+                {allOptions.length === 0 ? (
+                  <Text size="xs" c="yellow">
+                    Для предмета нет крафтовых рецептов.
+                  </Text>
+                ) : null}
+                {allOptions.length > 0 && !hasResolvableCraftVariant ? (
                   <Box
-                    key={`${itemId}-variant-${idx}-${variant.outputAmount}`}
+                    p="xs"
+                    style={{ borderRadius: 8, border: '1px solid var(--mantine-color-default-border)' }}
+                  >
+                    <Text size="xs" c="yellow">
+                      Нет данных для расчета крафта.
+                    </Text>
+                    {unresolvedMeta?.missingEnergy ? (
+                      <Text size="xs" c="yellow">
+                        Не хватает: цены энергии.
+                      </Text>
+                    ) : null}
+                    {(unresolvedMeta?.missingIngredientIds.length ?? 0) > 0 ? (
+                      <Text size="xs" c="yellow">
+                        Не хватает: себестоимости ингредиентов ({unresolvedMeta!.missingIngredientIds
+                          .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
+                          .join(', ')}).
+                      </Text>
+                    ) : null}
+                  </Box>
+                ) : null}
+                {allOptions.map((option, idx) => {
+                  const isBestRecipe =
+                    bestRecipe !== null &&
+                    bestRecipe.recipe === option.recipe &&
+                    Math.abs(bestRecipe.outputAmount - option.outputAmount) < 1e-9
+                  const isSelectedCraft = chosenSource === 'craft' && isBestRecipe
+                  const isInsufficient = option.craftPerUnit === null
+                  return (
+                    <Box
+                      key={`${itemId}-variant-${idx}-${option.outputAmount}`}
+                      p="xs"
+                      style={{
+                        borderRadius: 8,
+                        border: '1px solid var(--mantine-color-default-border)',
+                      }}
+                    >
+                      <Text size="xs" fw={700} c={isSelectedCraft ? 'green.4' : isInsufficient ? 'yellow' : undefined}>
+                        Крафт #{idx + 1} {isSelectedCraft ? '(выбран)' : ''}
+                      </Text>
+                      <Text size="xs" c={isInsufficient ? 'yellow' : 'dimmed'}>
+                        Выход: {option.outputAmount} шт. · Энергия: {option.recipe.energy} · Себестоимость:{' '}
+                        {option.craftPerUnit !== null
+                          ? `${formatAuctionRub(option.craftPerUnit)} ₽/шт`
+                          : 'Недостаточно данных'}
+                      </Text>
+                      {option.hasEnergyGap ? (
+                        <Text size="xs" c="yellow">
+                          Не хватает: цены энергии для этого крафта.
+                        </Text>
+                      ) : null}
+                      {option.missingIngredientIds.length > 0 ? (
+                        <Text size="xs" c="yellow">
+                          Не хватает: себестоимости ингредиентов ({option.missingIngredientIds
+                            .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
+                            .join(', ')}).
+                        </Text>
+                      ) : null}
+                      <Stack gap={5} mt={6}>
+                        {option.recipe.ingredients.map((ingredient) => {
+                          const childAmount = (amountNeeded * ingredient.amount) / option.outputAmount
+                          return renderTreeNode(ingredient.item, depth + 1, childAmount, [...path, itemId])
+                        })}
+                      </Stack>
+                    </Box>
+                  )
+                })}
+              </Stack>
+            ) : (
+              <Stack gap={6}>
+                {chosenSource === 'buy' ? (
+                  <Box
                     p="xs"
                     style={{
                       borderRadius: 8,
                       border: '1px solid var(--mantine-color-default-border)',
                     }}
                   >
-                    <Text size="xs" fw={700} c={isSelectedCraft ? 'green.4' : isInsufficient ? 'yellow' : undefined}>
-                      Крафт #{idx + 1} {isSelectedCraft ? '(выбран)' : ''}
+                    <Text size="xs" fw={700} c="green.4">
+                      Скуп (выбран)
                     </Text>
-                    <Text size="xs" c={isInsufficient ? 'yellow' : 'dimmed'}>
-                      Выход: {variant.outputAmount} шт. · Энергия: {variant.recipe.energy} · Себестоимость:{' '}
-                      {craftPerUnit !== null
-                        ? `${formatAuctionRub(craftPerUnit)} ₽/шт`
+                    <Text size="xs" c={buyCostPerUnit !== null ? 'dimmed' : 'yellow'}>
+                      {buyCostPerUnit !== null ? `${formatAuctionRub(buyCostPerUnit)} ₽/шт` : 'Нет цены скупа'}
+                    </Text>
+                  </Box>
+                ) : null}
+                {chosenSource === 'craft' && bestRecipe ? (
+                  <Box
+                    p="xs"
+                    style={{
+                      borderRadius: 8,
+                      border: '1px solid var(--mantine-color-default-border)',
+                    }}
+                  >
+                    <Text size="xs" fw={700} c="green.4">
+                      Крафт (выбран)
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      Выход: {bestRecipe.outputAmount} шт. · Энергия: {bestRecipe.recipe.energy} · Себестоимость:{' '}
+                      {bestRecipe.craftPerUnit !== null
+                        ? `${formatAuctionRub(bestRecipe.craftPerUnit)} ₽/шт`
                         : 'Недостаточно данных'}
                     </Text>
-                    {hasEnergyGap ? (
-                      <Text size="xs" c="yellow">
-                        Не хватает: цены энергии для этого крафта.
-                      </Text>
-                    ) : null}
-                    {missingIngredientIds.length > 0 ? (
-                      <Text size="xs" c="yellow">
-                        Не хватает: себестоимости ингредиентов ({missingIngredientIds
-                          .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
-                          .join(', ')}).
-                      </Text>
-                    ) : null}
                     <Stack gap={5} mt={6}>
-                      {variant.recipe.ingredients.map((ingredient) => {
-                        const childAmount = (amountNeeded * ingredient.amount) / variant.outputAmount
+                      {bestRecipe.recipe.ingredients.map((ingredient) => {
+                        const childAmount = (amountNeeded * ingredient.amount) / bestRecipe.outputAmount
                         return renderTreeNode(ingredient.item, depth + 1, childAmount, [...path, itemId])
                       })}
                     </Stack>
                   </Box>
-                )
-              })}
-            </Stack>
+                ) : null}
+                {chosenSource === 'unknown' ? (
+                  <Box p="xs" style={{ borderRadius: 8, border: '1px solid var(--mantine-color-default-border)' }}>
+                    <Text size="xs" c="yellow">
+                      Нет данных для выбора пути.
+                    </Text>
+                    {unresolvedMeta?.missingEnergy ? (
+                      <Text size="xs" c="yellow">
+                        Не хватает: цены энергии.
+                      </Text>
+                    ) : null}
+                    {(unresolvedMeta?.missingIngredientIds.length ?? 0) > 0 ? (
+                      <Text size="xs" c="yellow">
+                        Не хватает: себестоимости ингредиентов ({unresolvedMeta!.missingIngredientIds
+                          .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
+                          .join(', ')}).
+                      </Text>
+                    ) : null}
+                    {unresolvedMeta?.noBuy ? (
+                      <Text size="xs" c="yellow">
+                        Не хватает: цены скупа.
+                      </Text>
+                    ) : null}
+                  </Box>
+                ) : null}
+              </Stack>
+            )}
           </Box>
         ) : null}
         {!isCycle && isDepthLimitReached ? (
@@ -588,6 +822,24 @@ export function CostPricePage() {
                 <Text size="sm" c="dimmed">
                   Ниже показан путь расчета себестоимости с выбором минимального варианта на каждом уровне.
                 </Text>
+              </Box>
+              <Box>
+                <Button.Group>
+                  <Button
+                    size="xs"
+                    variant={treeViewMode === 'selected' ? 'filled' : 'default'}
+                    onClick={() => setTreeViewMode('selected')}
+                  >
+                    Только выбранный путь
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant={treeViewMode === 'all' ? 'filled' : 'default'}
+                    onClick={() => setTreeViewMode('all')}
+                  >
+                    Все альтернативы
+                  </Button>
+                </Button.Group>
               </Box>
               <Divider />
               {renderTreeNode(treeItemId, 0, 1, [])}
