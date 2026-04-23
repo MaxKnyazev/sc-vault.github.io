@@ -1,5 +1,5 @@
 import { Alert, Box, Button, Divider, Loader, Modal, ScrollArea, SimpleGrid, Stack, Text } from '@mantine/core'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { PageContainer } from '../../components/page-container/PageContainer'
 import { SectionCard } from '../../components/section-card/SectionCard'
@@ -313,64 +313,178 @@ export function CostPricePage() {
     return getItemName(itemsById[treeItemId]?.name?.lines) || treeItemId
   }, [itemsById, treeItemId])
 
-  const renderTreeNode = (itemId: string, depth: number, amountNeeded: number, path: string[]) => {
+  const recipeVariantsByItemId = useMemo(() => {
+    const byItemId = new Map<string, Array<{ recipe: HideoutRecipe; outputAmount: number }>>()
+    for (const recipe of adjustedRecipes) {
+      for (const resultEntry of recipe.result) {
+        if (resultEntry.amount <= 0) continue
+        const list = byItemId.get(resultEntry.item) ?? []
+        list.push({ recipe, outputAmount: resultEntry.amount })
+        byItemId.set(resultEntry.item, list)
+      }
+    }
+    return byItemId
+  }, [adjustedRecipes])
+
+  const renderTreeNode = (itemId: string, depth: number, amountNeeded: number, path: string[]): ReactNode => {
+    const MAX_DEPTH = 8
     const item = itemsById[itemId]
     const itemName = getItemName(item?.name?.lines) || itemId
     const buyCostPerUnit = parsePositiveNumber(buyPricesByItemId[itemId] ?? null)
     const effectiveCostPerUnit = costModel.effectiveCostByItemId.get(itemId) ?? null
     const bestRecipe = costModel.bestRecipeOptionByItemId.get(itemId) ?? null
-    const allOptions = costModel.recipeOptionsByItemId.get(itemId) ?? []
+    const allVariants = recipeVariantsByItemId.get(itemId) ?? []
     const isCycle = path.includes(itemId)
+    const isDepthLimitReached = depth >= MAX_DEPTH
 
-    const hasCraftChoice =
-      bestRecipe !== null &&
-      (buyCostPerUnit === null || bestRecipe.craftPerUnit <= buyCostPerUnit + 1e-9)
+    const chosenSource: 'craft' | 'buy' | 'unknown' =
+      bestRecipe !== null && (buyCostPerUnit === null || bestRecipe.craftPerUnit <= buyCostPerUnit + 1e-9)
+        ? 'craft'
+        : buyCostPerUnit !== null
+          ? 'buy'
+          : 'unknown'
+
+    const evaluateVariant = (variant: { recipe: HideoutRecipe; outputAmount: number }) => {
+      let totalInputCost = 0
+      const missingIngredientIds: string[] = []
+      for (const ingredient of variant.recipe.ingredients) {
+        const perUnit = costModel.effectiveCostByItemId.get(ingredient.item)
+        if (perUnit === undefined) {
+          missingIngredientIds.push(ingredient.item)
+          continue
+        }
+        totalInputCost += perUnit * ingredient.amount
+      }
+      if (variant.recipe.energy > 0) {
+        const parsedEnergyPrice = parsePositiveNumber(energyPrice)
+        if (parsedEnergyPrice === null) {
+          return { craftPerUnit: null as number | null, missingIngredientIds, hasEnergyGap: true }
+        }
+        totalInputCost += parsedEnergyPrice * variant.recipe.energy
+      }
+      if (missingIngredientIds.length > 0) {
+        return { craftPerUnit: null as number | null, missingIngredientIds, hasEnergyGap: false }
+      }
+      return { craftPerUnit: totalInputCost / variant.outputAmount, missingIngredientIds, hasEnergyGap: false }
+    }
 
     return (
       <Stack
         key={`${itemId}-${depth}-${amountNeeded}`}
-        gap={5}
+        gap={8}
         p="xs"
         style={{
-          marginLeft: depth * 18,
+          marginLeft: depth * 16,
           borderLeft: depth > 0 ? '1px dashed var(--mantine-color-default-border)' : undefined,
         }}
       >
-        <Text size="sm" fw={600}>
+        <Text size="sm" fw={700}>
           {itemName} x{Number(amountNeeded.toFixed(3))}
         </Text>
         <Text size="xs" c="dimmed">
-          Итог: {effectiveCostPerUnit !== null ? `${formatAuctionRub(effectiveCostPerUnit)} ₽/шт` : 'Недостаточно данных'}
+          Итоговая себестоимость: {effectiveCostPerUnit !== null ? `${formatAuctionRub(effectiveCostPerUnit)} ₽/шт` : 'Недостаточно данных'}
         </Text>
-        <Text size="xs" c="dimmed">
-          Скуп: {buyCostPerUnit !== null ? `${formatAuctionRub(buyCostPerUnit)} ₽/шт` : '—'} · Крафт:{' '}
-          {bestRecipe ? `${formatAuctionRub(bestRecipe.craftPerUnit)} ₽/шт` : '—'}
+        <Text size="lg" fw={800} c={chosenSource === 'craft' ? 'green.4' : chosenSource === 'buy' ? 'blue.3' : 'yellow.4'}>
+          ПУТЬ РАСЧЕТА: {chosenSource === 'craft' ? 'КРАФТ' : chosenSource === 'buy' ? 'СКУП' : 'НЕТ ДАННЫХ'}
         </Text>
-        {allOptions.length > 1 ? (
-          <Text size="xs" c="dimmed">
-            Вариантов крафта: {allOptions.length} (выбран самый дешевый)
-          </Text>
-        ) : null}
         {isCycle ? (
           <Text size="xs" c="yellow">
             Обнаружен цикл зависимостей, ветка обрезана.
           </Text>
         ) : null}
-        {!isCycle && hasCraftChoice && bestRecipe ? (
-          <>
-            <Text size="xs" c="dimmed">
-              Рецепт: выход {bestRecipe.outputAmount} шт., энергия {bestRecipe.recipe.energy}
-            </Text>
-            {bestRecipe.recipe.ingredients.map((ingredient) => {
-              const childAmount = (amountNeeded * ingredient.amount) / bestRecipe.outputAmount
-              return renderTreeNode(ingredient.item, depth + 1, childAmount, [...path, itemId])
-            })}
-          </>
-        ) : (
-          <Text size="xs" c="dimmed">
-            Используется скуп (или недостаточно данных по крафту).
+        {isDepthLimitReached ? (
+          <Text size="xs" c="yellow">
+            Достигнут лимит глубины дерева.
           </Text>
-        )}
+        ) : null}
+        {!isCycle && !isDepthLimitReached ? (
+          <Box>
+            <Divider my={4} />
+            <Text size="sm" fw={700} mb={6}>
+              Альтернативы
+            </Text>
+            <Stack gap={6}>
+              <Box
+                p="xs"
+                style={{
+                  borderRadius: 8,
+                  border: '1px solid var(--mantine-color-default-border)',
+                  background:
+                    chosenSource === 'buy'
+                      ? 'color-mix(in srgb, var(--mantine-color-green-7) 35%, transparent)'
+                      : 'transparent',
+                }}
+              >
+                <Text size="xs" fw={700}>
+                  Скуп {chosenSource === 'buy' ? '(выбран)' : ''}
+                </Text>
+                <Text size="xs" c={buyCostPerUnit !== null ? 'dimmed' : 'yellow'}>
+                  {buyCostPerUnit !== null ? `${formatAuctionRub(buyCostPerUnit)} ₽/шт` : 'Нет цены скупа'}
+                </Text>
+              </Box>
+              {allVariants.length === 0 ? (
+                <Text size="xs" c="yellow">
+                  Для предмета нет крафтовых рецептов.
+                </Text>
+              ) : null}
+              {allVariants.map((variant, idx) => {
+                const variantEval = evaluateVariant(variant)
+                const isBestRecipe =
+                  bestRecipe !== null &&
+                  bestRecipe.recipe === variant.recipe &&
+                  Math.abs(bestRecipe.outputAmount - variant.outputAmount) < 1e-9
+                const isSelectedCraft = chosenSource === 'craft' && isBestRecipe
+                const isInsufficient = variantEval.craftPerUnit === null
+                return (
+                  <Box
+                    key={`${itemId}-variant-${idx}-${variant.outputAmount}`}
+                    p="xs"
+                    style={{
+                      borderRadius: 8,
+                      border: `1px solid ${isInsufficient ? 'var(--mantine-color-yellow-7)' : 'var(--mantine-color-default-border)'}`,
+                      background: isSelectedCraft
+                        ? 'color-mix(in srgb, var(--mantine-color-green-7) 35%, transparent)'
+                        : isInsufficient
+                          ? 'color-mix(in srgb, var(--mantine-color-yellow-8) 25%, transparent)'
+                          : 'transparent',
+                    }}
+                  >
+                    <Text size="xs" fw={700} c={isInsufficient ? 'yellow' : undefined}>
+                      Крафт #{idx + 1} {isSelectedCraft ? '(выбран)' : ''}
+                    </Text>
+                    <Text size="xs" c={isInsufficient ? 'yellow' : 'dimmed'}>
+                      Выход: {variant.outputAmount} шт. · Энергия: {variant.recipe.energy} · Себестоимость:{' '}
+                      {variantEval.craftPerUnit !== null
+                        ? `${formatAuctionRub(variantEval.craftPerUnit)} ₽/шт`
+                        : 'Недостаточно данных'}
+                    </Text>
+                    {variantEval.hasEnergyGap ? (
+                      <Text size="xs" c="yellow">
+                        Нет цены энергии для расчета этого крафта.
+                      </Text>
+                    ) : null}
+                    {variantEval.missingIngredientIds.length > 0 ? (
+                      <Text size="xs" c="yellow">
+                        Нет данных по ингредиентам: {variantEval.missingIngredientIds.map((id) => getItemName(itemsById[id]?.name?.lines) || id).join(', ')}
+                      </Text>
+                    ) : null}
+                    <Stack gap={5} mt={6}>
+                      {variant.recipe.ingredients.map((ingredient) => {
+                        const childAmount = (amountNeeded * ingredient.amount) / variant.outputAmount
+                        return renderTreeNode(ingredient.item, depth + 1, childAmount, [...path, itemId])
+                      })}
+                    </Stack>
+                  </Box>
+                )
+              })}
+            </Stack>
+          </Box>
+        ) : null}
+        {!isCycle && isDepthLimitReached ? (
+          <Text size="xs" c="dimmed">
+            Вложенные альтернативы скрыты из-за лимита глубины.
+          </Text>
+        ) : null}
       </Stack>
     )
   }
