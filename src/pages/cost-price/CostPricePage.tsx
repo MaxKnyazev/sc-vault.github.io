@@ -367,6 +367,10 @@ export function CostPricePage() {
       }
       return { craftPerUnit: totalInputCost / variant.outputAmount, missingIngredientIds, hasEnergyGap: false }
     }
+    const variantEvaluations = allVariants.map((variant, idx) => ({ idx, variant, ...evaluateVariant(variant) }))
+    const hasResolvableCraftVariant = variantEvaluations.some((entry) => entry.craftPerUnit !== null)
+    const missingIngredientIds = [...new Set(variantEvaluations.flatMap((entry) => entry.missingIngredientIds))]
+    const hasEnergyGap = variantEvaluations.some((entry) => entry.hasEnergyGap)
 
     return (
       <Stack
@@ -409,13 +413,9 @@ export function CostPricePage() {
                 style={{
                   borderRadius: 8,
                   border: '1px solid var(--mantine-color-default-border)',
-                  background:
-                    chosenSource === 'buy'
-                      ? 'color-mix(in srgb, var(--mantine-color-green-7) 35%, transparent)'
-                      : 'transparent',
                 }}
               >
-                <Text size="xs" fw={700}>
+                <Text size="xs" fw={700} c={chosenSource === 'buy' ? 'green.4' : undefined}>
                   Скуп {chosenSource === 'buy' ? '(выбран)' : ''}
                 </Text>
                 <Text size="xs" c={buyCostPerUnit !== null ? 'dimmed' : 'yellow'}>
@@ -427,45 +427,60 @@ export function CostPricePage() {
                   Для предмета нет крафтовых рецептов.
                 </Text>
               ) : null}
-              {allVariants.map((variant, idx) => {
-                const variantEval = evaluateVariant(variant)
+              {allVariants.length > 0 && !hasResolvableCraftVariant ? (
+                <Box p="xs" style={{ borderRadius: 8, border: '1px solid var(--mantine-color-default-border)' }}>
+                  <Text size="xs" c="yellow">
+                    Нет данных для расчета крафта.
+                  </Text>
+                  {hasEnergyGap ? (
+                    <Text size="xs" c="yellow">
+                      Не хватает: цены энергии.
+                    </Text>
+                  ) : null}
+                  {missingIngredientIds.length > 0 ? (
+                    <Text size="xs" c="yellow">
+                      Не хватает: себестоимости ингредиентов ({missingIngredientIds
+                        .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
+                        .join(', ')}).
+                    </Text>
+                  ) : null}
+                </Box>
+              ) : null}
+              {variantEvaluations.map(({ idx, variant, craftPerUnit, hasEnergyGap, missingIngredientIds }) => {
                 const isBestRecipe =
                   bestRecipe !== null &&
                   bestRecipe.recipe === variant.recipe &&
                   Math.abs(bestRecipe.outputAmount - variant.outputAmount) < 1e-9
                 const isSelectedCraft = chosenSource === 'craft' && isBestRecipe
-                const isInsufficient = variantEval.craftPerUnit === null
+                const isInsufficient = craftPerUnit === null
                 return (
                   <Box
                     key={`${itemId}-variant-${idx}-${variant.outputAmount}`}
                     p="xs"
                     style={{
                       borderRadius: 8,
-                      border: `1px solid ${isInsufficient ? 'var(--mantine-color-yellow-7)' : 'var(--mantine-color-default-border)'}`,
-                      background: isSelectedCraft
-                        ? 'color-mix(in srgb, var(--mantine-color-green-7) 35%, transparent)'
-                        : isInsufficient
-                          ? 'color-mix(in srgb, var(--mantine-color-yellow-8) 25%, transparent)'
-                          : 'transparent',
+                      border: '1px solid var(--mantine-color-default-border)',
                     }}
                   >
-                    <Text size="xs" fw={700} c={isInsufficient ? 'yellow' : undefined}>
+                    <Text size="xs" fw={700} c={isSelectedCraft ? 'green.4' : isInsufficient ? 'yellow' : undefined}>
                       Крафт #{idx + 1} {isSelectedCraft ? '(выбран)' : ''}
                     </Text>
                     <Text size="xs" c={isInsufficient ? 'yellow' : 'dimmed'}>
                       Выход: {variant.outputAmount} шт. · Энергия: {variant.recipe.energy} · Себестоимость:{' '}
-                      {variantEval.craftPerUnit !== null
-                        ? `${formatAuctionRub(variantEval.craftPerUnit)} ₽/шт`
+                      {craftPerUnit !== null
+                        ? `${formatAuctionRub(craftPerUnit)} ₽/шт`
                         : 'Недостаточно данных'}
                     </Text>
-                    {variantEval.hasEnergyGap ? (
+                    {hasEnergyGap ? (
                       <Text size="xs" c="yellow">
-                        Нет цены энергии для расчета этого крафта.
+                        Не хватает: цены энергии для этого крафта.
                       </Text>
                     ) : null}
-                    {variantEval.missingIngredientIds.length > 0 ? (
+                    {missingIngredientIds.length > 0 ? (
                       <Text size="xs" c="yellow">
-                        Нет данных по ингредиентам: {variantEval.missingIngredientIds.map((id) => getItemName(itemsById[id]?.name?.lines) || id).join(', ')}
+                        Не хватает: себестоимости ингредиентов ({missingIngredientIds
+                          .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
+                          .join(', ')}).
                       </Text>
                     ) : null}
                     <Stack gap={5} mt={6}>
