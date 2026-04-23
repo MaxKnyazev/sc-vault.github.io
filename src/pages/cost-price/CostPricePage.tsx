@@ -313,7 +313,7 @@ export function CostPricePage() {
     return getItemName(itemsById[treeItemId]?.name?.lines) || treeItemId
   }, [itemsById, treeItemId])
 
-  const renderTreeNode = (itemId: string, depth: number, amountNeeded: number, path: string[]): JSX.Element => {
+  const renderTreeNode = (itemId: string, depth: number, amountNeeded: number, path: string[]) => {
     const item = itemsById[itemId]
     const itemName = getItemName(item?.name?.lines) || itemId
     const buyCostPerUnit = parsePositiveNumber(buyPricesByItemId[itemId] ?? null)
