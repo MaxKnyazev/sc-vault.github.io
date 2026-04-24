@@ -8,7 +8,6 @@ import { ProfilePage } from '../pages/profile/ProfilePage'
 import { RequireRole } from './RequireRole'
 import { UsersPage } from '../pages/users/UsersPage'
 import { AuctionHistoryPage } from '../pages/auction-history/AuctionHistoryPage'
-import { CostPricePage } from '../pages/cost-price/CostPricePage'
 
 export const appRouter = createBrowserRouter(
   [
@@ -47,16 +46,6 @@ export const appRouter = createBrowserRouter(
             {
               index: true,
               element: <AuctionHistoryPage />,
-            },
-          ],
-        },
-        {
-          path: 'cost-price',
-          element: <RequireRole minimumRole="user" />,
-          children: [
-            {
-              index: true,
-              element: <CostPricePage />,
             },
           ],
         },

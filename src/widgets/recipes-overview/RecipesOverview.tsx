@@ -29,7 +29,7 @@ import type { HideoutRecipe } from '../../entities/hideout/types'
 import { useAuthStore } from '../../shared/store/authStore'
 import { getRecipeRequiredSkill } from '../../shared/lib/craftSkills'
 import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
-import { buildCraftCostModel } from '../../pages/cost-price/CostPricePage'
+import { buildCraftCostModel } from '../../shared/lib/costModel'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 
 const CANON_BRANCHES = [

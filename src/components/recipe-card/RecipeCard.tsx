@@ -77,6 +77,7 @@ export function RecipeCard({
   const primaryResultItemId = recipe.result[0]?.item
   const recipeId = recipeFavoriteId || getRecipeFavoriteId(recipe)
   const [isCraftOpen, setIsCraftOpen] = useState(defaultCraftOpen)
+  const [isCostTreeHovered, setIsCostTreeHovered] = useState(false)
   const [isEditingBonus, setIsEditingBonus] = useState(false)
   const [draftBonus, setDraftBonus] = useState('0')
   const [isSavingLocal, setIsSavingLocal] = useState(false)
@@ -185,25 +186,31 @@ export function RecipeCard({
           {primaryResultItemId ? (
             <Group gap={8} wrap="nowrap" align="flex-start">
               <ActionIcon
-                size={24}
+                size={26}
                 radius="md"
-                variant="light"
-                color="gray"
+                variant={isCostTreeHovered ? 'filled' : 'light'}
+                color={isCostTreeHovered ? 'blue' : 'gray'}
                 aria-label="Открыть дерево крафтов"
                 title="Открыть дерево крафтов"
                 onClick={() => onOpenCostTree?.(primaryResultItemId)}
-                style={{ backgroundColor: 'rgba(255,255,255,0.10)', marginTop: 2 }}
+                onMouseEnter={() => setIsCostTreeHovered(true)}
+                onMouseLeave={() => setIsCostTreeHovered(false)}
+                style={{
+                  backgroundColor: isCostTreeHovered ? undefined : 'rgba(255,255,255,0.10)',
+                  transition: 'background-color 140ms ease, color 140ms ease, transform 140ms ease',
+                  marginTop: 2,
+                }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path
-                    d="M6 4h6v4H6V4zm6 12h6v4h-6v-4zM3 16h6v4H3v-4zm6-8h6v4H9V8z"
+                    d="M5 5h5v4H5V5zm9 0h5v4h-5V5zM5 15h5v4H5v-4zm9 0h5v4h-5v-4z"
                     stroke="currentColor"
                     strokeWidth="1.8"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                   <path
-                    d="M9 8v8m3-4h0"
+                    d="M10 7h4M7.5 9v6m9 0V9M10 17h4"
                     stroke="currentColor"
                     strokeWidth="1.8"
                     strokeLinecap="round"
