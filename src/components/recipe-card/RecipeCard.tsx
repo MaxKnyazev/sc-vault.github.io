@@ -203,19 +203,20 @@ export function RecipeCard({
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path
-                    d="M5 5h5v4H5V5zm9 0h5v4h-5V5zM5 15h5v4H5v-4zm9 0h5v4h-5v-4z"
+                    d="M12 4V8M12 8L7 12M12 8L17 12M7 12V16M7 12L4 16M7 12L10 16M17 12V16M17 12L14 16M17 12L20 16"
                     stroke="currentColor"
                     strokeWidth="1.8"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-                  <path
-                    d="M10 7h4M7.5 9v6m9 0V9M10 17h4"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
+                  <circle cx="12" cy="4" r="1.4" fill="currentColor" />
+                  <circle cx="12" cy="8" r="1.4" fill="currentColor" />
+                  <circle cx="7" cy="12" r="1.4" fill="currentColor" />
+                  <circle cx="17" cy="12" r="1.4" fill="currentColor" />
+                  <circle cx="4" cy="16" r="1.4" fill="currentColor" />
+                  <circle cx="10" cy="16" r="1.4" fill="currentColor" />
+                  <circle cx="14" cy="16" r="1.4" fill="currentColor" />
+                  <circle cx="20" cy="16" r="1.4" fill="currentColor" />
                 </svg>
               </ActionIcon>
               <Stack gap={2}>
