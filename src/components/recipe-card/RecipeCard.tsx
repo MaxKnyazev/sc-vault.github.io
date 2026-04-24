@@ -33,6 +33,10 @@ type RecipeCardProps = {
   showCraftToggle?: boolean
   defaultCraftOpen?: boolean
   showAdminOverrideControls?: boolean
+  costLine1?: string
+  costLine2?: string
+  costLine3?: string
+  onOpenCostTree?: (itemId: string) => void
 }
 
 function getItemPresentation(
@@ -60,6 +64,10 @@ export function RecipeCard({
   showCraftToggle = true,
   defaultCraftOpen = false,
   showAdminOverrideControls = false,
+  costLine1,
+  costLine2,
+  costLine3,
+  onOpenCostTree,
 }: RecipeCardProps) {
   const { isFavoriteCraft, toggleFavoriteCraft } = useFavoritesStore()
   const user = useAuthStore((s) => s.user)
@@ -174,6 +182,48 @@ export function RecipeCard({
               <AdminAuctionTrackingButton itemId={item.itemId} itemName={item.name} />
             </Stack>
           ))}
+          {primaryResultItemId ? (
+            <Group gap={8} wrap="nowrap" align="flex-start">
+              <ActionIcon
+                size={24}
+                radius="md"
+                variant="light"
+                color="gray"
+                aria-label="Открыть дерево крафтов"
+                title="Открыть дерево крафтов"
+                onClick={() => onOpenCostTree?.(primaryResultItemId)}
+                style={{ backgroundColor: 'rgba(255,255,255,0.10)', marginTop: 2 }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M6 4h6v4H6V4zm6 12h6v4h-6v-4zM3 16h6v4H3v-4zm6-8h6v4H9V8z"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M9 8v8m3-4h0"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </ActionIcon>
+              <Stack gap={2}>
+                <Text size="xs" c="dimmed">
+                  1) По цене скупа/крафта: {costLine1 ?? 'Недостаточно данных для расчета себестоимости'}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  2) По цене аукциона: {costLine2 ?? 'Заглушка (будет реализовано далее)'}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  3) Гибридный вариант: {costLine3 ?? 'Заглушка (будет реализовано далее)'}
+                </Text>
+              </Stack>
+            </Group>
+          ) : null}
         </Stack>
       ) : showResultTextOnly ? (
         <Stack gap={4}>
