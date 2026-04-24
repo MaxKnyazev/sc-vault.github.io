@@ -45,8 +45,10 @@ type UnresolvedMeta = {
 type IngredientFlowRow = {
   itemId: string
   amount: number
+  craftRuns: number
   source: 'craft' | 'buy' | 'unknown'
   perUnitCost: number | null
+  totalCost: number | null
   reasons: string[]
 }
 
@@ -596,16 +598,26 @@ export function CostPricePage() {
       return { source: 'unknown', bestRecipe, buyCost, reasons: getUnresolvedReasons(itemId) }
     }
 
-    const addRow = (itemId: string, amount: number, source: IngredientFlowRow['source'], perUnitCost: number | null, reasons: string[]) => {
+    const addRow = (
+      itemId: string,
+      amount: number,
+      craftRuns: number,
+      source: IngredientFlowRow['source'],
+      perUnitCost: number | null,
+      reasons: string[],
+    ) => {
       const normalizedAmount = normalizeAmount(amount)
       if (normalizedAmount <= 0) return
+      const normalizedRuns = normalizeAmount(craftRuns)
       const prev = rowsByItemId.get(itemId)
       if (!prev) {
         rowsByItemId.set(itemId, {
           itemId,
           amount: normalizedAmount,
+          craftRuns: normalizedRuns,
           source,
           perUnitCost,
+          totalCost: perUnitCost !== null ? normalizeAmount(perUnitCost * normalizedAmount) : null,
           reasons: [...new Set(reasons)],
         })
         return
@@ -615,8 +627,13 @@ export function CostPricePage() {
       rowsByItemId.set(itemId, {
         itemId,
         amount: normalizeAmount(prev.amount + normalizedAmount),
+        craftRuns: normalizeAmount(prev.craftRuns + normalizedRuns),
         source: mergedSource,
         perUnitCost: prev.perUnitCost ?? perUnitCost,
+        totalCost:
+          (prev.perUnitCost ?? perUnitCost) !== null
+            ? normalizeAmount((prev.perUnitCost ?? perUnitCost)! * normalizeAmount(prev.amount + normalizedAmount))
+            : null,
         reasons: mergedReasons,
       })
     }
@@ -647,7 +664,7 @@ export function CostPricePage() {
       let normalizedNeeded = normalizeAmount(amountNeeded)
       if (normalizedNeeded <= 0) return
       if (path.includes(itemId)) {
-        addRow(itemId, normalizedNeeded, 'unknown', null, ['обнаружен цикл в выбранной ветке'])
+        addRow(itemId, normalizedNeeded, 0, 'unknown', null, ['обнаружен цикл в выбранной ветке'])
         return
       }
       normalizedNeeded = consumeLeftover(itemId, normalizedNeeded)
@@ -661,14 +678,14 @@ export function CostPricePage() {
         resolved.bestRecipe.outputAmount <= 0
       ) {
         const perUnitCost = resolved.source === 'buy' ? resolved.buyCost : null
-        addRow(itemId, normalizedNeeded, resolved.source, perUnitCost, resolved.reasons)
+        addRow(itemId, normalizedNeeded, 0, resolved.source, perUnitCost, resolved.reasons)
         return
       }
 
       const runs = Math.max(1, Math.ceil((normalizedNeeded - EPS) / resolved.bestRecipe.outputAmount))
       const producedAmount = normalizeAmount(runs * resolved.bestRecipe.outputAmount)
       const leftoverAmount = normalizeAmount(producedAmount - normalizedNeeded)
-      addRow(itemId, normalizedNeeded, 'craft', resolved.bestRecipe.craftPerUnit, [])
+      addRow(itemId, normalizedNeeded, runs, 'craft', resolved.bestRecipe.craftPerUnit, [])
       if (resolved.bestRecipe.recipe.energy > 0) {
         walkSelectedPath(ENERGY_ROW_ID, normalizeAmount(resolved.bestRecipe.recipe.energy * runs), [...path, itemId])
       }
@@ -801,7 +818,7 @@ export function CostPricePage() {
         opened={treeItemId !== null}
         onClose={() => setTreeItemId(null)}
         title={treeItemId ? `Дерево крафтов: ${treeItemName}` : 'Дерево крафтов'}
-        size="xl"
+        size="90%"
         centered
         removeScrollProps={{
           removeScrollBar: false,
@@ -875,17 +892,23 @@ export function CostPricePage() {
                           padding: '6px 10px',
                         }}
                       >
-                        <Text size="xs" c="dimmed" style={{ width: 250 }}>
+                        <Text size="xs" c="dimmed" style={{ width: 240 }}>
                           Ингредиент
                         </Text>
                         <Text size="xs" c="dimmed" style={{ width: 90, textAlign: 'right' }}>
                           Кол-во
                         </Text>
-                        <Text size="xs" c="dimmed" style={{ width: 110, textAlign: 'right' }}>
+                        <Text size="xs" c="dimmed" style={{ width: 130, textAlign: 'right' }}>
+                          Кол-во крафтов
+                        </Text>
+                        <Text size="xs" c="dimmed" style={{ width: 100, textAlign: 'right' }}>
                           Способ
                         </Text>
-                        <Text size="xs" c="dimmed" style={{ width: 130, textAlign: 'right' }}>
+                        <Text size="xs" c="dimmed" style={{ width: 120, textAlign: 'right' }}>
                           Цена/шт
+                        </Text>
+                        <Text size="xs" c="dimmed" style={{ width: 120, textAlign: 'right' }}>
+                          Сумма
                         </Text>
                       </Group>
                       {ingredientFlow.rows.map((row, idx) => {
@@ -903,17 +926,23 @@ export function CostPricePage() {
                             }}
                           >
                             <Group justify="space-between" wrap="nowrap" align="flex-start">
-                              <Text size="sm" style={{ width: 250 }}>
+                              <Text size="sm" style={{ width: 240 }}>
                                 {rowName}
                               </Text>
                               <Text size="sm" style={{ width: 90, textAlign: 'right' }}>
                                 {formatBatchAmount(row.amount)}
                               </Text>
-                              <Text size="sm" c={sourceColor} style={{ width: 110, textAlign: 'right' }}>
+                              <Text size="sm" style={{ width: 130, textAlign: 'right' }}>
+                                {row.craftRuns > 0 ? formatBatchAmount(row.craftRuns) : '—'}
+                              </Text>
+                              <Text size="sm" c={sourceColor} style={{ width: 100, textAlign: 'right' }}>
                                 {sourceLabel}
                               </Text>
-                              <Text size="sm" style={{ width: 130, textAlign: 'right' }}>
+                              <Text size="sm" style={{ width: 120, textAlign: 'right' }}>
                                 {row.perUnitCost !== null ? `${formatAuctionRub(row.perUnitCost)} ₽` : '—'}
+                              </Text>
+                              <Text size="sm" style={{ width: 120, textAlign: 'right' }}>
+                                {row.totalCost !== null ? `${formatAuctionRub(row.totalCost)} ₽` : '—'}
                               </Text>
                             </Group>
                             {row.reasons.length > 0 ? (
