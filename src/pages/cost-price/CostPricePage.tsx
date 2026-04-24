@@ -1,4 +1,4 @@
-import { Alert, Box, Button, Divider, Group, Loader, Modal, ScrollArea, SimpleGrid, Stack, Text } from '@mantine/core'
+import { Alert, Box, Button, Divider, Group, Loader, Modal, ScrollArea, SimpleGrid, Stack, Text, TextInput } from '@mantine/core'
 import { useEffect, useMemo, useState } from 'react'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { PageContainer } from '../../components/page-container/PageContainer'
@@ -419,6 +419,7 @@ export function CostPricePage() {
   const energyPrice = useIngredientPricesStore((s) => s.energyPrice)
   const loadRemoteBuyPrices = useIngredientPricesStore((s) => s.loadRemoteBuyPrices)
   const [treeItemId, setTreeItemId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     void fetchRecipes()
@@ -744,6 +745,12 @@ export function CostPricePage() {
     }
   }, [buyPricesByItemId, costModel, itemsById, treeItemId])
 
+  const filteredCraftedItems = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return craftedItems
+    return craftedItems.filter((item) => `${item.name} ${item.itemId}`.toLowerCase().includes(query))
+  }, [craftedItems, search])
+
   return (
     <PageContainer>
       <SectionCard title="" description="">
@@ -766,8 +773,14 @@ export function CostPricePage() {
           ) : null}
 
           {!isLoading && !error ? (
+            <Stack gap="sm">
+              <TextInput
+                placeholder="Поиск: название или ID крафта..."
+                value={search}
+                onChange={(event) => setSearch(event.currentTarget.value)}
+              />
             <SimpleGrid cols={{ base: 1, sm: 2, md: 3, xl: 4 }} spacing="sm" verticalSpacing="sm">
-              {craftedItems.map((item) => (
+              {filteredCraftedItems.map((item) => (
                 <Stack
                   key={item.itemId}
                   gap={6}
@@ -811,6 +824,7 @@ export function CostPricePage() {
                 </Stack>
               ))}
             </SimpleGrid>
+            </Stack>
           ) : null}
         </Stack>
       </SectionCard>
