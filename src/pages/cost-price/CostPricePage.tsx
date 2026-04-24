@@ -55,6 +55,8 @@ type IngredientLeftoverRow = {
   amount: number
 }
 
+const ENERGY_ROW_ID = '__energy__'
+
 function parsePositiveNumber(raw: string | null | undefined): number | null {
   if (!raw) return null
   const normalized = raw.replace(',', '.').trim()
@@ -575,6 +577,13 @@ export function CostPricePage() {
       buyCost: number | null
       reasons: string[]
     } => {
+      if (itemId === ENERGY_ROW_ID) {
+        const energyUnitCost = parsePositiveNumber(energyPrice)
+        if (energyUnitCost !== null) {
+          return { source: 'buy', bestRecipe: null, buyCost: energyUnitCost, reasons: [] }
+        }
+        return { source: 'unknown', bestRecipe: null, buyCost: null, reasons: ['нет цены энергии'] }
+      }
       const buyCost = parsePositiveNumber(buyPricesByItemId[itemId] ?? null)
       const bestRecipe = costModel.bestRecipeOptionByItemId.get(itemId) ?? null
       const canCraft = bestRecipe?.craftPerUnit !== null
@@ -613,19 +622,37 @@ export function CostPricePage() {
     }
 
     const addLeftover = (itemId: string, amount: number) => {
+      if (itemId === ENERGY_ROW_ID) return
       const normalizedAmount = normalizeAmount(amount)
       if (normalizedAmount <= 0) return
       const prev = leftoversByItemId.get(itemId) ?? 0
       leftoversByItemId.set(itemId, normalizeAmount(prev + normalizedAmount))
     }
 
+    const consumeLeftover = (itemId: string, neededAmount: number): number => {
+      if (itemId === ENERGY_ROW_ID) return neededAmount
+      const currentLeftover = leftoversByItemId.get(itemId) ?? 0
+      if (currentLeftover <= 0) return neededAmount
+      const take = Math.min(currentLeftover, neededAmount)
+      const nextLeftover = normalizeAmount(currentLeftover - take)
+      if (nextLeftover > 0) {
+        leftoversByItemId.set(itemId, nextLeftover)
+      } else {
+        leftoversByItemId.delete(itemId)
+      }
+      return normalizeAmount(neededAmount - take)
+    }
+
     const walkSelectedPath = (itemId: string, amountNeeded: number, path: string[]) => {
-      const normalizedNeeded = normalizeAmount(amountNeeded)
+      let normalizedNeeded = normalizeAmount(amountNeeded)
       if (normalizedNeeded <= 0) return
       if (path.includes(itemId)) {
         addRow(itemId, normalizedNeeded, 'unknown', null, ['обнаружен цикл в выбранной ветке'])
         return
       }
+      normalizedNeeded = consumeLeftover(itemId, normalizedNeeded)
+      if (normalizedNeeded <= 0) return
+
       const resolved = resolveSource(itemId)
       if (
         resolved.source !== 'craft' ||
@@ -642,6 +669,9 @@ export function CostPricePage() {
       const producedAmount = normalizeAmount(runs * resolved.bestRecipe.outputAmount)
       const leftoverAmount = normalizeAmount(producedAmount - normalizedNeeded)
       addRow(itemId, normalizedNeeded, 'craft', resolved.bestRecipe.craftPerUnit, [])
+      if (resolved.bestRecipe.recipe.energy > 0) {
+        walkSelectedPath(ENERGY_ROW_ID, normalizeAmount(resolved.bestRecipe.recipe.energy * runs), [...path, itemId])
+      }
       if (leftoverAmount > 0) {
         addLeftover(itemId, leftoverAmount)
       }
@@ -658,6 +688,9 @@ export function CostPricePage() {
         ? normalizeAmount(rootResolved.bestRecipe.outputAmount)
         : null
     if (rootResolved.source === 'craft' && rootResolved.bestRecipe) {
+      if (rootResolved.bestRecipe.recipe.energy > 0) {
+        walkSelectedPath(ENERGY_ROW_ID, normalizeAmount(rootResolved.bestRecipe.recipe.energy), [treeItemId])
+      }
       for (const ingredient of rootResolved.bestRecipe.recipe.ingredients) {
         const childAmount = normalizeAmount(ingredient.amount)
         walkSelectedPath(ingredient.item, childAmount, [treeItemId])
@@ -671,15 +704,17 @@ export function CostPricePage() {
       }
       const aName = getItemName(itemsById[a.itemId]?.name?.lines) || a.itemId
       const bName = getItemName(itemsById[b.itemId]?.name?.lines) || b.itemId
-      return aName.localeCompare(bName, 'ru')
+      const normA = a.itemId === ENERGY_ROW_ID ? 'Энергия' : aName
+      const normB = b.itemId === ENERGY_ROW_ID ? 'Энергия' : bName
+      return normA.localeCompare(normB, 'ru')
     })
 
     const leftovers = [...leftoversByItemId.entries()]
       .filter(([, amount]) => amount > 0)
       .map(([itemId, amount]) => ({ itemId, amount }))
       .sort((a, b) => {
-        const aName = getItemName(itemsById[a.itemId]?.name?.lines) || a.itemId
-        const bName = getItemName(itemsById[b.itemId]?.name?.lines) || b.itemId
+        const aName = a.itemId === ENERGY_ROW_ID ? 'Энергия' : getItemName(itemsById[a.itemId]?.name?.lines) || a.itemId
+        const bName = b.itemId === ENERGY_ROW_ID ? 'Энергия' : getItemName(itemsById[b.itemId]?.name?.lines) || b.itemId
         return aName.localeCompare(bName, 'ru')
       })
 
@@ -855,7 +890,8 @@ export function CostPricePage() {
                       </Group>
                       {ingredientFlow.rows.map((row, idx) => {
                         const rowItem = itemsById[row.itemId]
-                        const rowName = getItemName(rowItem?.name?.lines) || row.itemId
+                        const rowName =
+                          row.itemId === ENERGY_ROW_ID ? 'Энергия' : getItemName(rowItem?.name?.lines) || row.itemId
                         const sourceLabel = row.source === 'craft' ? 'Крафт' : row.source === 'buy' ? 'Скуп' : 'Нет данных'
                         const sourceColor = row.source === 'craft' ? 'green.4' : row.source === 'buy' ? 'blue.3' : 'yellow.4'
                         return (
@@ -921,7 +957,8 @@ export function CostPricePage() {
                         </Group>
                         {ingredientFlow.leftovers.map((row, idx) => {
                           const rowItem = itemsById[row.itemId]
-                          const rowName = getItemName(rowItem?.name?.lines) || row.itemId
+                          const rowName =
+                            row.itemId === ENERGY_ROW_ID ? 'Энергия' : getItemName(rowItem?.name?.lines) || row.itemId
                           return (
                             <Box
                               key={`leftover-${row.itemId}-${idx}`}
