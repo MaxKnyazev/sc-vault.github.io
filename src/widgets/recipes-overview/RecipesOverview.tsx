@@ -340,7 +340,18 @@ export function RecipesOverview() {
       let normalizedNeeded = normalizeAmount(amountNeeded)
       if (normalizedNeeded <= 0) return
       if (path.includes(itemId)) {
-        addRow(itemId, normalizedNeeded, 0, 'unknown', null, ['обнаружен цикл в выбранной ветке'])
+        const anchoredCycleCost = costModel.effectiveCostByItemId.get(itemId)
+        if (anchoredCycleCost !== undefined && Number.isFinite(anchoredCycleCost)) {
+          addRow(itemId, normalizedNeeded, 0, 'craft', anchoredCycleCost, [
+            'обнаружен цикл в выбранной ветке',
+            'цена взята из SCC-оценки (циклический крафт с ценовым якорем)',
+          ])
+        } else {
+          addRow(itemId, normalizedNeeded, 0, 'unknown', null, [
+            'обнаружен цикл в выбранной ветке',
+            'нет ценового якоря для расчета цикла',
+          ])
+        }
         return
       }
       normalizedNeeded = consumeLeftover(itemId, normalizedNeeded)
