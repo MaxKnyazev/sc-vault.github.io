@@ -50,6 +50,11 @@ type IngredientFlowRow = {
   reasons: string[]
 }
 
+type IngredientLeftoverRow = {
+  itemId: string
+  amount: number
+}
+
 function parsePositiveNumber(raw: string | null | undefined): number | null {
   if (!raw) return null
   const normalized = raw.replace(',', '.').trim()
@@ -516,16 +521,28 @@ export function CostPricePage() {
     return getItemName(itemsById[treeItemId]?.name?.lines) || treeItemId
   }, [itemsById, treeItemId])
 
+  const formatBatchAmount = (value: number): string => {
+    const rounded = Math.round(value)
+    if (Math.abs(value - rounded) < 1e-9) {
+      return new Intl.NumberFormat('ru-RU').format(rounded)
+    }
+    return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3 }).format(Number(value.toFixed(3)))
+  }
+
   const ingredientFlow = useMemo(() => {
+    const EPS = 1e-9
     if (!treeItemId) {
       return {
         rootSource: 'unknown' as const,
         rootReasons: [] as string[],
+        rootOutputAmount: null as number | null,
         rows: [] as IngredientFlowRow[],
+        leftovers: [] as IngredientLeftoverRow[],
       }
     }
 
     const rowsByItemId = new Map<string, IngredientFlowRow>()
+    const leftoversByItemId = new Map<string, number>()
 
     const getUnresolvedReasons = (itemId: string): string[] => {
       const meta = costModel.unresolvedMetaByItemId.get(itemId)
@@ -544,6 +561,12 @@ export function CostPricePage() {
       if (meta.noRecipes) reasons.push('нет крафтовых рецептов')
       if (meta.noBuy) reasons.push('нет цены скупа')
       return reasons
+    }
+
+    const normalizeAmount = (value: number): number => {
+      if (Math.abs(value) < EPS) return 0
+      const rounded = Math.round(value)
+      return Math.abs(value - rounded) < EPS ? rounded : value
     }
 
     const resolveSource = (itemId: string): {
@@ -565,11 +588,13 @@ export function CostPricePage() {
     }
 
     const addRow = (itemId: string, amount: number, source: IngredientFlowRow['source'], perUnitCost: number | null, reasons: string[]) => {
+      const normalizedAmount = normalizeAmount(amount)
+      if (normalizedAmount <= 0) return
       const prev = rowsByItemId.get(itemId)
       if (!prev) {
         rowsByItemId.set(itemId, {
           itemId,
-          amount,
+          amount: normalizedAmount,
           source,
           perUnitCost,
           reasons: [...new Set(reasons)],
@@ -580,37 +605,61 @@ export function CostPricePage() {
       const mergedReasons = [...new Set([...prev.reasons, ...reasons])]
       rowsByItemId.set(itemId, {
         itemId,
-        amount: prev.amount + amount,
+        amount: normalizeAmount(prev.amount + normalizedAmount),
         source: mergedSource,
         perUnitCost: prev.perUnitCost ?? perUnitCost,
         reasons: mergedReasons,
       })
     }
 
+    const addLeftover = (itemId: string, amount: number) => {
+      const normalizedAmount = normalizeAmount(amount)
+      if (normalizedAmount <= 0) return
+      const prev = leftoversByItemId.get(itemId) ?? 0
+      leftoversByItemId.set(itemId, normalizeAmount(prev + normalizedAmount))
+    }
+
     const walkSelectedPath = (itemId: string, amountNeeded: number, path: string[]) => {
+      const normalizedNeeded = normalizeAmount(amountNeeded)
+      if (normalizedNeeded <= 0) return
       if (path.includes(itemId)) {
-        addRow(itemId, amountNeeded, 'unknown', null, ['обнаружен цикл в выбранной ветке'])
+        addRow(itemId, normalizedNeeded, 'unknown', null, ['обнаружен цикл в выбранной ветке'])
         return
       }
       const resolved = resolveSource(itemId)
-      const perUnitCost =
-        resolved.source === 'craft'
-          ? resolved.bestRecipe?.craftPerUnit ?? null
-          : resolved.source === 'buy'
-            ? resolved.buyCost
-            : null
-      addRow(itemId, amountNeeded, resolved.source, perUnitCost, resolved.reasons)
-      if (resolved.source !== 'craft' || !resolved.bestRecipe) return
+      if (
+        resolved.source !== 'craft' ||
+        !resolved.bestRecipe ||
+        resolved.bestRecipe.craftPerUnit === null ||
+        resolved.bestRecipe.outputAmount <= 0
+      ) {
+        const perUnitCost = resolved.source === 'buy' ? resolved.buyCost : null
+        addRow(itemId, normalizedNeeded, resolved.source, perUnitCost, resolved.reasons)
+        return
+      }
+
+      const runs = Math.max(1, Math.ceil((normalizedNeeded - EPS) / resolved.bestRecipe.outputAmount))
+      const producedAmount = normalizeAmount(runs * resolved.bestRecipe.outputAmount)
+      const leftoverAmount = normalizeAmount(producedAmount - normalizedNeeded)
+      addRow(itemId, normalizedNeeded, 'craft', resolved.bestRecipe.craftPerUnit, [])
+      if (leftoverAmount > 0) {
+        addLeftover(itemId, leftoverAmount)
+      }
+
       for (const ingredient of resolved.bestRecipe.recipe.ingredients) {
-        const childAmount = (amountNeeded * ingredient.amount) / resolved.bestRecipe.outputAmount
+        const childAmount = normalizeAmount(ingredient.amount * runs)
         walkSelectedPath(ingredient.item, childAmount, [...path, itemId])
       }
     }
 
     const rootResolved = resolveSource(treeItemId)
+    const rootOutputAmount =
+      rootResolved.source === 'craft' && rootResolved.bestRecipe
+        ? normalizeAmount(rootResolved.bestRecipe.outputAmount)
+        : null
     if (rootResolved.source === 'craft' && rootResolved.bestRecipe) {
       for (const ingredient of rootResolved.bestRecipe.recipe.ingredients) {
-        const childAmount = ingredient.amount / rootResolved.bestRecipe.outputAmount
+        const childAmount = normalizeAmount(ingredient.amount)
         walkSelectedPath(ingredient.item, childAmount, [treeItemId])
       }
     }
@@ -625,10 +674,21 @@ export function CostPricePage() {
       return aName.localeCompare(bName, 'ru')
     })
 
+    const leftovers = [...leftoversByItemId.entries()]
+      .filter(([, amount]) => amount > 0)
+      .map(([itemId, amount]) => ({ itemId, amount }))
+      .sort((a, b) => {
+        const aName = getItemName(itemsById[a.itemId]?.name?.lines) || a.itemId
+        const bName = getItemName(itemsById[b.itemId]?.name?.lines) || b.itemId
+        return aName.localeCompare(bName, 'ru')
+      })
+
     return {
       rootSource: rootResolved.source,
       rootReasons: rootResolved.reasons,
+      rootOutputAmount,
       rows,
+      leftovers,
     }
   }, [buyPricesByItemId, costModel, itemsById, treeItemId])
 
@@ -717,7 +777,9 @@ export function CostPricePage() {
             <Stack gap="sm">
               <Box>
                 <Text size="sm" c="dimmed">
-                  Ниже перечислены ингредиенты, используемые в выбранной ветке расчета (для 1 шт. итогового предмета).
+                  Ниже перечислены ингредиенты для одного запуска выбранного крафта итогового предмета (полный выход
+                  рецепта). Дробные количества возможны только из-за бонусного выхода в рецепте; при необходимости
+                  вложенные крафты округляются вверх до целого числа запусков.
                 </Text>
               </Box>
               <Divider />
@@ -758,6 +820,12 @@ export function CostPricePage() {
               ) : null}
               {ingredientFlow.rootSource === 'craft' ? (
                 <>
+                  {ingredientFlow.rootOutputAmount !== null ? (
+                    <Text size="sm" c="dimmed">
+                      За один крафт получается {formatBatchAmount(ingredientFlow.rootOutputAmount)} шт. итогового
+                      предмета.
+                    </Text>
+                  ) : null}
                   {ingredientFlow.rows.length === 0 ? (
                     <Text size="sm" c="dimmed">
                       У выбранного крафта нет вложенных ингредиентов.
@@ -803,7 +871,7 @@ export function CostPricePage() {
                                 {rowName}
                               </Text>
                               <Text size="sm" style={{ width: 90, textAlign: 'right' }}>
-                                {Number(row.amount.toFixed(3))}
+                                {formatBatchAmount(row.amount)}
                               </Text>
                               <Text size="sm" c={sourceColor} style={{ width: 110, textAlign: 'right' }}>
                                 {sourceLabel}
@@ -826,6 +894,56 @@ export function CostPricePage() {
                       })}
                     </Stack>
                   )}
+                  {ingredientFlow.leftovers.length > 0 ? (
+                    <Stack gap="xs" mt="md">
+                      <Text size="sm" fw={700}>
+                        Остаток после округления вложенных крафтов
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        Лишний выход промежуточных крафтов, если для покрытия потребности пришлось сделать больше одного
+                        запуска рецепта.
+                      </Text>
+                      <Stack gap={0}>
+                        <Group
+                          justify="space-between"
+                          wrap="nowrap"
+                          style={{
+                            background: 'rgba(255,255,255,0.03)',
+                            padding: '6px 10px',
+                          }}
+                        >
+                          <Text size="xs" c="dimmed" style={{ width: 250 }}>
+                            Предмет
+                          </Text>
+                          <Text size="xs" c="dimmed" style={{ width: 90, textAlign: 'right' }}>
+                            Остаток
+                          </Text>
+                        </Group>
+                        {ingredientFlow.leftovers.map((row, idx) => {
+                          const rowItem = itemsById[row.itemId]
+                          const rowName = getItemName(rowItem?.name?.lines) || row.itemId
+                          return (
+                            <Box
+                              key={`leftover-${row.itemId}-${idx}`}
+                              style={{
+                                padding: '8px 10px',
+                                background: idx % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)',
+                              }}
+                            >
+                              <Group justify="space-between" wrap="nowrap">
+                                <Text size="sm" style={{ width: 250 }}>
+                                  {rowName}
+                                </Text>
+                                <Text size="sm" style={{ width: 90, textAlign: 'right' }}>
+                                  {formatBatchAmount(row.amount)}
+                                </Text>
+                              </Group>
+                            </Box>
+                          )
+                        })}
+                      </Stack>
+                    </Stack>
+                  ) : null}
                 </>
               ) : null}
             </Stack>
