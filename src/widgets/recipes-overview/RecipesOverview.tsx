@@ -537,10 +537,29 @@ export function RecipesOverview() {
                     <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="sm">
                       {categoryRecipes.map(({ recipe, recipeFavoriteId }, index) => {
                         const primaryResultItemId = recipe.result[0]?.item
-                        const line1 =
-                          primaryResultItemId && costModel.effectiveCostByItemId.get(primaryResultItemId) !== undefined
-                            ? `${formatAuctionRub(costModel.effectiveCostByItemId.get(primaryResultItemId)!)} ₽/шт`
+                        const line1 = (() => {
+                          if (!primaryResultItemId) return 'Недостаточно данных для расчета себестоимости'
+                          const resolved = costModel.effectiveCostByItemId.get(primaryResultItemId)
+                          if (resolved !== undefined) return `${formatAuctionRub(resolved)} ₽/шт`
+                          const meta = costModel.unresolvedMetaByItemId.get(primaryResultItemId)
+                          if (!meta) return 'Недостаточно данных для расчета себестоимости'
+                          const reasons: string[] = []
+                          if (meta.cycleUnanchored) reasons.push('цикл без ценового якоря')
+                          if (meta.unstableCycle) reasons.push('цикл не сошелся')
+                          if (meta.missingEnergy) reasons.push('нет цены энергии')
+                          if (meta.missingIngredientIds.length > 0) {
+                            reasons.push(
+                              `нет цен ингредиентов: ${meta.missingIngredientIds
+                                .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
+                                .join(', ')}`,
+                            )
+                          }
+                          if (meta.noRecipes) reasons.push('нет крафтовых рецептов')
+                          if (meta.noBuy) reasons.push('нет цены скупа')
+                          return reasons.length > 0
+                            ? `Недостаточно данных (${reasons.join('; ')})`
                             : 'Недостаточно данных для расчета себестоимости'
+                        })()
                         return (
                           <RecipeCard
                             key={`${categoryName}-${recipe.bench}-${index}`}
