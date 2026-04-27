@@ -6,6 +6,7 @@ type ManualRecipeDef = {
   resultAmount: number
   ingredientNameRu: string
   ingredientAmount: number
+  perkId: 'pyrotechnics' | 'medicine'
 }
 
 const MANUAL_RECIPES: ManualRecipeDef[] = [
@@ -14,18 +15,21 @@ const MANUAL_RECIPES: ManualRecipeDef[] = [
     resultAmount: 10,
     ingredientNameRu: 'Ящик самодельных светошумов',
     ingredientAmount: 1,
+    perkId: 'pyrotechnics',
   },
   {
     resultNameRu: 'Граната «Кустарник-1»',
     resultAmount: 10,
     ingredientNameRu: 'Ящик гранат «Кустарник-1»',
     ingredientAmount: 1,
+    perkId: 'pyrotechnics',
   },
   {
     resultNameRu: 'Аптечка проводника',
     resultAmount: 10,
     ingredientNameRu: 'Подсумок с аптечками проводника',
     ingredientAmount: 1,
+    perkId: 'medicine',
   },
 ]
 
@@ -54,6 +58,9 @@ export function buildCustomManualRecipes(itemsById: Record<string, ListingItemWi
       ingredients: [{ item: ingredient.id, amount: def.ingredientAmount }],
       energy: 0,
       requirements: {
+        perks: {
+          [def.perkId]: 1,
+        },
         features: ['manual_unpack_no_energy', 'manual_unpack_no_bonus'],
       },
     })

@@ -92,9 +92,6 @@ function parsePositiveNumber(raw: string | null | undefined): number | null {
 function resolveRecipeCanonBranch(
   recipe: HideoutRecipe,
 ): CanonBranch | null {
-  if (recipe.requirements?.features?.includes('manual_unpack_no_energy')) {
-    return 'Сырье и материалы'
-  }
   const required = getRecipeRequiredSkill(recipe)
   if (!required) return null
   return BRANCH_BY_PERK[required.perkId] ?? null
