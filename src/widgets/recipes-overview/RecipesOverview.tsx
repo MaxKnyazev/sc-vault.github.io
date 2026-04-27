@@ -536,23 +536,56 @@ export function RecipesOverview() {
                         const primaryResultItemId = recipe.result[0]?.item
                         const line1 = (() => {
                           if (!primaryResultItemId) return 'Недостаточно данных для расчета себестоимости'
-                          const resolved = costModel.effectiveCostByItemId.get(primaryResultItemId)
-                          if (resolved !== undefined) return `${formatAuctionRub(resolved)} ₽/шт`
+                          const primaryResultAmount = recipe.result[0]?.amount ?? 0
+                          if (primaryResultAmount <= 0) return 'Недостаточно данных для расчета себестоимости'
+
+                          let totalInputCost = 0
+                          const missingReasons: string[] = []
+                          for (const ingredient of recipe.ingredients) {
+                            const perUnit = costModel.effectiveCostByItemId.get(ingredient.item)
+                            if (perUnit === undefined) {
+                              const missingName = getItemName(itemsById[ingredient.item]?.name?.lines) || ingredient.item
+                              missingReasons.push(`нет цены ингредиента: ${missingName}`)
+                              continue
+                            }
+                            totalInputCost += perUnit * ingredient.amount
+                          }
+                          if (recipe.energy > 0) {
+                            const energyUnitCost = parsePositiveNumber(energyPrice)
+                            if (energyUnitCost === null) {
+                              missingReasons.push('нет цены энергии')
+                            } else {
+                              totalInputCost += energyUnitCost * recipe.energy
+                            }
+                          }
+
+                          const recipeCraftPerUnit =
+                            missingReasons.length === 0 ? totalInputCost / primaryResultAmount : null
+                          const buyPerUnit = parsePositiveNumber(buyPricesByItemId[primaryResultItemId] ?? null)
+                          const resolved =
+                            recipeCraftPerUnit !== null && buyPerUnit !== null
+                              ? Math.min(recipeCraftPerUnit, buyPerUnit)
+                              : recipeCraftPerUnit ?? buyPerUnit
+
+                          if (resolved !== null) return `${formatAuctionRub(resolved)} ₽/шт`
+
                           const meta = costModel.unresolvedMetaByItemId.get(primaryResultItemId)
-                          if (!meta) return 'Недостаточно данных для расчета себестоимости'
+                          if (!meta && missingReasons.length === 0) return 'Недостаточно данных для расчета себестоимости'
                           const reasons: string[] = []
-                          if (meta.cycleUnanchored) reasons.push('цикл без ценового якоря')
-                          if (meta.unstableCycle) reasons.push('цикл не сошелся')
-                          if (meta.missingEnergy) reasons.push('нет цены энергии')
-                          if (meta.missingIngredientIds.length > 0) {
+                          reasons.push(...missingReasons)
+                          if (!buyPerUnit) reasons.push('нет цены скупа')
+                          if (meta?.cycleUnanchored) reasons.push('цикл без ценового якоря')
+                          if (meta?.unstableCycle) reasons.push('цикл не сошелся')
+                          if (meta?.missingEnergy) reasons.push('нет цены энергии')
+                          if ((meta?.missingIngredientIds.length ?? 0) > 0) {
                             reasons.push(
-                              `нет цен ингредиентов: ${meta.missingIngredientIds
+                              `нет цен ингредиентов: ${meta!.missingIngredientIds
                                 .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
                                 .join(', ')}`,
                             )
                           }
-                          if (meta.noRecipes) reasons.push('нет крафтовых рецептов')
-                          if (meta.noBuy) reasons.push('нет цены скупа')
+                          if (meta?.noRecipes) reasons.push('нет крафтовых рецептов')
+                          if (meta?.noBuy) reasons.push('нет цены скупа')
                           return reasons.length > 0
                             ? `Недостаточно данных (${reasons.join('; ')})`
                             : 'Недостаточно данных для расчета себестоимости'
