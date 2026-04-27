@@ -18,7 +18,7 @@ const MANUAL_RECIPES: ManualRecipeDef[] = [
     perkId: 'pyrotechnics',
   },
   {
-    resultNameRu: 'Граната «Кустарник-1»',
+    resultNameRu: 'Ручная граната «Кустарник-1»',
     resultAmount: 10,
     ingredientNameRu: 'Ящик гранат «Кустарник-1»',
     ingredientAmount: 1,
