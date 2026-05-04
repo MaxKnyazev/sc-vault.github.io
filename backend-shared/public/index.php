@@ -33,11 +33,14 @@ function resolve_allowed_origin_header(array $config): string
 {
     $raw = (string)($config['app_allowed_origin'] ?? '');
     $allowedOrigins = array_values(array_filter(array_map('trim', explode(',', $raw))));
+    $requestOrigin = trim((string)($_SERVER['HTTP_ORIGIN'] ?? ''));
+
     if (count($allowedOrigins) === 0) {
-        return '*';
+        // Browsers reject Access-Control-Allow-Origin: * when the request carries Authorization
+        // (preflight must echo a concrete Origin).
+        return $requestOrigin !== '' ? $requestOrigin : '*';
     }
 
-    $requestOrigin = trim((string)($_SERVER['HTTP_ORIGIN'] ?? ''));
     if ($requestOrigin !== '' && in_array($requestOrigin, $allowedOrigins, true)) {
         return $requestOrigin;
     }
@@ -47,8 +50,9 @@ function resolve_allowed_origin_header(array $config): string
 
 header('Vary: Origin');
 header('Access-Control-Allow-Origin: ' . resolve_allowed_origin_header($config));
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token, Accept');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+header('Access-Control-Max-Age: 86400');
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);
     exit;

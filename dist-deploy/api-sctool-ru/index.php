@@ -23,9 +23,28 @@ require $baseDir . '/src/Auth.php';
 require $baseDir . '/src/Auction.php';
 require $baseDir . '/src/UserBuyPrices.php';
 
-header('Access-Control-Allow-Origin: ' . $config['app_allowed_origin']);
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
+function resolve_allowed_origin_header(array $config): string
+{
+    $raw = (string)($config['app_allowed_origin'] ?? '');
+    $allowedOrigins = array_values(array_filter(array_map('trim', explode(',', $raw))));
+    $requestOrigin = trim((string)($_SERVER['HTTP_ORIGIN'] ?? ''));
+
+    if (count($allowedOrigins) === 0) {
+        return $requestOrigin !== '' ? $requestOrigin : '*';
+    }
+
+    if ($requestOrigin !== '' && in_array($requestOrigin, $allowedOrigins, true)) {
+        return $requestOrigin;
+    }
+
+    return $allowedOrigins[0];
+}
+
+header('Vary: Origin');
+header('Access-Control-Allow-Origin: ' . resolve_allowed_origin_header($config));
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token, Accept');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+header('Access-Control-Max-Age: 86400');
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);
     exit;
