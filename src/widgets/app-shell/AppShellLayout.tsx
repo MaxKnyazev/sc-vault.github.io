@@ -58,7 +58,7 @@ export function AppShellLayout() {
       '/': 'Главная',
       '/crafts': 'Крафты',
       '/ingredients': 'Ингредиенты',
-      '/auction-history': 'История аукциона',
+      '/auction-history': 'Отслеживание аукциона',
       '/profile': 'Профиль',
       '/users': 'Пользователи',
     }
@@ -67,7 +67,7 @@ export function AppShellLayout() {
     if (!pageTitle) {
       if (location.pathname.startsWith('/crafts')) pageTitle = 'Крафты'
       else if (location.pathname.startsWith('/ingredients')) pageTitle = 'Ингредиенты'
-      else if (location.pathname.startsWith('/auction-history')) pageTitle = 'История аукциона'
+      else if (location.pathname.startsWith('/auction-history')) pageTitle = 'Отслеживание аукциона'
       else if (location.pathname.startsWith('/profile')) pageTitle = 'Профиль'
       else if (location.pathname.startsWith('/users')) pageTitle = 'Пользователи'
       else pageTitle = 'Главная'
@@ -156,7 +156,7 @@ export function AppShellLayout() {
               component={Link}
               to="/auction-history"
               onClick={close}
-              label="История аукциона"
+              label="Отслеживание аукциона"
               active={location.pathname.startsWith('/auction-history')}
               styles={getNavItemStyles(location.pathname.startsWith('/auction-history'))}
             />

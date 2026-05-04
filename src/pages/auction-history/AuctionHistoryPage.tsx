@@ -5,30 +5,60 @@ import {
   Group,
   Loader,
   Modal,
+  Paper,
   ScrollArea,
   SimpleGrid,
   Stack,
   Text,
   TextInput,
 } from '@mantine/core'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PageContainer } from '../../components/page-container/PageContainer'
 import { SectionCard } from '../../components/section-card/SectionCard'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { AuctionPrice24hLine } from '../../components/auction-price-24h/AuctionPrice24hLine'
 import {
   addTrackedAuctionItem,
+  fetchAuctionItemActiveLots,
   fetchTrackedAuctionItems,
   removeTrackedAuctionItem,
   resolveAuctionItemIdByExactName,
+  type AuctionActiveLot,
 } from '../../shared/api/backendApi'
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import { authModalGlowModalStyles } from '../../shared/lib/authModalGlowStyles'
 import { useAuctionHistoryItemModalStore } from '../../shared/store/auctionHistoryItemModalStore'
+import { minActiveLotUnitPrice } from '../../shared/lib/auctionActiveLotsUtils'
+import { playAuctionDealSound } from '../../shared/lib/playAuctionDealSound'
+import {
+  readQualifyingEdgeSnapshot,
+  writeQualifyingEdgeSnapshot,
+} from '../../shared/lib/auctionQualifyingEdgeStorage'
+import { useAuctionDesiredBuyPricesStore } from '../../shared/store/auctionDesiredBuyPricesStore'
+import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
+
+const ACTIVE_LOTS_POLL_MS = 90_000
+
+function parseDesiredBuyRub(raw: string | undefined): number | null {
+  const digits = (raw ?? '').replace(/[^\d]/g, '')
+  if (digits === '') return null
+  const n = Number(digits)
+  if (!Number.isFinite(n) || n <= 0) return null
+  return n
+}
+
+type DealToast = {
+  id: string
+  itemId: string
+  name: string
+  minPrice: number
+}
 
 export function AuctionHistoryPage() {
   const { itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
+  const desiredBuyByItemId = useAuctionDesiredBuyPricesStore((s) => s.desiredBuyByItemId)
+  const setDesiredBuyPrice = useAuctionDesiredBuyPricesStore((s) => s.setDesiredBuyPrice)
   const [trackedItemIds, setTrackedItemIds] = useState<string[]>([])
   const [isLoadingTracked, setIsLoadingTracked] = useState(false)
   const [search, setSearch] = useState('')
@@ -40,6 +70,48 @@ export function AuctionHistoryPage() {
   const [pendingDeleteItemId, setPendingDeleteItemId] = useState<string | null>(null)
   const [trackedError, setTrackedError] = useState<string | null>(null)
   const openAuctionHistoryItemModal = useAuctionHistoryItemModalStore((s) => s.open)
+  const [lotsByItemId, setLotsByItemId] = useState<Record<string, AuctionActiveLot[]>>({})
+  const [dealToasts, setDealToasts] = useState<DealToast[]>([])
+  const [lotEvalNowMs, setLotEvalNowMs] = useState(() => Date.now())
+  const toastTimeoutsByIdRef = useRef<Map<string, number>>(new Map())
+
+  const dismissToast = useCallback((id: string) => {
+    const tid = toastTimeoutsByIdRef.current.get(id)
+    if (tid !== undefined) {
+      window.clearTimeout(tid)
+      toastTimeoutsByIdRef.current.delete(id)
+    }
+    setDealToasts((prev) => prev.filter((t) => t.id !== id))
+  }, [])
+
+  const pushDealToast = useCallback(
+    (toast: DealToast) => {
+      setDealToasts((prev) => [...prev, toast])
+      const tid = window.setTimeout(() => {
+        toastTimeoutsByIdRef.current.delete(toast.id)
+        setDealToasts((prev) => prev.filter((t) => t.id !== toast.id))
+      }, 10_000)
+      toastTimeoutsByIdRef.current.set(toast.id, tid)
+    },
+    [],
+  )
+
+  useEffect(() => {
+    const timeoutsRef = toastTimeoutsByIdRef
+    return () => {
+      const pending = timeoutsRef.current
+      for (const tid of pending.values()) {
+        window.clearTimeout(tid)
+      }
+      pending.clear()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (trackedItemIds.length === 0) return
+    const id = window.setInterval(() => setLotEvalNowMs(Date.now()), 5000)
+    return () => window.clearInterval(id)
+  }, [trackedItemIds.length])
 
   useEffect(() => {
     void fetchRecipes()
@@ -59,6 +131,70 @@ export function AuctionHistoryPage() {
       }
     })()
   }, [])
+
+  useEffect(() => {
+    if (trackedItemIds.length === 0) {
+      setLotsByItemId({})
+      return
+    }
+
+    let cancelled = false
+
+    const runPoll = async () => {
+      const entries = await Promise.all(
+        trackedItemIds.map(async (itemId) => {
+          try {
+            const lots = await fetchAuctionItemActiveLots(itemId, 150)
+            return [itemId, lots] as const
+          } catch {
+            return [itemId, [] as AuctionActiveLot[]] as const
+          }
+        }),
+      )
+      if (cancelled) return
+
+      const nextLots: Record<string, AuctionActiveLot[]> = {}
+      for (const [itemId, lots] of entries) {
+        nextLots[itemId] = lots
+      }
+      setLotsByItemId((prev) => ({ ...prev, ...nextLots }))
+
+      const nowMs = Date.now()
+      const desired = useAuctionDesiredBuyPricesStore.getState().desiredBuyByItemId
+      const prevEdge = readQualifyingEdgeSnapshot()
+      const nextEdge: Record<string, boolean> = {}
+      const hideout = useHideoutStore.getState()
+
+      for (const itemId of trackedItemIds) {
+        const lots = nextLots[itemId] ?? []
+        const threshold = parseDesiredBuyRub(desired[itemId])
+        const minP = minActiveLotUnitPrice(lots, nowMs)
+        const qualifying = threshold !== null && minP !== null && minP <= threshold
+        nextEdge[itemId] = qualifying
+
+        if (qualifying && prevEdge[itemId] !== true && minP !== null) {
+          const item = hideout.itemsById[itemId]
+          const name = getItemName(item?.name?.lines) || itemId
+          pushDealToast({
+            id: `${Date.now()}-${itemId}-${Math.random().toString(16).slice(2)}`,
+            itemId,
+            name,
+            minPrice: minP,
+          })
+          playAuctionDealSound()
+        }
+      }
+
+      writeQualifyingEdgeSnapshot(nextEdge)
+    }
+
+    void runPoll()
+    const intervalId = window.setInterval(() => void runPoll(), ACTIVE_LOTS_POLL_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [trackedItemIds, pushDealToast])
 
   const trackedItems = useMemo(() => {
     return trackedItemIds
@@ -108,7 +244,7 @@ export function AuctionHistoryPage() {
       <SectionCard title="" description="">
         <Stack gap="md">
           <Text size="xl" fw={700}>
-            История аукциона
+            Отслеживание аукциона
           </Text>
 
           <Group align="flex-end" wrap="wrap">
@@ -136,13 +272,24 @@ export function AuctionHistoryPage() {
 
           {!isLoading && !isLoadingTracked ? (
             <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
-              {filteredTrackedItems.map((item) => (
+              {filteredTrackedItems.map((item) => {
+                const desiredRaw = desiredBuyByItemId[item.itemId] ?? ''
+                const threshold = parseDesiredBuyRub(desiredRaw)
+                const minP = minActiveLotUnitPrice(lotsByItemId[item.itemId] ?? [], lotEvalNowMs)
+                const isDeal = threshold !== null && minP !== null && minP <= threshold
+                return (
                 <Stack
                   key={item.itemId}
                   gap={6}
                   p="md"
                   bd="1px solid var(--mantine-color-default-border)"
-                  style={{ borderRadius: 8 }}
+                  style={{
+                    borderRadius: 8,
+                    boxShadow: isDeal
+                      ? '0 0 22px 6px rgba(34, 197, 94, 0.72), 0 0 0 1px rgba(34, 197, 94, 0.35)'
+                      : undefined,
+                    transition: 'box-shadow 220ms ease',
+                  }}
                 >
                   <Group justify="space-between" align="center" wrap="nowrap">
                     <ItemBadge
@@ -181,12 +328,65 @@ export function AuctionHistoryPage() {
                     showNoCacheHint={false}
                     hideWhenNoData
                   />
+                  <TextInput
+                    label="Желаемая стоимость скупа"
+                    placeholder="₽ за 1 ед."
+                    value={desiredRaw}
+                    onChange={(event) => {
+                      const sanitized = event.currentTarget.value.replace(/[^\d]/g, '')
+                      setDesiredBuyPrice(item.itemId, sanitized)
+                    }}
+                  />
                 </Stack>
-              ))}
+                )
+              })}
             </SimpleGrid>
           ) : null}
         </Stack>
       </SectionCard>
+
+      <Stack
+        gap="sm"
+        style={{
+          position: 'fixed',
+          top: 16,
+          right: 16,
+          zIndex: 1000,
+          maxWidth: 360,
+          width: 'min(360px, calc(100vw - 32px))',
+          pointerEvents: 'none',
+        }}
+      >
+        {dealToasts.map((toast) => (
+          <Paper
+            key={toast.id}
+            shadow="md"
+            p="sm"
+            withBorder
+            style={{ pointerEvents: 'auto', background: 'var(--mantine-color-body)' }}
+          >
+            <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
+              <Stack gap={4} style={{ minWidth: 0 }}>
+                <Text size="sm" fw={700} lineClamp={2}>
+                  Выгодный лот: {toast.name}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  От {formatAuctionRub(toast.minPrice)} ₽/ед. при вашем скупе
+                </Text>
+              </Stack>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                aria-label="Закрыть уведомление"
+                onClick={() => dismissToast(toast.id)}
+              >
+                ✕
+              </ActionIcon>
+            </Group>
+          </Paper>
+        ))}
+      </Stack>
 
       <Modal
         opened={isModalOpened}

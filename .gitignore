@@ -55,3 +55,6 @@ Desktop.ini
 *.njsproj
 *.sln
 *.sw?
+
+agents-master
+docs/implementation/
