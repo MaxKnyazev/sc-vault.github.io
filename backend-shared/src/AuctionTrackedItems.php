@@ -1,6 +1,9 @@
 <?php
 
-function get_tracked_auction_item_ids(PDO $db): array
+declare(strict_types=1);
+
+/** Глобальный список (крон, вкладка «Все отслеживания»). */
+function get_global_tracked_auction_item_ids(PDO $db): array
 {
     $stmt = $db->query('SELECT item_id FROM auction_tracked_items ORDER BY created_at ASC');
     $rows = $stmt->fetchAll();
@@ -11,7 +14,50 @@ function get_tracked_auction_item_ids(PDO $db): array
     return $ids;
 }
 
-function add_tracked_auction_item(PDO $db, string $itemId, ?int $userId): void
+/** Совместимость: крон и сборщик используют только глобальный список. */
+function get_tracked_auction_item_ids(PDO $db): array
+{
+    return get_global_tracked_auction_item_ids($db);
+}
+
+function get_user_tracked_auction_item_ids(PDO $db, int $userId): array
+{
+    $stmt = $db->prepare(
+        'SELECT item_id FROM auction_user_tracked_items WHERE user_id = ? ORDER BY created_at ASC',
+    );
+    $stmt->execute([$userId]);
+    $ids = [];
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $ids[] = (string)($row['item_id'] ?? '');
+    }
+    return array_values(array_filter($ids, static fn ($id) => $id !== ''));
+}
+
+function global_has_tracked_item(PDO $db, string $itemId): bool
+{
+    $norm = trim($itemId);
+    if ($norm === '') {
+        return false;
+    }
+    $stmt = $db->prepare('SELECT 1 FROM auction_tracked_items WHERE item_id = ? LIMIT 1');
+    $stmt->execute([$norm]);
+    return (bool)$stmt->fetchColumn();
+}
+
+function user_has_tracked_item(PDO $db, int $userId, string $itemId): bool
+{
+    $norm = trim($itemId);
+    if ($norm === '') {
+        return false;
+    }
+    $stmt = $db->prepare(
+        'SELECT 1 FROM auction_user_tracked_items WHERE user_id = ? AND item_id = ? LIMIT 1',
+    );
+    $stmt->execute([$userId, $norm]);
+    return (bool)$stmt->fetchColumn();
+}
+
+function insert_global_tracked_item(PDO $db, string $itemId, ?int $addedByUserId): void
 {
     $normalized = trim($itemId);
     if ($normalized === '') {
@@ -20,19 +66,81 @@ function add_tracked_auction_item(PDO $db, string $itemId, ?int $userId): void
     $stmt = $db->prepare(
         'INSERT INTO auction_tracked_items (item_id, added_by_user_id, created_at)
          VALUES (?, ?, UTC_TIMESTAMP())
-         ON DUPLICATE KEY UPDATE item_id = item_id'
+         ON DUPLICATE KEY UPDATE item_id = item_id',
     );
-    $stmt->execute([$normalized, $userId]);
+    $stmt->execute([$normalized, $addedByUserId]);
 }
 
-function remove_tracked_auction_item(PDO $db, string $itemId): void
+function add_user_tracked_row(PDO $db, int $userId, string $itemId): void
 {
-    $normalized = trim($itemId);
-    if ($normalized === '') {
+    $norm = trim($itemId);
+    if ($norm === '') {
+        throw new InvalidArgumentException('itemId required');
+    }
+    $stmt = $db->prepare(
+        'INSERT INTO auction_user_tracked_items (user_id, item_id, created_at)
+         VALUES (?, ?, UTC_TIMESTAMP())
+         ON DUPLICATE KEY UPDATE item_id = VALUES(item_id)',
+    );
+    $stmt->execute([$userId, $norm]);
+}
+
+/**
+ * @return array{addedGlobal: bool}
+ */
+function ensure_tracked_for_user(PDO $db, string $itemId, int $userId, ?int $addedByUserId): array
+{
+    $norm = trim($itemId);
+    if ($norm === '') {
+        throw new InvalidArgumentException('itemId required');
+    }
+    if (global_has_tracked_item($db, $norm)) {
+        add_user_tracked_row($db, $userId, $norm);
+        return ['addedGlobal' => false];
+    }
+    insert_global_tracked_item($db, $norm, $addedByUserId ?? $userId);
+    add_user_tracked_row($db, $userId, $norm);
+    return ['addedGlobal' => true];
+}
+
+function remove_user_tracked_row(PDO $db, int $userId, string $itemId): void
+{
+    $norm = trim($itemId);
+    if ($norm === '') {
+        throw new InvalidArgumentException('itemId required');
+    }
+    $stmt = $db->prepare('DELETE FROM auction_user_tracked_items WHERE user_id = ? AND item_id = ?');
+    $stmt->execute([$userId, $norm]);
+}
+
+function remove_global_tracked_admin(PDO $db, string $itemId): void
+{
+    $norm = trim($itemId);
+    if ($norm === '') {
         throw new InvalidArgumentException('itemId required');
     }
     $stmt = $db->prepare('DELETE FROM auction_tracked_items WHERE item_id = ?');
-    $stmt->execute([$normalized]);
+    $stmt->execute([$norm]);
+    $stmt = $db->prepare('DELETE FROM auction_user_tracked_items WHERE item_id = ?');
+    $stmt->execute([$norm]);
+    $stmt = $db->prepare('DELETE FROM auction_tracked_desired_buy_prices WHERE item_id = ?');
+    $stmt->execute([$norm]);
+}
+
+/** @deprecated Используйте ensure_tracked_for_user; оставлено для совместимости вызовов. */
+function add_tracked_auction_item(PDO $db, string $itemId, ?int $userId): void
+{
+    if ($userId === null) {
+        insert_global_tracked_item($db, $itemId, null);
+        return;
+    }
+    ensure_tracked_for_user($db, $itemId, $userId, $userId);
+}
+
+/** @deprecated Используйте remove_user_tracked_row или remove_global_tracked_admin. */
+function remove_tracked_auction_item(PDO $db, string $itemId): void
+{
+    remove_global_tracked_admin($db, $itemId);
 }
 
 function normalize_auction_item_name_key(string $name): string
@@ -184,7 +292,6 @@ function resolve_auction_item_id_by_exact_name(string $name): string
         return (string)$cached[$key];
     }
 
-    // Fast path: listing.json.
     try {
         $listingIndex = build_auction_item_name_index_from_listing();
         if (isset($listingIndex[$key])) {
@@ -194,7 +301,6 @@ function resolve_auction_item_id_by_exact_name(string $name): string
         // Fallback to archive index.
     }
 
-    // Full fallback: build index from ru/items archive and cache it.
     $archiveIndex = build_auction_item_name_index_from_archive();
     save_auction_item_name_cache($archiveIndex);
     if (!isset($archiveIndex[$key])) {
@@ -214,4 +320,3 @@ function resolve_auction_item_id_by_exact_name(string $name): string
     }
     return (string)$archiveIndex[$key];
 }
-

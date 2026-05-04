@@ -8,10 +8,11 @@ import {
   ScrollArea,
   SimpleGrid,
   Stack,
+  Tabs,
   Text,
   TextInput,
 } from '@mantine/core'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageContainer } from '../../components/page-container/PageContainer'
 import { SectionCard } from '../../components/section-card/SectionCard'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
@@ -29,69 +30,125 @@ import { minActiveLotUnitPrice } from '../../shared/lib/auctionActiveLotsUtils'
 import { parseDesiredBuyRub } from '../../shared/lib/parseDesiredBuyRub'
 import { useAuctionDesiredBuyPricesStore } from '../../shared/store/auctionDesiredBuyPricesStore'
 import { useAuctionTrackedLotsStore } from '../../shared/store/auctionTrackedLotsStore'
+import { useAuthStore } from '../../shared/store/authStore'
+
+type TrackedRow = {
+  itemId: string
+  name: string
+  iconUrl?: string
+  qualityColor?: string
+}
 
 export function AuctionHistoryPage() {
   const { itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
+  const user = useAuthStore((s) => s.user)
+  const isAdmin = user?.role === 'admin'
   const desiredBuyByItemId = useAuctionDesiredBuyPricesStore((s) => s.desiredBuyByItemId)
-  const setDesiredBuyPrice = useAuctionDesiredBuyPricesStore((s) => s.setDesiredBuyPrice)
-  const [trackedItemIds, setTrackedItemIds] = useState<string[]>([])
-  const [isLoadingTracked, setIsLoadingTracked] = useState(false)
+  const saveDesiredBuyPrice = useAuctionDesiredBuyPricesStore((s) => s.saveDesiredBuyPrice)
+
+  const [mineIds, setMineIds] = useState<string[]>([])
+  const [globalIds, setGlobalIds] = useState<string[]>([])
+  const [listsError, setListsError] = useState<string | null>(null)
+  const [isLoadingLists, setIsLoadingLists] = useState(true)
+
+  const [activeTab, setActiveTab] = useState<string>('mine')
   const [search, setSearch] = useState('')
   const [isModalOpened, setIsModalOpened] = useState(false)
   const [modalSearch, setModalSearch] = useState('')
   const [manualItemName, setManualItemName] = useState('')
   const [isAddingItemId, setIsAddingItemId] = useState<string | null>(null)
   const [isRemovingItemId, setIsRemovingItemId] = useState<string | null>(null)
-  const [pendingDeleteItemId, setPendingDeleteItemId] = useState<string | null>(null)
+  const [pendingRemove, setPendingRemove] = useState<null | { scope: 'my' | 'global'; item: TrackedRow }>(null)
   const [trackedError, setTrackedError] = useState<string | null>(null)
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({})
+  const [savingPriceItemId, setSavingPriceItemId] = useState<string | null>(null)
+
   const openAuctionHistoryItemModal = useAuctionHistoryItemModalStore((s) => s.open)
   const lotsByItemId = useAuctionTrackedLotsStore((s) => s.lotsByItemId)
   const [lotEvalNowMs, setLotEvalNowMs] = useState(() => Date.now())
 
-  useEffect(() => {
-    if (trackedItemIds.length === 0) return
-    const id = window.setInterval(() => setLotEvalNowMs(Date.now()), 5000)
-    return () => window.clearInterval(id)
-  }, [trackedItemIds.length])
+  const reloadLists = useCallback(async () => {
+    setIsLoadingLists(true)
+    setListsError(null)
+    try {
+      const [mine, global] = await Promise.all([
+        fetchTrackedAuctionItems('mine'),
+        fetchTrackedAuctionItems('global'),
+      ])
+      setMineIds(mine)
+      setGlobalIds(global)
+    } catch (e) {
+      setListsError(e instanceof Error ? e.message : 'Не удалось загрузить списки отслеживания')
+    } finally {
+      setIsLoadingLists(false)
+    }
+  }, [])
 
   useEffect(() => {
     void fetchRecipes()
   }, [fetchRecipes])
 
   useEffect(() => {
-    void (async () => {
-      setIsLoadingTracked(true)
-      setTrackedError(null)
-      try {
-        const ids = await fetchTrackedAuctionItems()
-        setTrackedItemIds(ids)
-      } catch (e) {
-        setTrackedError(e instanceof Error ? e.message : 'Не удалось загрузить отслеживаемые предметы')
-      } finally {
-        setIsLoadingTracked(false)
-      }
-    })()
-  }, [])
+    void reloadLists()
+    void useAuctionDesiredBuyPricesStore.getState().loadRemote()
+  }, [reloadLists])
 
-  const trackedItems = useMemo(() => {
-    return trackedItemIds
-      .map((itemId) => {
-        const item = itemsById[itemId]
-        return {
-          itemId,
-          name: getItemName(item?.name?.lines) || itemId,
-          iconUrl: item ? buildItemIconUrl(item.icon, realm) : undefined,
-          qualityColor: item?.color,
+  useEffect(() => {
+    const ids = mineIds
+    if (ids.length === 0) return
+    const id = window.setInterval(() => setLotEvalNowMs(Date.now()), 5000)
+    return () => window.clearInterval(id)
+  }, [mineIds.length])
+
+  useEffect(() => {
+    setPriceDrafts((prev) => {
+      const next = { ...prev }
+      for (const itemId of mineIds) {
+        if (next[itemId] === undefined) {
+          next[itemId] = desiredBuyByItemId[itemId] ?? ''
         }
-      })
-      .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
-  }, [itemsById, realm, trackedItemIds])
+      }
+      for (const k of Object.keys(next)) {
+        if (!mineIds.includes(k)) delete next[k]
+      }
+      return next
+    })
+  }, [mineIds, desiredBuyByItemId])
 
-  const filteredTrackedItems = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    if (!query) return trackedItems
-    return trackedItems.filter((item) => `${item.name} ${item.itemId}`.toLowerCase().includes(query))
-  }, [search, trackedItems])
+  const mineSet = useMemo(() => new Set(mineIds), [mineIds])
+  const globalSet = useMemo(() => new Set(globalIds), [globalIds])
+
+  const toRows = useCallback(
+    (ids: string[]): TrackedRow[] => {
+      return ids
+        .map((itemId) => {
+          const item = itemsById[itemId]
+          return {
+            itemId,
+            name: getItemName(item?.name?.lines) || itemId,
+            iconUrl: item ? buildItemIconUrl(item.icon, realm) : undefined,
+            qualityColor: item?.color,
+          }
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+    },
+    [itemsById, realm],
+  )
+
+  const mineRows = useMemo(() => toRows(mineIds), [mineIds, toRows])
+  const globalRows = useMemo(() => toRows(globalIds), [globalIds, toRows])
+
+  const filteredMineRows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return mineRows
+    return mineRows.filter((item) => `${item.name} ${item.itemId}`.toLowerCase().includes(q))
+  }, [mineRows, search])
+
+  const filteredGlobalRows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return globalRows
+    return globalRows.filter((item) => `${item.name} ${item.itemId}`.toLowerCase().includes(q))
+  }, [globalRows, search])
 
   const allItems = useMemo(() => {
     return Object.values(itemsById)
@@ -110,11 +167,13 @@ export function AuctionHistoryPage() {
     return allItems.filter((item) => `${item.name} ${item.itemId}`.toLowerCase().includes(query))
   }, [allItems, modalSearch])
 
-  const trackedSet = useMemo(() => new Set(trackedItemIds), [trackedItemIds])
-  const pendingDeleteItem = useMemo(
-    () => trackedItems.find((item) => item.itemId === pendingDeleteItemId) ?? null,
-    [pendingDeleteItemId, trackedItems],
-  )
+  const getModalButtonLabel = (itemId: string) => {
+    if (mineSet.has(itemId)) return 'В моих'
+    if (globalSet.has(itemId)) return 'Подписаться'
+    return 'Добавить'
+  }
+
+  const isModalAddDisabled = (itemId: string) => mineSet.has(itemId)
 
   return (
     <PageContainer>
@@ -136,82 +195,181 @@ export function AuctionHistoryPage() {
                 setModalSearch('')
                 setManualItemName('')
                 setTrackedError(null)
-                setIsModalOpened(true)
+                void reloadLists().then(() => setIsModalOpened(true))
               }}
             >
               Отслеживать новый предмет
             </Button>
           </Group>
 
+          {listsError ? <Alert color="red">{listsError}</Alert> : null}
           {trackedError ? <Alert color="red">{trackedError}</Alert> : null}
-          {isLoading || isLoadingTracked ? <Loader size="sm" /> : null}
+          {isLoading || isLoadingLists ? <Loader size="sm" /> : null}
           {error ? <Alert color="red">{error}</Alert> : null}
 
-          {!isLoading && !isLoadingTracked ? (
-            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
-              {filteredTrackedItems.map((item) => {
-                const desiredRaw = desiredBuyByItemId[item.itemId] ?? ''
-                const threshold = parseDesiredBuyRub(desiredRaw)
-                const minP = minActiveLotUnitPrice(lotsByItemId[item.itemId] ?? [], lotEvalNowMs)
-                const isDeal = threshold !== null && minP !== null && minP <= threshold
-                return (
-                <Stack
-                  key={item.itemId}
-                  gap={6}
-                  p="md"
-                  bd="1px solid var(--mantine-color-default-border)"
-                  style={{
-                    borderRadius: 8,
-                    boxShadow: isDeal
-                      ? '0 0 14px 3px rgba(34, 197, 94, 0.38), 0 0 0 1px rgba(34, 197, 94, 0.22)'
-                      : undefined,
-                    transition: 'box-shadow 220ms ease',
-                  }}
-                >
-                  <Group justify="space-between" align="center" wrap="nowrap">
-                    <ItemBadge
-                      itemId={item.itemId}
-                      name={item.name}
-                      iconUrl={item.iconUrl}
-                      qualityColor={item.qualityColor}
-                      size="result"
-                      showFavoriteButton={false}
-                      openDetailsOnClick={false}
-                      onClick={() => openAuctionHistoryItemModal(item.itemId)}
-                    />
-                    <ActionIcon
-                      size={40}
-                      color="red"
-                      variant="light"
-                      aria-label="Удалить из отслеживания"
-                      title="Удалить из отслеживания"
-                      loading={isRemovingItemId === item.itemId}
-                      onClick={() => setPendingDeleteItemId(item.itemId)}
+          {!isLoading && !isLoadingLists ? (
+            <Tabs value={activeTab} onChange={(v) => setActiveTab(v ?? 'mine')}>
+              <Tabs.List>
+                <Tabs.Tab value="mine">Мои отслеживания</Tabs.Tab>
+                <Tabs.Tab value="global">Все отслеживания</Tabs.Tab>
+              </Tabs.List>
+
+              <Tabs.Panel value="mine" pt="md">
+                <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
+                  {filteredMineRows.map((item) => {
+                    const draft = priceDrafts[item.itemId] ?? desiredBuyByItemId[item.itemId] ?? ''
+                    const threshold = parseDesiredBuyRub(draft)
+                    const minP = minActiveLotUnitPrice(lotsByItemId[item.itemId] ?? [], lotEvalNowMs)
+                    const isDeal = threshold !== null && minP !== null && minP <= threshold
+                    return (
+                      <Stack
+                        key={item.itemId}
+                        gap={6}
+                        p="md"
+                        bd="1px solid var(--mantine-color-default-border)"
+                        style={{
+                          borderRadius: 8,
+                          boxShadow: isDeal
+                            ? '0 0 14px 3px rgba(34, 197, 94, 0.38), 0 0 0 1px rgba(34, 197, 94, 0.22)'
+                            : undefined,
+                          transition: 'box-shadow 220ms ease',
+                        }}
+                      >
+                        <Group justify="space-between" align="center" wrap="nowrap">
+                          <ItemBadge
+                            itemId={item.itemId}
+                            name={item.name}
+                            iconUrl={item.iconUrl}
+                            qualityColor={item.qualityColor}
+                            size="result"
+                            showFavoriteButton={false}
+                            openDetailsOnClick={false}
+                            onClick={() => openAuctionHistoryItemModal(item.itemId)}
+                          />
+                          <ActionIcon
+                            size={40}
+                            color="red"
+                            variant="light"
+                            aria-label="Убрать из моих отслеживаний"
+                            title="Убрать из моих отслеживаний"
+                            loading={isRemovingItemId === item.itemId}
+                            onClick={() => setPendingRemove({ scope: 'my', item })}
+                          >
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                              <path
+                                d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </ActionIcon>
+                        </Group>
+                        <Group align="flex-end" wrap="nowrap" gap="xs">
+                          <TextInput
+                            label="Желаемая стоимость скупа"
+                            placeholder="₽ за 1 ед."
+                            value={draft}
+                            style={{ flex: 1 }}
+                            onChange={(event) => {
+                              const sanitized = event.currentTarget.value.replace(/[^\d]/g, '')
+                              setPriceDrafts((p) => ({ ...p, [item.itemId]: sanitized }))
+                            }}
+                          />
+                          <Button
+                            variant="default"
+                            color="gray"
+                            loading={savingPriceItemId === item.itemId}
+                            disabled={draft === (desiredBuyByItemId[item.itemId] ?? '')}
+                            onClick={async () => {
+                              setSavingPriceItemId(item.itemId)
+                              setTrackedError(null)
+                              try {
+                                await saveDesiredBuyPrice(item.itemId, draft)
+                              } catch (e) {
+                                setTrackedError(
+                                  e instanceof Error ? e.message : 'Не удалось сохранить цену скупа',
+                                )
+                              } finally {
+                                setSavingPriceItemId(null)
+                              }
+                            }}
+                          >
+                            Сохранить
+                          </Button>
+                        </Group>
+                      </Stack>
+                    )
+                  })}
+                </SimpleGrid>
+              </Tabs.Panel>
+
+              <Tabs.Panel value="global" pt="md">
+                <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
+                  {filteredGlobalRows.map((item) => (
+                    <Stack
+                      key={`g-${item.itemId}`}
+                      gap={8}
+                      p="md"
+                      bd="1px solid var(--mantine-color-default-border)"
+                      style={{ borderRadius: 8 }}
                     >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path
-                          d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </ActionIcon>
-                  </Group>
-                  <TextInput
-                    label="Желаемая стоимость скупа"
-                    placeholder="₽ за 1 ед."
-                    value={desiredRaw}
-                    onChange={(event) => {
-                      const sanitized = event.currentTarget.value.replace(/[^\d]/g, '')
-                      setDesiredBuyPrice(item.itemId, sanitized)
-                    }}
-                  />
-                </Stack>
-                )
-              })}
-            </SimpleGrid>
+                      <ItemBadge
+                        itemId={item.itemId}
+                        name={item.name}
+                        iconUrl={item.iconUrl}
+                        qualityColor={item.qualityColor}
+                        size="result"
+                        showFavoriteButton={false}
+                        openDetailsOnClick={false}
+                        onClick={() => openAuctionHistoryItemModal(item.itemId)}
+                      />
+                      <Group gap="xs" wrap="wrap">
+                        {!mineSet.has(item.itemId) ? (
+                          <Button
+                            size="sm"
+                            loading={isAddingItemId === item.itemId}
+                            onClick={async () => {
+                              setIsAddingItemId(item.itemId)
+                              setTrackedError(null)
+                              try {
+                                await addTrackedAuctionItem(item.itemId)
+                                await reloadLists()
+                                useAuctionTrackedLotsStore.getState().bumpPoll()
+                              } catch (e) {
+                                setTrackedError(
+                                  e instanceof Error ? e.message : 'Не удалось подписаться на предмет',
+                                )
+                              } finally {
+                                setIsAddingItemId(null)
+                              }
+                            }}
+                          >
+                            Подписаться
+                          </Button>
+                        ) : (
+                          <Text size="sm" c="dimmed">
+                            Уже в «Моих отслеживаниях»
+                          </Text>
+                        )}
+                        {isAdmin ? (
+                          <Button
+                            size="sm"
+                            color="red"
+                            variant="light"
+                            loading={isRemovingItemId === item.itemId}
+                            onClick={() => setPendingRemove({ scope: 'global', item })}
+                          >
+                            Убрать для всех
+                          </Button>
+                        ) : null}
+                      </Group>
+                    </Stack>
+                  ))}
+                </SimpleGrid>
+              </Tabs.Panel>
+            </Tabs>
           ) : null}
         </Stack>
       </SectionCard>
@@ -231,6 +389,9 @@ export function AuctionHistoryPage() {
         <Stack gap="sm">
           <Text size="lg" fw={700}>
             Добавить предмет в отслеживание
+          </Text>
+          <Text size="xs" c="dimmed">
+            Если предмет уже есть во «Все отслеживания», он будет только добавлен в «Мои отслеживания».
           </Text>
           <TextInput
             placeholder="Поиск по всем предметам STALCRAFT..."
@@ -256,7 +417,7 @@ export function AuctionHistoryPage() {
                 try {
                   const resolvedItemId = await resolveAuctionItemIdByExactName(normalized)
                   await addTrackedAuctionItem(resolvedItemId)
-                  setTrackedItemIds((prev) => [...new Set([...prev, resolvedItemId])])
+                  await reloadLists()
                   useAuctionTrackedLotsStore.getState().bumpPoll()
                   setManualItemName('')
                 } catch (e) {
@@ -292,7 +453,7 @@ export function AuctionHistoryPage() {
                   />
                   <Button
                     size="sm"
-                    disabled={trackedSet.has(item.itemId)}
+                    disabled={isModalAddDisabled(item.itemId)}
                     loading={isAddingItemId === item.itemId}
                     style={{ minWidth: 112, whiteSpace: 'nowrap', flexShrink: 0 }}
                     onClick={async () => {
@@ -300,7 +461,7 @@ export function AuctionHistoryPage() {
                       setTrackedError(null)
                       try {
                         await addTrackedAuctionItem(item.itemId)
-                        setTrackedItemIds((prev) => [...new Set([...prev, item.itemId])])
+                        await reloadLists()
                         useAuctionTrackedLotsStore.getState().bumpPoll()
                       } catch (e) {
                         setTrackedError(
@@ -311,7 +472,7 @@ export function AuctionHistoryPage() {
                       }
                     }}
                   >
-                    {trackedSet.has(item.itemId) ? 'Добавлено' : 'Добавить'}
+                    {getModalButtonLabel(item.itemId)}
                   </Button>
                 </Group>
               ))}
@@ -321,9 +482,9 @@ export function AuctionHistoryPage() {
       </Modal>
 
       <Modal
-        opened={pendingDeleteItem !== null}
+        opened={pendingRemove !== null}
         onClose={() => {
-          if (!isRemovingItemId) setPendingDeleteItemId(null)
+          if (!isRemovingItemId) setPendingRemove(null)
         }}
         title={null}
         withCloseButton={false}
@@ -336,17 +497,19 @@ export function AuctionHistoryPage() {
       >
         <Stack gap="sm">
           <Text size="md" fw={700}>
-            Подтверждение удаления
+            {pendingRemove?.scope === 'global' ? 'Удалить для всех?' : 'Подтверждение удаления'}
           </Text>
           <Text size="sm">
-            Удалить предмет «{pendingDeleteItem?.name ?? pendingDeleteItem?.itemId ?? ''}» из отслеживания?
+            {pendingRemove?.scope === 'global'
+              ? `Убрать «${pendingRemove?.item.name ?? pendingRemove?.item.itemId ?? ''}» из общего списка? Предмет перестанет собираться кроном, подписки пользователей будут сняты.`
+              : `Убрать «${pendingRemove?.item.name ?? pendingRemove?.item.itemId ?? ''}» только из ваших отслеживаний? В общем списке предмет останется, можно снова подписаться.`}
           </Text>
           <Group justify="flex-end">
             <Button
               variant="default"
               color="gray"
               disabled={Boolean(isRemovingItemId)}
-              onClick={() => setPendingDeleteItemId(null)}
+              onClick={() => setPendingRemove(null)}
             >
               Отмена
             </Button>
@@ -354,24 +517,28 @@ export function AuctionHistoryPage() {
               color="red"
               loading={Boolean(isRemovingItemId)}
               onClick={async () => {
-                if (!pendingDeleteItem) return
-                setIsRemovingItemId(pendingDeleteItem.itemId)
+                if (!pendingRemove) return
+                setIsRemovingItemId(pendingRemove.item.itemId)
                 setTrackedError(null)
                 try {
-                  await removeTrackedAuctionItem(pendingDeleteItem.itemId)
-                  setTrackedItemIds((prev) => prev.filter((id) => id !== pendingDeleteItem.itemId))
+                  await removeTrackedAuctionItem(
+                    pendingRemove.item.itemId,
+                    pendingRemove.scope === 'global' ? 'global' : 'my',
+                  )
+                  await reloadLists()
+                  void useAuctionDesiredBuyPricesStore.getState().loadRemote()
                   useAuctionTrackedLotsStore.getState().bumpPoll()
-                  setPendingDeleteItemId(null)
+                  setPendingRemove(null)
                 } catch (e) {
                   setTrackedError(
-                    e instanceof Error ? e.message : 'Не удалось удалить предмет из отслеживания',
+                    e instanceof Error ? e.message : 'Не удалось выполнить удаление',
                   )
                 } finally {
                   setIsRemovingItemId(null)
                 }
               }}
             >
-              Удалить
+              {pendingRemove?.scope === 'global' ? 'Убрать для всех' : 'Убрать из моих'}
             </Button>
           </Group>
         </Stack>
@@ -379,4 +546,3 @@ export function AuctionHistoryPage() {
     </PageContainer>
   )
 }
-

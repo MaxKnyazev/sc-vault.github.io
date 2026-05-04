@@ -210,10 +210,12 @@ export async function removeAuctionBlacklistItem(itemId: string): Promise<void> 
   await parseJsonOrThrow<{ ok?: boolean }>(response)
 }
 
-export async function fetchTrackedAuctionItems(): Promise<string[]> {
+export type TrackedAuctionScope = 'mine' | 'global'
+
+export async function fetchTrackedAuctionItems(scope: TrackedAuctionScope = 'mine'): Promise<string[]> {
   const token = getBackendAuthToken()
   if (!token) return []
-  const url = buildApiUrl('/auction/tracked-items')
+  const url = buildApiUrl(`/auction/tracked-items?scope=${encodeURIComponent(scope)}`)
   const response = await fetch(url, {
     method: 'GET',
     headers: {
@@ -306,7 +308,10 @@ export async function fetchAuctionItemActiveLots(itemId: string, limit = 100): P
   return payload.lots ?? []
 }
 
-export async function removeTrackedAuctionItem(itemId: string): Promise<void> {
+export async function removeTrackedAuctionItem(
+  itemId: string,
+  scope: 'my' | 'global' = 'my',
+): Promise<void> {
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация')
   const url = buildApiUrl('/auction/tracked-items/remove')
@@ -318,7 +323,7 @@ export async function removeTrackedAuctionItem(itemId: string): Promise<void> {
       Authorization: `Bearer ${token}`,
       'X-Auth-Token': token,
     },
-    body: JSON.stringify({ itemId }),
+    body: JSON.stringify({ itemId, scope }),
   })
   await parseJsonOrThrow<{ ok?: boolean }>(response)
 }

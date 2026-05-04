@@ -2,6 +2,16 @@
 
 declare(strict_types=1);
 
+/** Только цифры, максимум 32 символа; пустая строка — удалить порог. */
+function normalize_tracked_desired_buy_price_input(string $raw): string
+{
+    $digits = preg_replace('/\D+/', '', $raw) ?? '';
+    if (strlen($digits) > 32) {
+        throw new InvalidArgumentException('Слишком длинное значение цены');
+    }
+    return $digits;
+}
+
 function get_tracked_desired_buy_prices(PDO $db, int $userId): array
 {
     $stmt = $db->prepare(
@@ -21,12 +31,17 @@ function get_tracked_desired_buy_prices(PDO $db, int $userId): array
 
 function upsert_tracked_desired_buy_price(PDO $db, int $userId, string $itemId, string $value): void
 {
+    $normItem = trim($itemId);
+    if ($normItem === '') {
+        throw new InvalidArgumentException('itemId required');
+    }
+    $normalized = normalize_tracked_desired_buy_price_input($value);
     $stmt = $db->prepare(
         'INSERT INTO auction_tracked_desired_buy_prices (user_id, item_id, desired_buy_price, updated_at)
          VALUES (?, ?, ?, NOW())
          ON DUPLICATE KEY UPDATE desired_buy_price = VALUES(desired_buy_price), updated_at = NOW()',
     );
-    $stmt->execute([$userId, $itemId, $value]);
+    $stmt->execute([$userId, $normItem, $normalized]);
 }
 
 function delete_tracked_desired_buy_price(PDO $db, int $userId, string $itemId): void

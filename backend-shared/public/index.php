@@ -329,8 +329,13 @@ if ($path === '/auction/tracked-items') {
         exit;
     }
     enforce_auth_user($user);
-    $ids = get_tracked_auction_item_ids($db);
-    send_json(200, ['itemIds' => $ids]);
+    $scope = trim((string)($_GET['scope'] ?? 'mine'));
+    if ($scope === 'global') {
+        $ids = get_global_tracked_auction_item_ids($db);
+    } else {
+        $ids = get_user_tracked_auction_item_ids($db, (int)$user['id']);
+    }
+    send_json(200, ['itemIds' => $ids, 'scope' => $scope === 'global' ? 'global' : 'mine']);
     exit;
 }
 
@@ -349,14 +354,22 @@ if ($path === '/auction/tracked-items/add') {
     enforce_auth_user($user);
     $body = read_json_body();
     $itemId = trim((string)($body['itemId'] ?? ''));
+    $sync = null;
+    $result = ['addedGlobal' => false];
     try {
-        add_tracked_auction_item($db, $itemId, (int)$user['id']);
-        $sync = sync_tracked_item_history($db, $config, $itemId);
+        $result = ensure_tracked_for_user($db, $itemId, (int)$user['id'], (int)$user['id']);
+        if ($result['addedGlobal']) {
+            $sync = sync_tracked_item_history($db, $config, $itemId);
+        }
     } catch (Throwable $e) {
         send_json(400, ['error' => $e->getMessage()]);
         exit;
     }
-    send_json(200, ['ok' => true, 'sync' => $sync]);
+    send_json(200, [
+        'ok' => true,
+        'sync' => $sync,
+        'subscribedOnly' => !$result['addedGlobal'],
+    ]);
     exit;
 }
 
@@ -399,8 +412,17 @@ if ($path === '/auction/tracked-items/remove') {
     enforce_auth_user($user);
     $body = read_json_body();
     $itemId = trim((string)($body['itemId'] ?? ''));
+    $scope = trim((string)($body['scope'] ?? 'my'));
     try {
-        remove_tracked_auction_item($db, $itemId);
+        if ($scope === 'global') {
+            if (!role_at_least($user, 'admin')) {
+                send_json(403, ['error' => 'Только администратор может убрать предмет из общего списка']);
+                exit;
+            }
+            remove_global_tracked_admin($db, $itemId);
+        } else {
+            remove_user_tracked_row($db, (int)$user['id'], $itemId);
+        }
     } catch (Throwable $e) {
         send_json(400, ['error' => $e->getMessage()]);
         exit;
@@ -424,7 +446,19 @@ if ($path === '/auction/tracked-desired-buy-prices') {
     $userId = (int)$user['id'];
 
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
-        $prices = get_tracked_desired_buy_prices($db, $userId);
+        try {
+            $prices = get_tracked_desired_buy_prices($db, $userId);
+        } catch (Throwable $e) {
+            $msg = $e->getMessage();
+            if (str_contains($msg, '1146') || str_contains($msg, "doesn't exist")) {
+                send_json(503, [
+                    'error' => 'Не найдена таблица в БД. Выполните миграции: 014_auction_tracked_desired_buy_prices.sql и 015_auction_user_tracked_items.sql.',
+                ]);
+                exit;
+            }
+            send_json(500, ['error' => $msg]);
+            exit;
+        }
         send_json(200, ['prices' => $prices]);
         exit;
     }
@@ -439,13 +473,27 @@ if ($path === '/auction/tracked-desired-buy-prices') {
             exit;
         }
         try {
+            if (!user_has_tracked_item($db, $userId, $itemId)) {
+                send_json(400, ['error' => 'Сначала добавьте предмет в «Мои отслеживания»']);
+                exit;
+            }
             if ($value === '') {
                 delete_tracked_desired_buy_price($db, $userId, $itemId);
             } else {
                 upsert_tracked_desired_buy_price($db, $userId, $itemId, $value);
             }
-        } catch (Throwable $e) {
+        } catch (InvalidArgumentException $e) {
             send_json(400, ['error' => $e->getMessage()]);
+            exit;
+        } catch (Throwable $e) {
+            $msg = $e->getMessage();
+            if (str_contains($msg, '1146') || str_contains($msg, "doesn't exist")) {
+                send_json(503, [
+                    'error' => 'Не найдена таблица в БД. Выполните миграции: 014_auction_tracked_desired_buy_prices.sql и 015_auction_user_tracked_items.sql.',
+                ]);
+                exit;
+            }
+            send_json(400, ['error' => $msg]);
             exit;
         }
         send_json(200, ['ok' => true]);

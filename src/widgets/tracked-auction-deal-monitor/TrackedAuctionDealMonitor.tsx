@@ -48,7 +48,7 @@ export function TrackedAuctionDealMonitor() {
     const runPoll = async () => {
       let ids: string[] = []
       try {
-        ids = await fetchTrackedAuctionItems()
+        ids = await fetchTrackedAuctionItems('mine')
       } catch {
         if (!cancelled) useAuctionTrackedLotsStore.getState().replaceLotsForTracked({})
         return
