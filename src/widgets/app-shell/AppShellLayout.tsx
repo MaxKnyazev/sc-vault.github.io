@@ -16,6 +16,8 @@ import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { ItemDetailsModal } from '../item-details-modal/ItemDetailsModal'
 import { AuctionHistoryItemModal } from '../auction-history-item-modal/AuctionHistoryItemModal'
+import { TrackedAuctionDealMonitor } from '../tracked-auction-deal-monitor/TrackedAuctionDealMonitor'
+import { AuctionDealToastPortal } from '../auction-deal-toast-portal/AuctionDealToastPortal'
 import { useAuthStore } from '../../shared/store/authStore'
 import { getRoleLabel } from '../../shared/lib/authRole'
 import { AuthModal } from '../auth/AuthModal'
@@ -275,6 +277,8 @@ export function AppShellLayout() {
           aria-label="Открыть меню"
         />
         <Outlet />
+        <TrackedAuctionDealMonitor />
+        <AuctionDealToastPortal />
         <ItemDetailsModal />
         <AuctionHistoryItemModal />
         <AuthModal opened={authOpened} onClose={authModalHandlers.close} initialMode={authMode} />

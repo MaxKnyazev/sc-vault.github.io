@@ -100,3 +100,32 @@ button {
   --mantine-color-dimmed: #7b8493;
   --mantine-color-default-border: #d8dee8;
 }
+
+@keyframes auction-deal-toast-enter {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.auction-deal-toast-paper {
+  animation: auction-deal-toast-enter 280ms ease-out both;
+}
+
+@keyframes auction-deal-toast-progress-shrink {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.auction-deal-toast-progress {
+  transform-origin: 100% 50%;
+  animation: auction-deal-toast-progress-shrink 10s linear forwards;
+}

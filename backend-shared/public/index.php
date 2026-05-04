@@ -22,6 +22,7 @@ require $baseDir . '/src/Http.php';
 require $baseDir . '/src/Auth.php';
 require $baseDir . '/src/Auction.php';
 require $baseDir . '/src/AuctionTrackedItems.php';
+require $baseDir . '/src/AuctionTrackedDesiredBuyPrices.php';
 require $baseDir . '/src/AuctionBlacklist.php';
 require $baseDir . '/src/UserBuyPrices.php';
 require $baseDir . '/src/UserEnergyBuyPrice.php';
@@ -405,6 +406,53 @@ if ($path === '/auction/tracked-items/remove') {
         exit;
     }
     send_json(200, ['ok' => true]);
+    exit;
+}
+
+if ($path === '/auction/tracked-desired-buy-prices') {
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    enforce_auth_user($user);
+    $userId = (int)$user['id'];
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+        $prices = get_tracked_desired_buy_prices($db, $userId);
+        send_json(200, ['prices' => $prices]);
+        exit;
+    }
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        require_method('POST');
+        $body = read_json_body();
+        $itemId = trim((string)($body['itemId'] ?? ''));
+        $value = trim((string)($body['value'] ?? ''));
+        if ($itemId === '') {
+            send_json(400, ['error' => 'itemId required']);
+            exit;
+        }
+        try {
+            if ($value === '') {
+                delete_tracked_desired_buy_price($db, $userId, $itemId);
+            } else {
+                upsert_tracked_desired_buy_price($db, $userId, $itemId, $value);
+            }
+        } catch (Throwable $e) {
+            send_json(400, ['error' => $e->getMessage()]);
+            exit;
+        }
+        send_json(200, ['ok' => true]);
+        exit;
+    }
+
+    send_json(405, ['error' => 'Method not allowed']);
     exit;
 }
 

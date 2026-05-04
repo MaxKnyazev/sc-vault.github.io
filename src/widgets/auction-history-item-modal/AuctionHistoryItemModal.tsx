@@ -1,10 +1,21 @@
 import { ActionIcon, Alert, Box, Button, Group, Loader, Modal, ScrollArea, Select, Stack, Text } from '@mantine/core'
-import { useCallback, useEffect, useMemo, useState, type MouseEvent, type WheelEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type MouseEvent,
+  type WheelEvent,
+} from 'react'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import { getQualityModalGlowBoxShadow } from '../../shared/lib/getQualityGlowColor'
-import { useAuctionHistoryItemModalStore } from '../../shared/store/auctionHistoryItemModalStore'
+import {
+  useAuctionHistoryItemModalStore,
+  type AuctionHistoryModalView,
+} from '../../shared/store/auctionHistoryItemModalStore'
 import { useAuthStore } from '../../shared/store/authStore'
 import {
   fetchAuctionItemHistory,
@@ -69,7 +80,7 @@ const QUALITY_GLOW_BY_KEY: Record<Exclude<AuctionHistoryQuality, 'all'>, string>
 }
 
 type ChartSeriesEntry = { point: AuctionHistoryPoint; x: number; y: number }
-type AuctionModalViewMode = 'history' | 'activeLots'
+type AuctionModalViewMode = AuctionHistoryModalView
 type ActiveLotsSortKey = 'name' | 'remaining' | 'amount' | 'startPrice' | 'buyoutPrice' | 'pricePerUnit'
 type ActiveLotsSortDirection = 'asc' | 'desc'
 
@@ -193,7 +204,10 @@ function formatRemaining(endTs: string, nowMs: number): string {
 }
 
 export function AuctionHistoryItemModal() {
-  const { opened, itemId, close } = useAuctionHistoryItemModalStore()
+  const opened = useAuctionHistoryItemModalStore((s) => s.opened)
+  const itemId = useAuctionHistoryItemModalStore((s) => s.itemId)
+  const initialViewFromStore = useAuctionHistoryItemModalStore((s) => s.initialView)
+  const close = useAuctionHistoryItemModalStore((s) => s.close)
   const { itemsById, realm } = useHideoutStore()
   const timezoneOffsetHours = useAuthStore((s) => s.user?.timezoneOffsetHours ?? 0)
   const [range, setRange] = useState<AuctionHistoryRange>('7d')
@@ -202,6 +216,12 @@ export function AuctionHistoryItemModal() {
   const [points, setPoints] = useState<AuctionHistoryPoint[]>([])
   const [activeLots, setActiveLots] = useState<AuctionActiveLot[]>([])
   const [viewMode, setViewMode] = useState<AuctionModalViewMode>('history')
+
+  useLayoutEffect(() => {
+    if (opened && itemId) {
+      setViewMode(initialViewFromStore)
+    }
+  }, [opened, itemId, initialViewFromStore])
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [activeLotsSortKey, setActiveLotsSortKey] = useState<ActiveLotsSortKey>('buyoutPrice')
   const [activeLotsSortDirection, setActiveLotsSortDirection] = useState<ActiveLotsSortDirection>('asc')
@@ -400,7 +420,7 @@ export function AuctionHistoryItemModal() {
 
   useEffect(() => {
     if (!opened || !itemId || viewMode !== 'activeLots') return
-    const intervalMs = 90_000
+    const intervalMs = 60_000
     const id = window.setInterval(() => {
       void (async () => {
         try {

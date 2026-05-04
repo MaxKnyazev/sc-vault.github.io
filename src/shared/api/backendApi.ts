@@ -12,6 +12,10 @@ type AuctionBlacklistResponse = {
 type TrackedAuctionItemsResponse = {
   itemIds?: string[]
 }
+
+type TrackedDesiredBuyPricesResponse = {
+  prices?: Record<string, { value?: string }>
+}
 type ResolveItemByNameResponse = {
   itemId?: string
 }
@@ -315,6 +319,39 @@ export async function removeTrackedAuctionItem(itemId: string): Promise<void> {
       'X-Auth-Token': token,
     },
     body: JSON.stringify({ itemId }),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function fetchTrackedDesiredBuyPrices(): Promise<Record<string, string>> {
+  const token = getBackendAuthToken()
+  if (!token) return {}
+  const url = buildApiUrl('/auction/tracked-desired-buy-prices')
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+  })
+  const payload = await parseJsonOrThrow<TrackedDesiredBuyPricesResponse>(response)
+  return parseBuyPricesPayload(payload.prices)
+}
+
+export async function saveTrackedDesiredBuyPrice(itemId: string, value: string): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl('/auction/tracked-desired-buy-prices')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify({ itemId, value }),
   })
   await parseJsonOrThrow<{ ok?: boolean }>(response)
 }
