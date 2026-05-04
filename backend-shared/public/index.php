@@ -77,6 +77,14 @@ function enforce_auth_user(array $user): void
     }
 }
 
+function api_is_missing_db_table(Throwable $e): bool
+{
+    $msg = $e->getMessage();
+    return str_contains($msg, '1146')
+        || str_contains($msg, "doesn't exist")
+        || str_contains($msg, 'Base table or view not found');
+}
+
 function rate_limit_key(string $action): string
 {
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
@@ -330,12 +338,26 @@ if ($path === '/auction/tracked-items') {
     }
     enforce_auth_user($user);
     $scope = trim((string)($_GET['scope'] ?? 'mine'));
-    if ($scope === 'global') {
-        $ids = get_global_tracked_auction_item_ids($db);
-    } else {
-        $ids = get_user_tracked_auction_item_ids($db, (int)$user['id']);
+    $migrationsPending = false;
+    try {
+        if ($scope === 'global') {
+            $ids = get_global_tracked_auction_item_ids($db);
+        } else {
+            $ids = get_user_tracked_auction_item_ids($db, (int)$user['id']);
+        }
+    } catch (Throwable $e) {
+        if (!api_is_missing_db_table($e)) {
+            send_json(500, ['error' => $e->getMessage()]);
+            exit;
+        }
+        $ids = [];
+        $migrationsPending = true;
     }
-    send_json(200, ['itemIds' => $ids, 'scope' => $scope === 'global' ? 'global' : 'mine']);
+    send_json(200, [
+        'itemIds' => $ids,
+        'scope' => $scope === 'global' ? 'global' : 'mine',
+        'migrationsPending' => $migrationsPending,
+    ]);
     exit;
 }
 
@@ -446,20 +468,21 @@ if ($path === '/auction/tracked-desired-buy-prices') {
     $userId = (int)$user['id'];
 
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+        $migrationsPending = false;
         try {
             $prices = get_tracked_desired_buy_prices($db, $userId);
         } catch (Throwable $e) {
-            $msg = $e->getMessage();
-            if (str_contains($msg, '1146') || str_contains($msg, "doesn't exist")) {
-                send_json(503, [
-                    'error' => 'Не найдена таблица в БД. Выполните миграции: 014_auction_tracked_desired_buy_prices.sql и 015_auction_user_tracked_items.sql.',
-                ]);
+            if (!api_is_missing_db_table($e)) {
+                send_json(500, ['error' => $e->getMessage()]);
                 exit;
             }
-            send_json(500, ['error' => $msg]);
-            exit;
+            $prices = [];
+            $migrationsPending = true;
         }
-        send_json(200, ['prices' => $prices]);
+        send_json(200, [
+            'prices' => $prices,
+            'migrationsPending' => $migrationsPending,
+        ]);
         exit;
     }
 
