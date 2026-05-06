@@ -28,6 +28,7 @@ import {
   type AuctionHistoryZoom,
 } from '../../shared/api/backendApi'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
+import { isArtifactDataPath, isModuleCoreItem } from '../../shared/lib/itemKinds'
 
 const RANGE_OPTIONS: AuctionHistoryRange[] = ['30m', '1h', '12h', '24h', '7d', '30d', '90d']
 const QUALITY_OPTIONS: Array<{ value: AuctionHistoryQuality; label: string }> = [
@@ -83,22 +84,6 @@ type ChartSeriesEntry = { point: AuctionHistoryPoint; x: number; y: number }
 type AuctionModalViewMode = AuctionHistoryModalView
 type ActiveLotsSortKey = 'name' | 'remaining' | 'amount' | 'startPrice' | 'buyoutPrice' | 'pricePerUnit'
 type ActiveLotsSortDirection = 'asc' | 'desc'
-
-function isArtifactDataPath(dataPath: string | undefined): boolean {
-  const normalized = (dataPath ?? '').toLowerCase()
-  return normalized.includes('/artefact/') || normalized.includes('/artifact/')
-}
-
-function isModuleCoreItem(dataPath: string | undefined, itemName: string): boolean {
-  const normalizedPath = (dataPath ?? '').toLowerCase()
-  const normalizedName = itemName.toLowerCase()
-  return (
-    normalizedPath.includes('/module/core/') ||
-    normalizedPath.includes('/modules/core/') ||
-    normalizedName.includes('ядро модуля') ||
-    normalizedName.includes('module core')
-  )
-}
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '')
@@ -207,6 +192,7 @@ export function AuctionHistoryItemModal() {
   const opened = useAuctionHistoryItemModalStore((s) => s.opened)
   const itemId = useAuctionHistoryItemModalStore((s) => s.itemId)
   const initialViewFromStore = useAuctionHistoryItemModalStore((s) => s.initialView)
+  const initialQualityFromStore = useAuctionHistoryItemModalStore((s) => s.initialQuality)
   const close = useAuctionHistoryItemModalStore((s) => s.close)
   const { itemsById, realm } = useHideoutStore()
   const timezoneOffsetHours = useAuthStore((s) => s.user?.timezoneOffsetHours ?? 0)
@@ -220,8 +206,11 @@ export function AuctionHistoryItemModal() {
   useLayoutEffect(() => {
     if (opened && itemId) {
       setViewMode(initialViewFromStore)
+      if (initialQualityFromStore) {
+        setQuality(initialQualityFromStore)
+      }
     }
-  }, [opened, itemId, initialViewFromStore])
+  }, [opened, itemId, initialViewFromStore, initialQualityFromStore])
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [activeLotsSortKey, setActiveLotsSortKey] = useState<ActiveLotsSortKey>('buyoutPrice')
   const [activeLotsSortDirection, setActiveLotsSortDirection] = useState<ActiveLotsSortDirection>('asc')

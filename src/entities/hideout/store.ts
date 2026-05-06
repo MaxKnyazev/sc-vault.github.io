@@ -7,6 +7,7 @@ import { toItemsById } from '../item/lib'
 import type { ListingItemWithId } from '../item/types'
 import { appConfig, type Realm } from '../../shared/config/app'
 import { collectMissingCraftBoostFactors } from './bonus'
+import { hideoutBonusConfig } from '../../shared/config/hideout-bonus'
 import { buildCustomManualRecipes } from '../../shared/lib/customManualRecipes'
 
 type HideoutStoreState = {
@@ -40,10 +41,16 @@ export const useHideoutStore = create<HideoutStoreState>((set) => ({
       const mergedRecipes = [...recipesResponse.recipes, ...customManualRecipes]
       const craftableItemIds = extractUniqueCraftableItemIds(mergedRecipes)
       const missingCraftBoostReport = collectMissingCraftBoostFactors(mergedRecipes)
-
-      if (missingCraftBoostReport.craftedItemsWithoutExplicitFactor.length > 0) {
+      const explicitPerkFactors = Object.keys(hideoutBonusConfig.craftBoostFactorByPerk).length
+      // Пустая карта перков — для всех рецептов осознанно используется defaultCraftBoostFactor, варнинг только шумит.
+      if (
+        explicitPerkFactors > 0 &&
+        missingCraftBoostReport.craftedItemsWithoutExplicitFactor.length > 0 &&
+        import.meta.env.DEV
+      ) {
+        const d = hideoutBonusConfig.defaultCraftBoostFactor
         console.warn(
-          `[craft-boost] No explicit craftBoostFactor for ${missingCraftBoostReport.craftedItemsWithoutExplicitFactor.length} crafted items. Using default=${75}. Sample: ${missingCraftBoostReport.craftedItemsWithoutExplicitFactor
+          `[craft-boost] Some crafted items use stations without craftBoostFactorByPerk entry; default=${d}. Count=${missingCraftBoostReport.craftedItemsWithoutExplicitFactor.length}. Sample: ${missingCraftBoostReport.craftedItemsWithoutExplicitFactor
             .slice(0, 10)
             .join(', ')}`,
         )

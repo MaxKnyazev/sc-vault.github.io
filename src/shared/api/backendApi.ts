@@ -15,6 +15,7 @@ type TrackedAuctionItemsResponse = {
 
 type TrackedDesiredBuyPricesResponse = {
   prices?: Record<string, { value?: string }>
+  migrationsPending?: boolean
 }
 type ResolveItemByNameResponse = {
   itemId?: string
@@ -357,6 +358,53 @@ export async function saveTrackedDesiredBuyPrice(itemId: string, value: string):
       'X-Auth-Token': token,
     },
     body: JSON.stringify({ itemId, value }),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export type TrackedItemRule = {
+  qualities: string[]
+  upgrades: number[]
+}
+
+type TrackedItemRulesResponse = {
+  rulesByItemId?: Record<string, TrackedItemRule>
+  migrationsPending?: boolean
+}
+
+export async function fetchTrackedItemRules(): Promise<Record<string, TrackedItemRule>> {
+  const token = getBackendAuthToken()
+  if (!token) return {}
+  const url = buildApiUrl('/auction/tracked-item-rules')
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+  })
+  const payload = await parseJsonOrThrow<TrackedItemRulesResponse>(response)
+  return payload.rulesByItemId ?? {}
+}
+
+export async function saveTrackedItemRules(
+  itemId: string,
+  qualities: string[],
+  upgrades: Array<number | null>,
+): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl('/auction/tracked-item-rules')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify({ itemId, qualities, upgrades }),
   })
   await parseJsonOrThrow<{ ok?: boolean }>(response)
 }

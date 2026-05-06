@@ -8,6 +8,7 @@ import { useIngredientPricesStore } from './shared/store/ingredientPricesStore'
 import { useAuctionDesiredBuyPricesStore } from './shared/store/auctionDesiredBuyPricesStore'
 import { useAuctionTrackedLotsStore } from './shared/store/auctionTrackedLotsStore'
 import { useAuctionDealToastsStore } from './shared/store/auctionDealToastsStore'
+import { useAuctionTrackedItemRulesStore } from './shared/store/auctionTrackedItemRulesStore'
 
 function App() {
   const bootstrapAuth = useAuthStore((s) => s.bootstrapAuth)
@@ -15,6 +16,7 @@ function App() {
   const isAuthResolved = useAuthStore((s) => s.isAuthResolved)
   const loadRemoteBuyPrices = useIngredientPricesStore((s) => s.loadRemoteBuyPrices)
   const loadTrackedDesiredBuyPrices = useAuctionDesiredBuyPricesStore((s) => s.loadRemote)
+  const loadTrackedItemRules = useAuctionTrackedItemRulesStore((s) => s.loadRemote)
 
   useEffect(() => {
     void bootstrapAuth()
@@ -31,8 +33,14 @@ function App() {
   }, [isAuthResolved, token, loadTrackedDesiredBuyPrices])
 
   useEffect(() => {
+    if (!isAuthResolved) return
+    void loadTrackedItemRules()
+  }, [isAuthResolved, token, loadTrackedItemRules])
+
+  useEffect(() => {
     if (token) return
     useAuctionDesiredBuyPricesStore.getState().reset()
+    useAuctionTrackedItemRulesStore.getState().reset()
     useAuctionTrackedLotsStore.getState().clearLots()
     useAuctionDealToastsStore.getState().clear()
   }, [token])

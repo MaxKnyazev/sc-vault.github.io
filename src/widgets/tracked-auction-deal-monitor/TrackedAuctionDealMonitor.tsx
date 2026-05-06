@@ -16,8 +16,10 @@ import { useAuthStore } from '../../shared/store/authStore'
 import { useAuctionDesiredBuyPricesStore } from '../../shared/store/auctionDesiredBuyPricesStore'
 import { useAuctionDealToastsStore, type AuctionDealToast } from '../../shared/store/auctionDealToastsStore'
 import { useAuctionTrackedLotsStore } from '../../shared/store/auctionTrackedLotsStore'
+import { useAuctionTrackedItemRulesStore } from '../../shared/store/auctionTrackedItemRulesStore'
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
+import { isArtifactDataPath, isModuleCoreItem } from '../../shared/lib/itemKinds'
 
 const ACTIVE_LOTS_POLL_MS = 60_000
 
@@ -81,6 +83,7 @@ export function TrackedAuctionDealMonitor() {
 
       const nowMs = Date.now()
       const desired = useAuctionDesiredBuyPricesStore.getState().desiredBuyByItemId
+      const rulesByItemId = useAuctionTrackedItemRulesStore.getState().rulesByItemId
       const prevEdge = readQualifyingEdgeSnapshot()
       const nextEdge: Record<string, boolean> = {}
       const hideout = useHideoutStore.getState()
@@ -89,13 +92,26 @@ export function TrackedAuctionDealMonitor() {
       for (const itemId of ids) {
         const lots = nextLots[itemId] ?? []
         const threshold = parseDesiredBuyRub(desired[itemId])
-        const minP = minActiveLotUnitPrice(lots, nowMs)
+        const item = hideout.itemsById[itemId]
+        const name = getItemName(item?.name?.lines) || itemId
+        const isArtifact = isArtifactDataPath(item?.data)
+        const isCore = item ? isModuleCoreItem(item.data, name) : false
+
+        const rule = rulesByItemId[itemId]
+        const filteredLots =
+          rule && rule.qualities.length > 0 && (isArtifact || isCore)
+            ? lots.filter((lot) => {
+                if (!rule.qualities.includes(lot.quality)) return false
+                if (isArtifact && rule.upgrades.length > 0) return rule.upgrades.includes(lot.upgrade)
+                return true
+              })
+            : lots
+
+        const minP = minActiveLotUnitPrice(filteredLots, nowMs)
         const qualifying = threshold !== null && minP !== null && minP <= threshold
         nextEdge[itemId] = qualifying
 
         if (qualifying && minP !== null && prevEdge[itemId] !== true) {
-          const item = hideout.itemsById[itemId]
-          const name = getItemName(item?.name?.lines) || itemId
           const iconUrl = item ? buildItemIconUrl(item.icon, hideout.realm) : undefined
           newToasts.push({
             id: `${Date.now()}-${itemId}-${Math.random().toString(16).slice(2)}`,
