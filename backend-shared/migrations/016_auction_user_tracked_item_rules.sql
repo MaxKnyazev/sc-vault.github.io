@@ -2,7 +2,8 @@ CREATE TABLE IF NOT EXISTS auction_user_tracked_item_rules (
   user_id BIGINT UNSIGNED NOT NULL,
   item_id VARCHAR(64) NOT NULL,
   quality VARCHAR(32) NOT NULL,
-  upgrade SMALLINT NULL,
+  -- Для артефактов: 0..15. Для правил без заточки (ядра): -1.
+  upgrade SMALLINT NOT NULL,
   created_at DATETIME NOT NULL,
   PRIMARY KEY (user_id, item_id, quality, upgrade),
   KEY idx_autir_item_id (item_id),

@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Правила подписок пользователя на конкретный itemId:
  * - quality: одна из normal/uncommon/special/rare/exclusive/legendary/unique/unknown (как в UI)
- * - upgrade: 0..15 для артефактов; NULL для правил, где заточка не применяется (ядра модулей).
+ * - upgrade: 0..15 для артефактов; -1 для правил, где заточка не применяется (ядра модулей).
  *
  * Хранение нормализовано: 1 строка = 1 комбинация (quality, upgrade).
  * Это позволяет безболезненно подписываться сразу на несколько редкостей/заточек.
@@ -30,17 +30,17 @@ function normalize_tracked_rule_quality(string $raw): string
     return $q;
 }
 
-function normalize_tracked_rule_upgrade($raw): ?int
+function normalize_tracked_rule_upgrade($raw): int
 {
     if ($raw === null || $raw === '') {
-        return null;
+        return -1;
     }
     if (!is_int($raw) && !is_string($raw)) {
         throw new InvalidArgumentException('Invalid upgrade');
     }
     $n = (int)$raw;
-    if ($n < 0 || $n > 15) {
-        throw new InvalidArgumentException('upgrade must be in range 0..15');
+    if ($n < -1 || $n > 15) {
+        throw new InvalidArgumentException('upgrade must be in range -1..15');
     }
     return $n;
 }
@@ -65,8 +65,7 @@ function get_user_tracked_item_rules(PDO $db, int $userId): array
             continue;
         }
         $quality = (string)($row['quality'] ?? '');
-        $upgrade = $row['upgrade'];
-        $upgradeInt = $upgrade === null ? null : (int)$upgrade;
+        $upgradeInt = (int)($row['upgrade'] ?? -1);
 
         if (!isset($out[$itemId])) {
             $out[$itemId] = ['qualities' => [], 'upgrades' => []];
@@ -74,7 +73,7 @@ function get_user_tracked_item_rules(PDO $db, int $userId): array
         if ($quality !== '' && !in_array($quality, $out[$itemId]['qualities'], true)) {
             $out[$itemId]['qualities'][] = $quality;
         }
-        if ($upgradeInt !== null && !in_array($upgradeInt, $out[$itemId]['upgrades'], true)) {
+        if ($upgradeInt >= 0 && !in_array($upgradeInt, $out[$itemId]['upgrades'], true)) {
             $out[$itemId]['upgrades'][] = $upgradeInt;
         }
     }
@@ -113,9 +112,9 @@ function replace_user_tracked_item_rules(PDO $db, int $userId, string $itemId, a
     foreach ($upgrades as $u) {
         $uNorm[] = normalize_tracked_rule_upgrade($u);
     }
-    // NULL оставляем (для ядер/правил без заточки); при наличии чисел — unique/sort
-    $hasNull = in_array(null, $uNorm, true);
-    $uNums = array_values(array_unique(array_values(array_filter($uNorm, static fn ($v) => $v !== null))));
+    // -1 означает «без заточки» (ядра). При наличии чисел 0..15 — unique/sort.
+    $hasNoUpgrade = in_array(-1, $uNorm, true);
+    $uNums = array_values(array_unique(array_values(array_filter($uNorm, static fn ($v) => $v >= 0))));
     sort($uNums);
 
     // Если qualities пустой — очищаем правила для itemId
@@ -127,7 +126,7 @@ function replace_user_tracked_item_rules(PDO $db, int $userId, string $itemId, a
     }
 
     // Для артефактов: если передали upgrades (0..15) — создаём комбинации (q, upgrade).
-    // Для ядер: если upgrades пустой или есть null — создаём строки (q, NULL).
+    // Для ядер: если upgrades пустой или есть null → normalize = -1 — создаём строки (q, -1).
     $rows = [];
     if (count($uNums) > 0) {
         foreach ($qNorm as $q) {
@@ -136,13 +135,12 @@ function replace_user_tracked_item_rules(PDO $db, int $userId, string $itemId, a
             }
         }
     } else {
-        // Если клиент прислал null в upgrades, это означает «без заточки» (ядра).
-        if (!$hasNull) {
-            $hasNull = true;
+        if (!$hasNoUpgrade) {
+            $hasNoUpgrade = true;
         }
-        if ($hasNull) {
+        if ($hasNoUpgrade) {
             foreach ($qNorm as $q) {
-                $rows[] = [$userId, $normItem, $q, null];
+                $rows[] = [$userId, $normItem, $q, -1];
             }
         }
     }
