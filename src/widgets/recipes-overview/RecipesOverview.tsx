@@ -29,8 +29,10 @@ import type { HideoutRecipe } from '../../entities/hideout/types'
 import { useAuthStore } from '../../shared/store/authStore'
 import { getRecipeRequiredSkill } from '../../shared/lib/craftSkills'
 import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
+import { mergeUserAndDefaultBuyPrices } from '../../shared/lib/craftCostBuyPrices'
 import { buildCraftCostModel } from '../../shared/lib/costModel'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
+import { recipeBatchOutputForPrimaryItem } from '../../shared/lib/recipeBatchOutput'
 
 const CANON_BRANCHES = [
   'Боеприпасы',
@@ -104,6 +106,7 @@ export function RecipesOverview() {
   const recipeOverridesById = useRecipeOverridesStore((s) => s.byRecipeId)
   const loadOverrides = useRecipeOverridesStore((s) => s.loadOverrides)
   const buyPricesByItemId = useIngredientPricesStore((s) => s.buyPricesByItemId)
+  const defaultBuyPricesByItemId = useIngredientPricesStore((s) => s.defaultBuyPricesByItemId)
   const energyPrice = useIngredientPricesStore((s) => s.energyPrice)
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState<'all' | 'favorites' | string>('all')
@@ -200,9 +203,14 @@ export function RecipesOverview() {
     [categoryEntries],
   )
   const auctionItemIds = useMemo(() => collectHideoutItemIds(recipes), [recipes])
+  const buyPricesMerged = useMemo(
+    () => mergeUserAndDefaultBuyPrices(buyPricesByItemId, defaultBuyPricesByItemId),
+    [buyPricesByItemId, defaultBuyPricesByItemId],
+  )
+
   const costModel = useMemo(
-    () => buildCraftCostModel(adjustedRecipes, buyPricesByItemId, energyPrice),
-    [adjustedRecipes, buyPricesByItemId, energyPrice],
+    () => buildCraftCostModel(adjustedRecipes, buyPricesMerged, energyPrice),
+    [adjustedRecipes, buyPricesMerged, energyPrice],
   )
   const costTreeItemName = useMemo(() => {
     if (!costTreeItemId) return ''
@@ -265,7 +273,7 @@ export function RecipesOverview() {
         if (energyUnitCost !== null) return { source: 'buy', bestRecipe: null, buyCost: energyUnitCost, reasons: [] }
         return { source: 'unknown', bestRecipe: null, buyCost: null, reasons: ['нет цены энергии'] }
       }
-      const buyCost = parsePositiveNumber(buyPricesByItemId[itemId] ?? null)
+      const buyCost = parsePositiveNumber(buyPricesMerged[itemId] ?? null)
       const bestRecipe = costModel.bestRecipeOptionByItemId.get(itemId) ?? null
       const canCraft = bestRecipe?.craftPerUnit !== null
       if (canCraft && (buyCost === null || (bestRecipe?.craftPerUnit ?? Number.POSITIVE_INFINITY) <= buyCost + 1e-9)) {
@@ -408,7 +416,7 @@ export function RecipesOverview() {
         return aName.localeCompare(bName, 'ru')
       })
     return { rootSource: rootResolved.source, rootReasons: rootResolved.reasons, rootOutputAmount, rows, leftovers }
-  }, [buyPricesByItemId, costModel, costTreeItemId, energyPrice, itemsById])
+  }, [buyPricesMerged, costModel, costTreeItemId, energyPrice, itemsById])
 
   return (
     <SectionCard title="" description="">
@@ -533,11 +541,12 @@ export function RecipesOverview() {
                   <Accordion.Panel>
                     <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="sm">
                       {categoryRecipes.map(({ recipe, recipeFavoriteId }, index) => {
-                        const primaryResultItemId = recipe.result[0]?.item
+                        const batchOut = recipeBatchOutputForPrimaryItem(recipe)
+                        const primaryResultItemId = batchOut?.primaryItemId
                         const line1 = (() => {
-                          if (!primaryResultItemId) return 'Недостаточно данных для расчета себестоимости'
-                          const primaryResultAmount = recipe.result[0]?.amount ?? 0
-                          if (primaryResultAmount <= 0) return 'Недостаточно данных для расчета себестоимости'
+                          if (!primaryResultItemId || !batchOut) return 'Недостаточно данных для расчета себестоимости'
+                          const batchUnits = batchOut.batchUnits
+                          if (batchUnits <= 0) return 'Недостаточно данных для расчета себестоимости'
 
                           let totalInputCost = 0
                           const missingReasons: string[] = []
@@ -560,8 +569,8 @@ export function RecipesOverview() {
                           }
 
                           const recipeCraftPerUnit =
-                            missingReasons.length === 0 ? totalInputCost / primaryResultAmount : null
-                          const buyPerUnit = parsePositiveNumber(buyPricesByItemId[primaryResultItemId] ?? null)
+                            missingReasons.length === 0 ? totalInputCost / batchUnits : null
+                          const buyPerUnit = parsePositiveNumber(buyPricesMerged[primaryResultItemId] ?? null)
                           const resolved =
                             recipeCraftPerUnit !== null && buyPerUnit !== null
                               ? Math.min(recipeCraftPerUnit, buyPerUnit)

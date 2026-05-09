@@ -39,10 +39,20 @@ function get_effective_buy_prices_for_user(PDO $db, int $userId): array
     $itemIds = array_values(array_unique(array_merge(array_keys($defaults), array_keys($overrides))));
     $result = [];
     foreach ($itemIds as $itemId) {
-        if (array_key_exists($itemId, $overrides)) {
-            $result[$itemId] = $overrides[$itemId];
-        } else {
-            $result[$itemId] = $defaults[$itemId];
+        $overrideRow = $overrides[$itemId] ?? null;
+        $defaultRow = $defaults[$itemId] ?? null;
+        $overrideVal = $overrideRow !== null ? trim((string)($overrideRow['value'] ?? '')) : '';
+
+        if ($overrideVal !== '') {
+            $result[$itemId] = $overrideRow;
+            continue;
+        }
+        if ($defaultRow !== null) {
+            $result[$itemId] = $defaultRow;
+            continue;
+        }
+        if ($overrideRow !== null) {
+            $result[$itemId] = $overrideRow;
         }
     }
     return $result;

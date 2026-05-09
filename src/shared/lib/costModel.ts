@@ -1,5 +1,10 @@
 import type { HideoutRecipe } from '../../entities/hideout/types'
 
+/**
+ * Себестоимость крафта: для каждого предмета min(скуп, дешёвый крафт по рецептам).
+ * Циклы (SCC): итеративное обновление min(скуп, крафт) внутри компоненты до сходимости;
+ * вне цикла — уже посчитанные effectiveCost по ингредиентам.
+ */
 type RecipeOption = {
   recipe: HideoutRecipe
   outputAmount: number
@@ -166,18 +171,19 @@ export function buildCraftCostModel(
     const isCyclicComponent = compItems.length > 1 || hasSelfLoop
     if (isCyclicComponent) for (const itemId of compItems) cyclicItemIds.add(itemId)
     if (isCyclicComponent) {
+      const compItemsSorted = [...compItems].sort((a, b) => a.localeCompare(b))
       const localCost = new Map<string, number | undefined>()
-      for (const itemId of compItems) localCost.set(itemId, buyCostByItemId.get(itemId))
+      for (const itemId of compItemsSorted) localCost.set(itemId, buyCostByItemId.get(itemId))
       let reachedMaxIterations = true
-      const maxIter = Math.max(20, compItems.length * 24)
+      const maxIter = Math.max(96, compItems.length * 48)
       for (let iter = 0; iter < maxIter; iter += 1) {
         let changed = false
-        for (const itemId of compItems) {
+        for (const itemId of compItemsSorted) {
           const variants = recipesByResultItemId.get(itemId) ?? []
           let bestCraft = Number.POSITIVE_INFINITY
           for (const variant of variants) {
             const option = evaluateRecipeOption(variant.recipe, variant.outputAmount, (ingredientId) => {
-              if (compItems.includes(ingredientId)) return localCost.get(ingredientId)
+              if (compItemsSorted.includes(ingredientId)) return localCost.get(ingredientId)
               return effectiveCostByItemId.get(ingredientId)
             })
             if (option.craftPerUnit !== null) bestCraft = Math.min(bestCraft, option.craftPerUnit)
@@ -196,8 +202,8 @@ export function buildCraftCostModel(
           break
         }
       }
-      if (reachedMaxIterations) for (const itemId of compItems) unstableCycleItemIds.add(itemId)
-      for (const itemId of compItems) {
+      if (reachedMaxIterations) for (const itemId of compItemsSorted) unstableCycleItemIds.add(itemId)
+      for (const itemId of compItemsSorted) {
         const resolved = localCost.get(itemId)
         if (resolved !== undefined && Number.isFinite(resolved)) {
           effectiveCostByItemId.set(itemId, resolved)
