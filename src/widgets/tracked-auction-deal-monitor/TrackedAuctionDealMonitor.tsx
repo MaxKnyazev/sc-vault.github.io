@@ -21,6 +21,7 @@ import { useAuctionTrackedLotsStore } from '../../shared/store/auctionTrackedLot
 import { useAuctionTrackedSubscriptionsStore } from '../../shared/store/auctionTrackedSubscriptionsStore'
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
+import { auctionQualityLabelRu } from '../../shared/lib/auctionQualityLabelsRu'
 import { isArtifactDataPath, isModuleCoreItem } from '../../shared/lib/itemKinds'
 
 const ACTIVE_LOTS_POLL_MS = 60_000
@@ -133,7 +134,7 @@ export function TrackedAuctionDealMonitor() {
 
         if (qualifying && minP !== null && prevEdge[edgeKey] !== true) {
           const iconUrl = item ? buildItemIconUrl(item.icon, hideout.realm) : undefined
-          const qLabel = sub.quality === 'all' ? 'Все редкости' : sub.quality
+          const qLabel = auctionQualityLabelRu(sub.quality)
           const toastName =
             sub.kind === 'core'
               ? `${name} — ${qLabel}`

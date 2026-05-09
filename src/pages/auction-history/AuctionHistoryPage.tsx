@@ -36,6 +36,7 @@ import { useAuctionDesiredBuyPricesStore } from '../../shared/store/auctionDesir
 import { useAuctionTrackedLotsStore } from '../../shared/store/auctionTrackedLotsStore'
 import { useAuctionTrackedSubscriptionsStore } from '../../shared/store/auctionTrackedSubscriptionsStore'
 import { useAuthStore } from '../../shared/store/authStore'
+import { auctionQualityLabelRu } from '../../shared/lib/auctionQualityLabelsRu'
 import { isArtifactDataPath, isModuleCoreItem } from '../../shared/lib/itemKinds'
 
 type TrackedRow = {
@@ -225,17 +226,6 @@ export function AuctionHistoryPage() {
     [itemsById, realm],
   )
 
-  const qualityLabelRu: Record<string, string> = {
-    all: 'Все',
-    normal: 'Обычная',
-    uncommon: 'Необычная',
-    special: 'Особая',
-    rare: 'Редкая',
-    exclusive: 'Исключительная',
-    legendary: 'Легендарная',
-    unique: 'Уникальная',
-  }
-
   const upgradeRangeOptions = useMemo(
     () => Array.from({ length: 16 }, (_, i) => ({ value: String(i), label: `+${i}` })),
     [],
@@ -373,8 +363,8 @@ export function AuctionHistoryPage() {
                           const draft = subPriceDrafts[k] ?? s.desiredBuyPrice ?? ''
                           const title =
                             s.kind === 'core'
-                              ? `Ядро — ${qualityLabelRu[s.quality] ?? s.quality}`
-                              : `Артефакт — ${qualityLabelRu[s.quality] ?? s.quality} (+${s.upgradeMin}…+${s.upgradeMax})`
+                              ? `Ядро — ${auctionQualityLabelRu(s.quality)}`
+                              : `Артефакт — ${auctionQualityLabelRu(s.quality)} (+${s.upgradeMin}…+${s.upgradeMax})`
                           const lots = lotsByItemId[s.itemId] ?? []
                           const filtered = lots.filter((lot) => {
                             if (s.quality !== 'all' && lot.quality !== s.quality) return false
