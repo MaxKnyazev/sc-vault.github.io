@@ -20,6 +20,8 @@ import { useAuctionTrackedItemRulesStore } from '../../shared/store/auctionTrack
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import { isArtifactDataPath, isModuleCoreItem } from '../../shared/lib/itemKinds'
+import { fetchVirtualActiveLotMins } from '../../shared/api/backendApi'
+import { useAuctionVirtualTrackingsStore } from '../../shared/store/auctionVirtualTrackingsStore'
 
 const ACTIVE_LOTS_POLL_MS = 60_000
 
@@ -88,6 +90,45 @@ export function TrackedAuctionDealMonitor() {
       const nextEdge: Record<string, boolean> = {}
       const hideout = useHideoutStore.getState()
       const newToasts: AuctionDealToast[] = []
+      let virtualMins: Record<string, { minPrice: number; itemId: string; updatedAt: string }> = {}
+      try {
+        virtualMins = await fetchVirtualActiveLotMins()
+      } catch {
+        virtualMins = {}
+      }
+
+      const virtualTrackings = useAuctionVirtualTrackingsStore.getState().trackings
+      for (const t of virtualTrackings) {
+        // Cache table stores artifact mins per exact upgrade; for диапазона берём минимум по всем upgrade в диапазоне.
+        let minRow: { minPrice: number; itemId: string } | null = null
+        if (t.kind === 'core') {
+          const r = virtualMins[`core|${t.quality}|-1`]
+          if (r) minRow = { minPrice: r.minPrice, itemId: r.itemId }
+        } else {
+          for (let u = t.upgradeMin; u <= t.upgradeMax; u += 1) {
+            const r = virtualMins[`artifact|${t.quality}|${u}`]
+            if (!r) continue
+            if (!minRow || r.minPrice < minRow.minPrice) minRow = { minPrice: r.minPrice, itemId: r.itemId }
+          }
+        }
+        const threshold = parseDesiredBuyRub(t.desiredBuyPrice)
+        const qualifying = threshold !== null && minRow !== null && minRow.minPrice <= threshold
+        const edgeKey = `v|${t.kind}|${t.quality}|${t.upgradeMin}|${t.upgradeMax}`
+        nextEdge[edgeKey] = qualifying
+        if (qualifying && minRow && prevEdge[edgeKey] !== true) {
+          const name =
+            t.kind === 'core'
+              ? `Ядро модуля — ${t.quality}`
+              : `Артефакт — ${t.quality} (+${t.upgradeMin}..+${t.upgradeMax})`
+          newToasts.push({
+            id: `${Date.now()}-${edgeKey}-${Math.random().toString(16).slice(2)}`,
+            itemId: minRow.itemId,
+            name,
+            minPrice: minRow.minPrice,
+            initialQuality: t.quality,
+          })
+        }
+      }
 
       for (const itemId of ids) {
         const lots = nextLots[itemId] ?? []
@@ -109,9 +150,9 @@ export function TrackedAuctionDealMonitor() {
 
         const minP = minActiveLotUnitPrice(filteredLots, nowMs)
         const qualifying = threshold !== null && minP !== null && minP <= threshold
-        nextEdge[itemId] = qualifying
+        nextEdge[`i|${itemId}`] = qualifying
 
-        if (qualifying && minP !== null && prevEdge[itemId] !== true) {
+        if (qualifying && minP !== null && prevEdge[`i|${itemId}`] !== true) {
           const iconUrl = item ? buildItemIconUrl(item.icon, hideout.realm) : undefined
           newToasts.push({
             id: `${Date.now()}-${itemId}-${Math.random().toString(16).slice(2)}`,

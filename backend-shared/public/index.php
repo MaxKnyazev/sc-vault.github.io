@@ -24,6 +24,7 @@ require $baseDir . '/src/Auction.php';
 require $baseDir . '/src/AuctionTrackedItems.php';
 require $baseDir . '/src/AuctionTrackedDesiredBuyPrices.php';
 require $baseDir . '/src/AuctionTrackedItemRules.php';
+require $baseDir . '/src/AuctionVirtualTrackings.php';
 require $baseDir . '/src/AuctionBlacklist.php';
 require $baseDir . '/src/UserBuyPrices.php';
 require $baseDir . '/src/UserEnergyBuyPrice.php';
@@ -604,6 +605,114 @@ if ($path === '/auction/tracked-item-rules') {
     }
 
     send_json(405, ['error' => 'Method not allowed']);
+    exit;
+}
+
+if ($path === '/auction/virtual-trackings') {
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    enforce_auth_user($user);
+    $userId = (int)$user['id'];
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+        $migrationsPending = false;
+        try {
+            $trackings = get_user_virtual_trackings($db, $userId);
+        } catch (Throwable $e) {
+            if (!api_is_missing_db_table($e)) {
+                send_json(500, ['error' => $e->getMessage()]);
+                exit;
+            }
+            $trackings = [];
+            $migrationsPending = true;
+        }
+        send_json(200, ['trackings' => $trackings, 'migrationsPending' => $migrationsPending]);
+        exit;
+    }
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        require_method('POST');
+        $body = read_json_body();
+        $kind = normalize_virtual_kind((string)($body['kind'] ?? ''));
+        $quality = normalize_virtual_quality((string)($body['quality'] ?? ''), $kind);
+        $range = normalize_virtual_upgrade_range($body['upgradeMin'] ?? -1, $body['upgradeMax'] ?? -1, $kind);
+        $desiredBuyPrice = normalize_virtual_desired_price((string)($body['desiredBuyPrice'] ?? ''));
+        try {
+            upsert_user_virtual_tracking($db, $userId, $kind, $quality, (int)$range['min'], (int)$range['max'], $desiredBuyPrice);
+        } catch (InvalidArgumentException $e) {
+            send_json(400, ['error' => $e->getMessage()]);
+            exit;
+        } catch (Throwable $e) {
+            if (api_is_missing_db_table($e)) {
+                send_json(503, ['error' => 'Не найдена таблица в БД. Выполните миграцию: 017_auction_user_virtual_trackings.sql.']);
+                exit;
+            }
+            send_json(400, ['error' => $e->getMessage()]);
+            exit;
+        }
+        send_json(200, ['ok' => true]);
+        exit;
+    }
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'DELETE') {
+        $body = read_json_body();
+        try {
+            $kind = normalize_virtual_kind((string)($body['kind'] ?? ''));
+            $quality = normalize_virtual_quality((string)($body['quality'] ?? ''), $kind);
+            $range = normalize_virtual_upgrade_range($body['upgradeMin'] ?? -1, $body['upgradeMax'] ?? -1, $kind);
+            delete_user_virtual_tracking($db, $userId, $kind, $quality, (int)$range['min'], (int)$range['max']);
+        } catch (InvalidArgumentException $e) {
+            send_json(400, ['error' => $e->getMessage()]);
+            exit;
+        } catch (Throwable $e) {
+            if (api_is_missing_db_table($e)) {
+                send_json(503, ['error' => 'Не найдена таблица в БД. Выполните миграцию: 017_auction_user_virtual_trackings.sql.']);
+                exit;
+            }
+            send_json(400, ['error' => $e->getMessage()]);
+            exit;
+        }
+        send_json(200, ['ok' => true]);
+        exit;
+    }
+
+    send_json(405, ['error' => 'Method not allowed']);
+    exit;
+}
+
+if ($path === '/auction/virtual-active-lot-mins') {
+    require_method('GET');
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    enforce_auth_user($user);
+    $migrationsPending = false;
+    try {
+        $mins = get_virtual_active_lot_mins($db);
+    } catch (Throwable $e) {
+        if (!api_is_missing_db_table($e)) {
+            send_json(500, ['error' => $e->getMessage()]);
+            exit;
+        }
+        $mins = [];
+        $migrationsPending = true;
+    }
+    send_json(200, ['mins' => $mins, 'migrationsPending' => $migrationsPending]);
     exit;
 }
 

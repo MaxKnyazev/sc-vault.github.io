@@ -6,6 +6,7 @@ import {
   Loader,
   Modal,
   MultiSelect,
+  Select,
   ScrollArea,
   SimpleGrid,
   Stack,
@@ -34,8 +35,10 @@ import { useAuctionTrackedLotsStore } from '../../shared/store/auctionTrackedLot
 import { useAuthStore } from '../../shared/store/authStore'
 import { useAuctionTrackedItemRulesStore } from '../../shared/store/auctionTrackedItemRulesStore'
 import { isArtifactDataPath, isModuleCoreItem } from '../../shared/lib/itemKinds'
+import { useAuctionVirtualTrackingsStore } from '../../shared/store/auctionVirtualTrackingsStore'
 
 import type { AuctionHistoryQuality } from '../../shared/api/backendApi'
+import type { VirtualTrackingKind, VirtualTracking } from '../../shared/api/backendApi'
 
 type TrackedRow = {
   itemId: string
@@ -66,7 +69,11 @@ export function AuctionHistoryPage() {
   const desiredBuyByItemId = useAuctionDesiredBuyPricesStore((s) => s.desiredBuyByItemId)
   const saveDesiredBuyPrice = useAuctionDesiredBuyPricesStore((s) => s.saveDesiredBuyPrice)
   const rulesByItemId = useAuctionTrackedItemRulesStore((s) => s.rulesByItemId)
-  const saveRules = useAuctionTrackedItemRulesStore((s) => s.saveRules)
+  const virtualTrackings = useAuctionVirtualTrackingsStore((s) => s.trackings)
+  const virtualLoading = useAuctionVirtualTrackingsStore((s) => s.isLoading)
+  const virtualError = useAuctionVirtualTrackingsStore((s) => s.error)
+  const upsertVirtual = useAuctionVirtualTrackingsStore((s) => s.upsert)
+  const removeVirtual = useAuctionVirtualTrackingsStore((s) => s.remove)
 
   const [mineIds, setMineIds] = useState<string[]>([])
   const [globalIds, setGlobalIds] = useState<string[]>([])
@@ -84,12 +91,18 @@ export function AuctionHistoryPage() {
   const [trackedError, setTrackedError] = useState<string | null>(null)
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({})
   const [savingPriceItemId, setSavingPriceItemId] = useState<string | null>(null)
-  const [ruleEditOpened, setRuleEditOpened] = useState(false)
-  const [ruleEditItemId, setRuleEditItemId] = useState<string | null>(null)
-  const [ruleEditQualities, setRuleEditQualities] = useState<string[]>([])
-  const [ruleEditUpgrades, setRuleEditUpgrades] = useState<number[]>([])
-  const [ruleEditError, setRuleEditError] = useState<string | null>(null)
-  const [isSavingRules, setIsSavingRules] = useState(false)
+  // NOTE: legacy per-item rules UI is kept read-only for now; new UX is implemented via "virtual" subscriptions above.
+
+  const [virtualModalOpened, setVirtualModalOpened] = useState(false)
+  const [virtualKind, setVirtualKind] = useState<VirtualTrackingKind>('core')
+  const [virtualQualities, setVirtualQualities] = useState<string[]>([])
+  const [virtualUpgradeMin, setVirtualUpgradeMin] = useState('0')
+  const [virtualUpgradeMax, setVirtualUpgradeMax] = useState('15')
+  const [virtualDesiredPrice, setVirtualDesiredPrice] = useState('')
+  const [virtualSaving, setVirtualSaving] = useState(false)
+  const [virtualSaveError, setVirtualSaveError] = useState<string | null>(null)
+
+  const [virtualPriceDrafts, setVirtualPriceDrafts] = useState<Record<string, string>>({})
 
   const openAuctionHistoryItemModal = useAuctionHistoryItemModalStore((s) => s.open)
   const lotsByItemId = useAuctionTrackedLotsStore((s) => s.lotsByItemId)
@@ -164,42 +177,9 @@ export function AuctionHistoryPage() {
     [itemsById, realm],
   )
 
-  const openRulesEditor = (item: TrackedRow) => {
-    const rule = rulesByItemId[item.itemId]
-    setRuleEditError(null)
-    setRuleEditItemId(item.itemId)
-    setRuleEditOpened(true)
-    setRuleEditQualities(rule?.qualities ?? [])
-    setRuleEditUpgrades(rule?.upgrades ?? [])
+  const openRulesEditor = (_item: TrackedRow) => {
+    setTrackedError('Правила на конкретный предмет устарели. Используйте «Подписки: ядра и артефакты» выше.')
   }
-
-  const itemKind = useMemo(() => {
-    if (!ruleEditItemId) return null
-    const it = itemsById[ruleEditItemId]
-    if (!it) return null
-    const name = getItemName(it.name?.lines) || ruleEditItemId
-    if (isArtifactDataPath(it.data)) return 'artifact'
-    if (isModuleCoreItem(it.data, name)) return 'core'
-    return null
-  }, [itemsById, ruleEditItemId])
-
-  const QUALITY_OPTIONS_CORE: Array<{ value: AuctionHistoryQuality; label: string }> = [
-    { value: 'normal', label: 'Обычная' },
-    { value: 'uncommon', label: 'Необычная' },
-    { value: 'special', label: 'Особая' },
-    { value: 'rare', label: 'Редкая' },
-    { value: 'exclusive', label: 'Исключительная' },
-    { value: 'legendary', label: 'Легендарная' },
-  ]
-  const QUALITY_OPTIONS_ARTIFACT: Array<{ value: AuctionHistoryQuality; label: string }> = [
-    ...QUALITY_OPTIONS_CORE,
-    { value: 'unique', label: 'Уникальная' },
-  ]
-  const qualityOptions = itemKind === 'artifact' ? QUALITY_OPTIONS_ARTIFACT : QUALITY_OPTIONS_CORE
-  const upgradeOptions = useMemo(
-    () => Array.from({ length: 16 }, (_, i) => ({ value: String(i), label: `+${i}` })),
-    [],
-  )
 
   const qualityLabelRu: Record<string, string> = {
     normal: 'Обычная',
@@ -210,6 +190,39 @@ export function AuctionHistoryPage() {
     legendary: 'Легендарная',
     unique: 'Уникальная',
   }
+
+  const virtualKey = (t: Pick<VirtualTracking, 'kind' | 'quality' | 'upgradeMin' | 'upgradeMax'>) =>
+    `${t.kind}|${t.quality}|${t.upgradeMin}|${t.upgradeMax}`
+
+  useEffect(() => {
+    setVirtualPriceDrafts((prev) => {
+      const next = { ...prev }
+      for (const t of virtualTrackings) {
+        const k = virtualKey(t)
+        if (next[k] === undefined) next[k] = t.desiredBuyPrice ?? ''
+      }
+      for (const k of Object.keys(next)) {
+        if (!virtualTrackings.some((t) => virtualKey(t) === k)) delete next[k]
+      }
+      return next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [virtualTrackings])
+
+  const VIRTUAL_QUALITY_OPTIONS_CORE = [
+    { value: 'normal', label: 'Обычная' },
+    { value: 'uncommon', label: 'Необычная' },
+    { value: 'special', label: 'Особая' },
+    { value: 'rare', label: 'Редкая' },
+    { value: 'exclusive', label: 'Исключительная' },
+    { value: 'legendary', label: 'Легендарная' },
+  ]
+  const VIRTUAL_QUALITY_OPTIONS_ARTIFACT = [...VIRTUAL_QUALITY_OPTIONS_CORE, { value: 'unique', label: 'Уникальная' }]
+  const virtualQualityOptions = virtualKind === 'artifact' ? VIRTUAL_QUALITY_OPTIONS_ARTIFACT : VIRTUAL_QUALITY_OPTIONS_CORE
+  const upgradeRangeOptions = useMemo(
+    () => Array.from({ length: 16 }, (_, i) => ({ value: String(i), label: `+${i}` })),
+    [],
+  )
 
   const mineRows = useMemo(() => toRows(mineIds), [mineIds, toRows])
   const globalRows = useMemo(() => toRows(globalIds), [globalIds, toRows])
@@ -291,6 +304,114 @@ export function AuctionHistoryPage() {
               </Tabs.List>
 
               <Tabs.Panel value="mine" pt="md">
+                <Stack gap="sm" mb="md">
+                  <Group justify="space-between" align="center" wrap="wrap">
+                    <Text fw={700}>Подписки: ядра и артефакты</Text>
+                    <Button
+                      size="sm"
+                      variant="light"
+                      color="gray"
+                      onClick={() => {
+                        setVirtualSaveError(null)
+                        setVirtualKind('core')
+                        setVirtualQualities([])
+                        setVirtualUpgradeMin('0')
+                        setVirtualUpgradeMax('15')
+                        setVirtualDesiredPrice('')
+                        setVirtualModalOpened(true)
+                      }}
+                    >
+                      Добавить подписку
+                    </Button>
+                  </Group>
+                  {virtualError ? <Alert color="red">{virtualError}</Alert> : null}
+                  {virtualLoading ? <Loader size="xs" /> : null}
+
+                  {virtualTrackings.length > 0 ? (
+                    <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
+                      {virtualTrackings.map((t) => {
+                        const k = virtualKey(t)
+                        const draft = virtualPriceDrafts[k] ?? t.desiredBuyPrice ?? ''
+                        const title =
+                          t.kind === 'core'
+                            ? `Ядро модуля — ${qualityLabelRu[t.quality] ?? t.quality}`
+                            : `Артефакт — ${qualityLabelRu[t.quality] ?? t.quality} (+${t.upgradeMin}..+${t.upgradeMax})`
+                        return (
+                          <Stack
+                            key={k}
+                            gap={6}
+                            p="md"
+                            bd="1px solid var(--mantine-color-default-border)"
+                            style={{ borderRadius: 8 }}
+                          >
+                            <Group justify="space-between" align="center" wrap="nowrap">
+                              <Text fw={700} style={{ flex: 1, minWidth: 0 }}>
+                                {title}
+                              </Text>
+                              <ActionIcon
+                                size={36}
+                                color="red"
+                                variant="light"
+                                aria-label="Удалить подписку"
+                                title="Удалить подписку"
+                                onClick={async () => {
+                                  setTrackedError(null)
+                                  try {
+                                    await removeVirtual({
+                                      kind: t.kind,
+                                      quality: t.quality,
+                                      upgradeMin: t.upgradeMin,
+                                      upgradeMax: t.upgradeMax,
+                                    })
+                                  } catch (e) {
+                                    setTrackedError(e instanceof Error ? e.message : 'Не удалось удалить подписку')
+                                  }
+                                }}
+                              >
+                                ✕
+                              </ActionIcon>
+                            </Group>
+                            <Group align="flex-end" wrap="nowrap" gap="xs">
+                              <TextInput
+                                label="Желаемая стоимость скупа"
+                                placeholder="цена за единицу"
+                                value={draft}
+                                style={{ flex: 1 }}
+                                onChange={(event) => {
+                                  const sanitized = event.currentTarget.value.replace(/[^\d]/g, '')
+                                  setVirtualPriceDrafts((p) => ({ ...p, [k]: sanitized }))
+                                }}
+                              />
+                              <Button
+                                variant="default"
+                                color="gray"
+                                disabled={draft === (t.desiredBuyPrice ?? '')}
+                                onClick={async () => {
+                                  setTrackedError(null)
+                                  try {
+                                    await upsertVirtual({
+                                      ...t,
+                                      desiredBuyPrice: draft,
+                                    })
+                                  } catch (e) {
+                                    setTrackedError(e instanceof Error ? e.message : 'Не удалось сохранить цену')
+                                  }
+                                }}
+                              >
+                                Сохранить
+                              </Button>
+                            </Group>
+                          </Stack>
+                        )
+                      })}
+                    </SimpleGrid>
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      Подписок пока нет.
+                    </Text>
+                  )}
+                </Stack>
+
                 <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
                   {filteredMineRows.map((item) => {
                     const draft = priceDrafts[item.itemId] ?? desiredBuyByItemId[item.itemId] ?? ''
@@ -490,74 +611,95 @@ export function AuctionHistoryPage() {
         </Stack>
       </SectionCard>
 
-      <Modal opened={ruleEditOpened} onClose={() => setRuleEditOpened(false)} title="Условия подписки" centered>
-        <Stack gap="sm">
-          {ruleEditError ? <Alert color="red">{ruleEditError}</Alert> : null}
-          <Text size="sm" c="dimmed">
-            {itemKind === 'artifact'
-              ? 'Выберите редкости и уровни заточки (+0…+15). Монитор и подсветка будут учитывать только подходящие лоты.'
-              : itemKind === 'core'
-                ? 'Выберите редкости. Монитор и подсветка будут учитывать только подходящие лоты.'
-                : 'Этот предмет не распознан как артефакт или ядро модуля.'}
-          </Text>
+      {/* Legacy per-item rules editor removed in favor of virtual subscriptions */}
 
+      <Modal
+        opened={virtualModalOpened}
+        onClose={() => setVirtualModalOpened(false)}
+        title="Добавить подписку"
+        centered
+        size="md"
+      >
+        <Stack gap="sm">
+          {virtualSaveError ? <Alert color="red">{virtualSaveError}</Alert> : null}
+          <Select
+            label="Тип"
+            data={[
+              { value: 'core', label: 'Ядро модуля' },
+              { value: 'artifact', label: 'Артефакт' },
+            ]}
+            value={virtualKind}
+            onChange={(v) => {
+              const next = (v as VirtualTrackingKind | null) ?? 'core'
+              setVirtualKind(next)
+              setVirtualQualities([])
+            }}
+          />
           <MultiSelect
             label="Редкости"
-            data={qualityOptions.map((o) => ({ value: o.value, label: o.label }))}
-            value={ruleEditQualities}
-            onChange={(v) => setRuleEditQualities(v)}
+            data={virtualQualityOptions}
+            value={virtualQualities}
+            onChange={(v) => setVirtualQualities(v)}
             searchable
             clearable
             nothingFoundMessage="Нет вариантов"
           />
 
-          {itemKind === 'artifact' ? (
-            <MultiSelect
-              label="Заточка"
-              data={upgradeOptions}
-              value={ruleEditUpgrades.map(String)}
-              onChange={(v) =>
-                setRuleEditUpgrades(
-                  v.map((x) => Number.parseInt(x, 10)).filter((n) => Number.isFinite(n) && n >= 0 && n <= 15),
-                )
-              }
-              searchable
-              clearable
-              nothingFoundMessage="Нет вариантов"
-            />
+          {virtualKind === 'artifact' ? (
+            <Group grow>
+              <Select
+                label="Заточка от"
+                data={upgradeRangeOptions}
+                value={virtualUpgradeMin}
+                onChange={(v) => setVirtualUpgradeMin(v ?? '0')}
+              />
+              <Select
+                label="до"
+                data={upgradeRangeOptions}
+                value={virtualUpgradeMax}
+                onChange={(v) => setVirtualUpgradeMax(v ?? '15')}
+              />
+            </Group>
           ) : null}
 
-          <Group justify="space-between">
-            <Button
-              variant="default"
-              color="gray"
-              onClick={() => {
-                setRuleEditQualities([])
-                setRuleEditUpgrades([])
-              }}
-            >
-              Сбросить
+          <TextInput
+            label="Желаемая стоимость скупа"
+            placeholder="цена за единицу"
+            value={virtualDesiredPrice}
+            onChange={(event) => setVirtualDesiredPrice(event.currentTarget.value.replace(/[^\d]/g, ''))}
+          />
+
+          <Group justify="flex-end">
+            <Button variant="default" color="gray" onClick={() => setVirtualModalOpened(false)} disabled={virtualSaving}>
+              Отмена
             </Button>
             <Button
-              loading={isSavingRules}
-              disabled={!ruleEditItemId || itemKind === null}
+              loading={virtualSaving}
+              disabled={virtualQualities.length === 0 || virtualDesiredPrice.trim() === ''}
               onClick={async () => {
-                if (!ruleEditItemId) return
-                setRuleEditError(null)
-                setIsSavingRules(true)
+                setVirtualSaveError(null)
+                setVirtualSaving(true)
                 try {
-                  const upgradesPayload =
-                    itemKind === 'artifact' ? ruleEditUpgrades : ([null] as Array<number | null>)
-                  await saveRules(ruleEditItemId, ruleEditQualities, upgradesPayload)
-                  setRuleEditOpened(false)
+                  const min = Number.parseInt(virtualUpgradeMin, 10)
+                  const max = Number.parseInt(virtualUpgradeMax, 10)
+                  for (const q of virtualQualities) {
+                    await upsertVirtual({
+                      kind: virtualKind,
+                      quality: q as AuctionHistoryQuality,
+                      upgradeMin: virtualKind === 'artifact' ? min : -1,
+                      upgradeMax: virtualKind === 'artifact' ? max : -1,
+                      desiredBuyPrice: virtualDesiredPrice,
+                    })
+                  }
+                  setVirtualModalOpened(false)
                 } catch (e) {
-                  setRuleEditError(e instanceof Error ? e.message : 'Не удалось сохранить условия')
+                  setVirtualSaveError(e instanceof Error ? e.message : 'Не удалось сохранить подписку')
                 } finally {
-                  setIsSavingRules(false)
+                  setVirtualSaving(false)
                 }
               }}
             >
-              Сохранить
+              Создать
             </Button>
           </Group>
         </Stack>

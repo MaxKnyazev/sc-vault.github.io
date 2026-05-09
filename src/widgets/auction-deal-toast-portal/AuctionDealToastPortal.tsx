@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 import { useAuctionDealToastsStore, type AuctionDealToast } from '../../shared/store/auctionDealToastsStore'
 import { useAuctionHistoryItemModalStore } from '../../shared/store/auctionHistoryItemModalStore'
+import type { AuctionHistoryQuality } from '../../shared/api/backendApi'
 
 const TOAST_MS = 10_000
 
@@ -124,7 +125,10 @@ export function AuctionDealToastPortal() {
           toast={toast}
           onDismiss={() => dismiss(toast.id)}
           onActivate={() => {
-            openModal(toast.itemId, { initialView: 'activeLots' })
+            openModal(toast.itemId, {
+              initialView: 'activeLots',
+              initialQuality: (toast.initialQuality as AuctionHistoryQuality | undefined) ?? null,
+            })
             dismiss(toast.id)
           }}
         />

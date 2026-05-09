@@ -409,6 +409,91 @@ export async function saveTrackedItemRules(
   await parseJsonOrThrow<{ ok?: boolean }>(response)
 }
 
+export type VirtualTrackingKind = 'core' | 'artifact'
+export type VirtualTracking = {
+  kind: VirtualTrackingKind
+  quality: AuctionHistoryQuality
+  upgradeMin: number
+  upgradeMax: number
+  desiredBuyPrice: string
+}
+
+type VirtualTrackingsResponse = {
+  trackings?: VirtualTracking[]
+  migrationsPending?: boolean
+}
+
+type VirtualActiveLotMinsResponse = {
+  mins?: Record<string, { minPrice: number; itemId: string; updatedAt: string }>
+  migrationsPending?: boolean
+}
+
+export async function fetchVirtualTrackings(): Promise<VirtualTracking[]> {
+  const token = getBackendAuthToken()
+  if (!token) return []
+  const url = buildApiUrl('/auction/virtual-trackings')
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+  })
+  const payload = await parseJsonOrThrow<VirtualTrackingsResponse>(response)
+  return payload.trackings ?? []
+}
+
+export async function upsertVirtualTracking(tracking: VirtualTracking): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl('/auction/virtual-trackings')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify(tracking),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function deleteVirtualTracking(tracking: Pick<VirtualTracking, 'kind' | 'quality' | 'upgradeMin' | 'upgradeMax'>): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl('/auction/virtual-trackings')
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify(tracking),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function fetchVirtualActiveLotMins(): Promise<Record<string, { minPrice: number; itemId: string; updatedAt: string }>> {
+  const token = getBackendAuthToken()
+  if (!token) return {}
+  const url = buildApiUrl('/auction/virtual-active-lot-mins')
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+  })
+  const payload = await parseJsonOrThrow<VirtualActiveLotMinsResponse>(response)
+  return payload.mins ?? {}
+}
+
 export async function fetchBackendUserBuyPrices(): Promise<FetchUserBuyPricesResult> {
   const token = getBackendAuthToken()
   if (!token) return { itemPrices: {}, energyBuyPrice: '', defaultPrices: {} }

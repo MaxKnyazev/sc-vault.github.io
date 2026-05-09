@@ -6,6 +6,7 @@ export type AuctionDealToast = {
   name: string
   minPrice: number
   iconUrl?: string
+  initialQuality?: string
 }
 
 type AuctionDealToastsState = {
