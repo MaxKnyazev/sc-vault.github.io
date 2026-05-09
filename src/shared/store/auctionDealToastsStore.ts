@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { AuctionHistoryQuality, AuctionHistoryUpgrade } from '../api/backendApi'
 
 export type AuctionDealToast = {
   id: string
@@ -6,7 +7,8 @@ export type AuctionDealToast = {
   name: string
   minPrice: number
   iconUrl?: string
-  initialQuality?: string
+  initialQuality?: AuctionHistoryQuality
+  initialUpgrade?: AuctionHistoryUpgrade
 }
 
 type AuctionDealToastsState = {

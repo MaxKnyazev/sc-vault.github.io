@@ -23,8 +23,7 @@ require $baseDir . '/src/Auth.php';
 require $baseDir . '/src/Auction.php';
 require $baseDir . '/src/AuctionTrackedItems.php';
 require $baseDir . '/src/AuctionTrackedDesiredBuyPrices.php';
-require $baseDir . '/src/AuctionTrackedItemRules.php';
-require $baseDir . '/src/AuctionVirtualTrackings.php';
+require $baseDir . '/src/AuctionTrackedSubscriptions.php';
 require $baseDir . '/src/AuctionBlacklist.php';
 require $baseDir . '/src/UserBuyPrices.php';
 require $baseDir . '/src/UserEnergyBuyPrice.php';
@@ -533,7 +532,7 @@ if ($path === '/auction/tracked-desired-buy-prices') {
     exit;
 }
 
-if ($path === '/auction/tracked-item-rules') {
+if ($path === '/auction/tracked-subscriptions') {
     $token = bearer_token_from_headers();
     if (!$token) {
         send_json(401, ['error' => 'Missing token']);
@@ -550,19 +549,16 @@ if ($path === '/auction/tracked-item-rules') {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
         $migrationsPending = false;
         try {
-            $rulesByItemId = get_user_tracked_item_rules($db, $userId);
+            $subscriptions = get_user_tracked_item_subscriptions($db, $userId);
         } catch (Throwable $e) {
             if (!api_is_missing_db_table($e)) {
                 send_json(500, ['error' => $e->getMessage()]);
                 exit;
             }
-            $rulesByItemId = [];
+            $subscriptions = [];
             $migrationsPending = true;
         }
-        send_json(200, [
-            'rulesByItemId' => $rulesByItemId,
-            'migrationsPending' => $migrationsPending,
-        ]);
+        send_json(200, ['subscriptions' => $subscriptions, 'migrationsPending' => $migrationsPending]);
         exit;
     }
 
@@ -570,89 +566,28 @@ if ($path === '/auction/tracked-item-rules') {
         require_method('POST');
         $body = read_json_body();
         $itemId = trim((string)($body['itemId'] ?? ''));
-        $qualities = $body['qualities'] ?? [];
-        $upgrades = $body['upgrades'] ?? [];
-        if ($itemId === '') {
-            send_json(400, ['error' => 'itemId required']);
-            exit;
-        }
-        if (!is_array($qualities) || !is_array($upgrades)) {
-            send_json(400, ['error' => 'qualities/upgrades must be arrays']);
-            exit;
-        }
+        $kind = normalize_subscription_kind((string)($body['kind'] ?? ''));
+        $quality = normalize_subscription_quality((string)($body['quality'] ?? ''), $kind);
+        $range = normalize_subscription_upgrade_range($kind, $body['upgradeMin'] ?? -1, $body['upgradeMax'] ?? -1);
+        $priceRaw = (string)($body['desiredBuyPrice'] ?? '');
         try {
-            if (!user_has_tracked_item($db, $userId, $itemId)) {
-                send_json(400, ['error' => 'Сначала добавьте предмет в «Мои отслеживания»']);
-                exit;
-            }
-            replace_user_tracked_item_rules($db, $userId, $itemId, $qualities, $upgrades);
-        } catch (InvalidArgumentException $e) {
-            send_json(400, ['error' => $e->getMessage()]);
-            exit;
-        } catch (Throwable $e) {
-            $msg = $e->getMessage();
-            if (api_is_missing_db_table($e)) {
-                send_json(503, [
-                    'error' => 'Не найдена таблица в БД. Выполните миграцию: 016_auction_user_tracked_item_rules.sql.',
-                ]);
-                exit;
-            }
-            send_json(400, ['error' => $msg]);
-            exit;
-        }
-        send_json(200, ['ok' => true]);
-        exit;
-    }
-
-    send_json(405, ['error' => 'Method not allowed']);
-    exit;
-}
-
-if ($path === '/auction/virtual-trackings') {
-    $token = bearer_token_from_headers();
-    if (!$token) {
-        send_json(401, ['error' => 'Missing token']);
-        exit;
-    }
-    $user = find_user_by_token($db, $token);
-    if (!$user) {
-        send_json(401, ['error' => 'Invalid token']);
-        exit;
-    }
-    enforce_auth_user($user);
-    $userId = (int)$user['id'];
-
-    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
-        $migrationsPending = false;
-        try {
-            $trackings = get_user_virtual_trackings($db, $userId);
-        } catch (Throwable $e) {
-            if (!api_is_missing_db_table($e)) {
-                send_json(500, ['error' => $e->getMessage()]);
-                exit;
-            }
-            $trackings = [];
-            $migrationsPending = true;
-        }
-        send_json(200, ['trackings' => $trackings, 'migrationsPending' => $migrationsPending]);
-        exit;
-    }
-
-    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-        require_method('POST');
-        $body = read_json_body();
-        $kind = normalize_virtual_kind((string)($body['kind'] ?? ''));
-        $quality = normalize_virtual_quality((string)($body['quality'] ?? ''), $kind);
-        $range = normalize_virtual_upgrade_range($body['upgradeMin'] ?? -1, $body['upgradeMax'] ?? -1, $kind);
-        $desiredBuyPrice = normalize_virtual_desired_price((string)($body['desiredBuyPrice'] ?? ''));
-        try {
-            upsert_user_virtual_tracking($db, $userId, $kind, $quality, (int)$range['min'], (int)$range['max'], $desiredBuyPrice);
+            $desired = normalize_subscription_desired_price($priceRaw);
+            upsert_user_tracked_item_subscription(
+                $db,
+                $userId,
+                $itemId,
+                $kind,
+                $quality,
+                (int)$range['min'],
+                (int)$range['max'],
+                $desired,
+            );
         } catch (InvalidArgumentException $e) {
             send_json(400, ['error' => $e->getMessage()]);
             exit;
         } catch (Throwable $e) {
             if (api_is_missing_db_table($e)) {
-                send_json(503, ['error' => 'Не найдена таблица в БД. Выполните миграцию: 017_auction_user_virtual_trackings.sql.']);
+                send_json(503, ['error' => 'Не найдена таблица в БД. Выполните миграцию: 019_auction_user_tracked_item_subscriptions.sql.']);
                 exit;
             }
             send_json(400, ['error' => $e->getMessage()]);
@@ -665,16 +600,25 @@ if ($path === '/auction/virtual-trackings') {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'DELETE') {
         $body = read_json_body();
         try {
-            $kind = normalize_virtual_kind((string)($body['kind'] ?? ''));
-            $quality = normalize_virtual_quality((string)($body['quality'] ?? ''), $kind);
-            $range = normalize_virtual_upgrade_range($body['upgradeMin'] ?? -1, $body['upgradeMax'] ?? -1, $kind);
-            delete_user_virtual_tracking($db, $userId, $kind, $quality, (int)$range['min'], (int)$range['max']);
+            $itemId = trim((string)($body['itemId'] ?? ''));
+            $kind = normalize_subscription_kind((string)($body['kind'] ?? ''));
+            $quality = normalize_subscription_quality((string)($body['quality'] ?? ''), $kind);
+            $range = normalize_subscription_upgrade_range($kind, $body['upgradeMin'] ?? -1, $body['upgradeMax'] ?? -1);
+            delete_user_tracked_item_subscription(
+                $db,
+                $userId,
+                $itemId,
+                $kind,
+                $quality,
+                (int)$range['min'],
+                (int)$range['max'],
+            );
         } catch (InvalidArgumentException $e) {
             send_json(400, ['error' => $e->getMessage()]);
             exit;
         } catch (Throwable $e) {
             if (api_is_missing_db_table($e)) {
-                send_json(503, ['error' => 'Не найдена таблица в БД. Выполните миграцию: 017_auction_user_virtual_trackings.sql.']);
+                send_json(503, ['error' => 'Не найдена таблица в БД. Выполните миграцию: 019_auction_user_tracked_item_subscriptions.sql.']);
                 exit;
             }
             send_json(400, ['error' => $e->getMessage()]);
@@ -685,34 +629,6 @@ if ($path === '/auction/virtual-trackings') {
     }
 
     send_json(405, ['error' => 'Method not allowed']);
-    exit;
-}
-
-if ($path === '/auction/virtual-active-lot-mins') {
-    require_method('GET');
-    $token = bearer_token_from_headers();
-    if (!$token) {
-        send_json(401, ['error' => 'Missing token']);
-        exit;
-    }
-    $user = find_user_by_token($db, $token);
-    if (!$user) {
-        send_json(401, ['error' => 'Invalid token']);
-        exit;
-    }
-    enforce_auth_user($user);
-    $migrationsPending = false;
-    try {
-        $mins = get_virtual_active_lot_mins($db);
-    } catch (Throwable $e) {
-        if (!api_is_missing_db_table($e)) {
-            send_json(500, ['error' => $e->getMessage()]);
-            exit;
-        }
-        $mins = [];
-        $migrationsPending = true;
-    }
-    send_json(200, ['mins' => $mins, 'migrationsPending' => $migrationsPending]);
     exit;
 }
 

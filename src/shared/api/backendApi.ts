@@ -362,76 +362,25 @@ export async function saveTrackedDesiredBuyPrice(itemId: string, value: string):
   await parseJsonOrThrow<{ ok?: boolean }>(response)
 }
 
-export type TrackedItemRule = {
-  qualities: string[]
-  upgrades: number[]
-}
-
-type TrackedItemRulesResponse = {
-  rulesByItemId?: Record<string, TrackedItemRule>
-  migrationsPending?: boolean
-}
-
-export async function fetchTrackedItemRules(): Promise<Record<string, TrackedItemRule>> {
-  const token = getBackendAuthToken()
-  if (!token) return {}
-  const url = buildApiUrl('/auction/tracked-item-rules')
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-      'X-Auth-Token': token,
-    },
-  })
-  const payload = await parseJsonOrThrow<TrackedItemRulesResponse>(response)
-  return payload.rulesByItemId ?? {}
-}
-
-export async function saveTrackedItemRules(
-  itemId: string,
-  qualities: string[],
-  upgrades: Array<number | null>,
-): Promise<void> {
-  const token = getBackendAuthToken()
-  if (!token) throw new Error('Нужна авторизация')
-  const url = buildApiUrl('/auction/tracked-item-rules')
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-      'X-Auth-Token': token,
-    },
-    body: JSON.stringify({ itemId, qualities, upgrades }),
-  })
-  await parseJsonOrThrow<{ ok?: boolean }>(response)
-}
-
-export type VirtualTrackingKind = 'core' | 'artifact'
-export type VirtualTracking = {
-  kind: VirtualTrackingKind
+export type TrackedItemSubscriptionKind = 'core' | 'artifact'
+export type TrackedItemSubscription = {
+  itemId: string
+  kind: TrackedItemSubscriptionKind
   quality: AuctionHistoryQuality
   upgradeMin: number
   upgradeMax: number
   desiredBuyPrice: string
 }
 
-type VirtualTrackingsResponse = {
-  trackings?: VirtualTracking[]
+type TrackedSubscriptionsResponse = {
+  subscriptions?: TrackedItemSubscription[]
   migrationsPending?: boolean
 }
 
-type VirtualActiveLotMinsResponse = {
-  mins?: Record<string, { minPrice: number; itemId: string; updatedAt: string }>
-  migrationsPending?: boolean
-}
-
-export async function fetchVirtualTrackings(): Promise<VirtualTracking[]> {
+export async function fetchTrackedItemSubscriptions(): Promise<TrackedItemSubscription[]> {
   const token = getBackendAuthToken()
   if (!token) return []
-  const url = buildApiUrl('/auction/virtual-trackings')
+  const url = buildApiUrl('/auction/tracked-subscriptions')
   const response = await fetch(url, {
     method: 'GET',
     headers: {
@@ -440,14 +389,14 @@ export async function fetchVirtualTrackings(): Promise<VirtualTracking[]> {
       'X-Auth-Token': token,
     },
   })
-  const payload = await parseJsonOrThrow<VirtualTrackingsResponse>(response)
-  return payload.trackings ?? []
+  const payload = await parseJsonOrThrow<TrackedSubscriptionsResponse>(response)
+  return payload.subscriptions ?? []
 }
 
-export async function upsertVirtualTracking(tracking: VirtualTracking): Promise<void> {
+export async function upsertTrackedItemSubscription(sub: TrackedItemSubscription): Promise<void> {
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация')
-  const url = buildApiUrl('/auction/virtual-trackings')
+  const url = buildApiUrl('/auction/tracked-subscriptions')
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -456,15 +405,24 @@ export async function upsertVirtualTracking(tracking: VirtualTracking): Promise<
       Authorization: `Bearer ${token}`,
       'X-Auth-Token': token,
     },
-    body: JSON.stringify(tracking),
+    body: JSON.stringify({
+      itemId: sub.itemId,
+      kind: sub.kind,
+      quality: sub.quality,
+      upgradeMin: sub.upgradeMin,
+      upgradeMax: sub.upgradeMax,
+      desiredBuyPrice: sub.desiredBuyPrice,
+    }),
   })
   await parseJsonOrThrow<{ ok?: boolean }>(response)
 }
 
-export async function deleteVirtualTracking(tracking: Pick<VirtualTracking, 'kind' | 'quality' | 'upgradeMin' | 'upgradeMax'>): Promise<void> {
+export async function deleteTrackedItemSubscription(
+  sub: Pick<TrackedItemSubscription, 'itemId' | 'kind' | 'quality' | 'upgradeMin' | 'upgradeMax'>,
+): Promise<void> {
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация')
-  const url = buildApiUrl('/auction/virtual-trackings')
+  const url = buildApiUrl('/auction/tracked-subscriptions')
   const response = await fetch(url, {
     method: 'DELETE',
     headers: {
@@ -473,25 +431,15 @@ export async function deleteVirtualTracking(tracking: Pick<VirtualTracking, 'kin
       Authorization: `Bearer ${token}`,
       'X-Auth-Token': token,
     },
-    body: JSON.stringify(tracking),
+    body: JSON.stringify({
+      itemId: sub.itemId,
+      kind: sub.kind,
+      quality: sub.quality,
+      upgradeMin: sub.upgradeMin,
+      upgradeMax: sub.upgradeMax,
+    }),
   })
   await parseJsonOrThrow<{ ok?: boolean }>(response)
-}
-
-export async function fetchVirtualActiveLotMins(): Promise<Record<string, { minPrice: number; itemId: string; updatedAt: string }>> {
-  const token = getBackendAuthToken()
-  if (!token) return {}
-  const url = buildApiUrl('/auction/virtual-active-lot-mins')
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-      'X-Auth-Token': token,
-    },
-  })
-  const payload = await parseJsonOrThrow<VirtualActiveLotMinsResponse>(response)
-  return payload.mins ?? {}
 }
 
 export async function fetchBackendUserBuyPrices(): Promise<FetchUserBuyPricesResult> {

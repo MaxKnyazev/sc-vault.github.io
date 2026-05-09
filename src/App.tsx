@@ -8,8 +8,7 @@ import { useIngredientPricesStore } from './shared/store/ingredientPricesStore'
 import { useAuctionDesiredBuyPricesStore } from './shared/store/auctionDesiredBuyPricesStore'
 import { useAuctionTrackedLotsStore } from './shared/store/auctionTrackedLotsStore'
 import { useAuctionDealToastsStore } from './shared/store/auctionDealToastsStore'
-import { useAuctionTrackedItemRulesStore } from './shared/store/auctionTrackedItemRulesStore'
-import { useAuctionVirtualTrackingsStore } from './shared/store/auctionVirtualTrackingsStore'
+import { useAuctionTrackedSubscriptionsStore } from './shared/store/auctionTrackedSubscriptionsStore'
 
 function App() {
   const bootstrapAuth = useAuthStore((s) => s.bootstrapAuth)
@@ -17,8 +16,7 @@ function App() {
   const isAuthResolved = useAuthStore((s) => s.isAuthResolved)
   const loadRemoteBuyPrices = useIngredientPricesStore((s) => s.loadRemoteBuyPrices)
   const loadTrackedDesiredBuyPrices = useAuctionDesiredBuyPricesStore((s) => s.loadRemote)
-  const loadTrackedItemRules = useAuctionTrackedItemRulesStore((s) => s.loadRemote)
-  const loadVirtualTrackings = useAuctionVirtualTrackingsStore((s) => s.loadRemote)
+  const loadTrackedSubscriptions = useAuctionTrackedSubscriptionsStore((s) => s.loadRemote)
 
   useEffect(() => {
     void bootstrapAuth()
@@ -36,19 +34,13 @@ function App() {
 
   useEffect(() => {
     if (!isAuthResolved) return
-    void loadTrackedItemRules()
-  }, [isAuthResolved, token, loadTrackedItemRules])
-
-  useEffect(() => {
-    if (!isAuthResolved) return
-    void loadVirtualTrackings()
-  }, [isAuthResolved, token, loadVirtualTrackings])
+    void loadTrackedSubscriptions()
+  }, [isAuthResolved, token, loadTrackedSubscriptions])
 
   useEffect(() => {
     if (token) return
     useAuctionDesiredBuyPricesStore.getState().reset()
-    useAuctionTrackedItemRulesStore.getState().reset()
-    useAuctionVirtualTrackingsStore.getState().reset()
+    useAuctionTrackedSubscriptionsStore.getState().reset()
     useAuctionTrackedLotsStore.getState().clearLots()
     useAuctionDealToastsStore.getState().clear()
   }, [token])

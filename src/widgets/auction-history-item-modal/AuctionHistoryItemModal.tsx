@@ -193,6 +193,7 @@ export function AuctionHistoryItemModal() {
   const itemId = useAuctionHistoryItemModalStore((s) => s.itemId)
   const initialViewFromStore = useAuctionHistoryItemModalStore((s) => s.initialView)
   const initialQualityFromStore = useAuctionHistoryItemModalStore((s) => s.initialQuality)
+  const initialUpgradeFromStore = useAuctionHistoryItemModalStore((s) => s.initialUpgrade)
   const close = useAuctionHistoryItemModalStore((s) => s.close)
   const { itemsById, realm } = useHideoutStore()
   const timezoneOffsetHours = useAuthStore((s) => s.user?.timezoneOffsetHours ?? 0)
@@ -206,11 +207,10 @@ export function AuctionHistoryItemModal() {
   useLayoutEffect(() => {
     if (opened && itemId) {
       setViewMode(initialViewFromStore)
-      if (initialQualityFromStore) {
-        setQuality(initialQualityFromStore)
-      }
+      setQuality(initialQualityFromStore ?? 'all')
+      setUpgrade(initialUpgradeFromStore ?? 'all')
     }
-  }, [opened, itemId, initialViewFromStore, initialQualityFromStore])
+  }, [opened, itemId, initialViewFromStore, initialQualityFromStore, initialUpgradeFromStore])
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [activeLotsSortKey, setActiveLotsSortKey] = useState<ActiveLotsSortKey>('buyoutPrice')
   const [activeLotsSortDirection, setActiveLotsSortDirection] = useState<ActiveLotsSortDirection>('asc')

@@ -109,6 +109,8 @@ function remove_user_tracked_row(PDO $db, int $userId, string $itemId): void
     if ($norm === '') {
         throw new InvalidArgumentException('itemId required');
     }
+    require_once __DIR__ . '/AuctionTrackedSubscriptions.php';
+    delete_all_subscriptions_for_user_item($db, $userId, $norm);
     $stmt = $db->prepare('DELETE FROM auction_user_tracked_items WHERE user_id = ? AND item_id = ?');
     $stmt->execute([$userId, $norm]);
 }
@@ -125,6 +127,8 @@ function remove_global_tracked_admin(PDO $db, string $itemId): void
     $stmt->execute([$norm]);
     $stmt = $db->prepare('DELETE FROM auction_tracked_desired_buy_prices WHERE item_id = ?');
     $stmt->execute([$norm]);
+    require_once __DIR__ . '/AuctionTrackedSubscriptions.php';
+    delete_all_subscriptions_for_item($db, $norm);
 }
 
 /** @deprecated Используйте ensure_tracked_for_user; оставлено для совместимости вызовов. */

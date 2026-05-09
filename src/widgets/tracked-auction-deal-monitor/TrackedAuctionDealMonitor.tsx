@@ -3,6 +3,8 @@ import {
   fetchAuctionItemActiveLots,
   fetchTrackedAuctionItems,
   type AuctionActiveLot,
+  type AuctionHistoryUpgrade,
+  type TrackedItemSubscription,
 } from '../../shared/api/backendApi'
 import { getBackendApiBaseUrl } from '../../shared/config/backendApi'
 import { minActiveLotUnitPrice } from '../../shared/lib/auctionActiveLotsUtils'
@@ -16,14 +18,32 @@ import { useAuthStore } from '../../shared/store/authStore'
 import { useAuctionDesiredBuyPricesStore } from '../../shared/store/auctionDesiredBuyPricesStore'
 import { useAuctionDealToastsStore, type AuctionDealToast } from '../../shared/store/auctionDealToastsStore'
 import { useAuctionTrackedLotsStore } from '../../shared/store/auctionTrackedLotsStore'
-import { useAuctionTrackedItemRulesStore } from '../../shared/store/auctionTrackedItemRulesStore'
+import { useAuctionTrackedSubscriptionsStore } from '../../shared/store/auctionTrackedSubscriptionsStore'
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import { isArtifactDataPath, isModuleCoreItem } from '../../shared/lib/itemKinds'
-import { fetchVirtualActiveLotMins } from '../../shared/api/backendApi'
-import { useAuctionVirtualTrackingsStore } from '../../shared/store/auctionVirtualTrackingsStore'
 
 const ACTIVE_LOTS_POLL_MS = 60_000
+
+function subscriptionEdgeKey(sub: TrackedItemSubscription): string {
+  return `s|${sub.itemId}|${sub.kind}|${sub.quality}|${sub.upgradeMin}|${sub.upgradeMax}`
+}
+
+function toastInitialUpgrade(sub: TrackedItemSubscription): AuctionHistoryUpgrade {
+  if (sub.kind === 'core') return 'all'
+  if (sub.upgradeMin === sub.upgradeMax && sub.upgradeMin >= 1 && sub.upgradeMin <= 15) {
+    return sub.upgradeMin as AuctionHistoryUpgrade
+  }
+  return 'all'
+}
+
+function filterLotsForSubscription(lots: AuctionActiveLot[], sub: TrackedItemSubscription): AuctionActiveLot[] {
+  return lots.filter((lot) => {
+    if (lot.quality !== sub.quality) return false
+    if (sub.kind === 'core') return true
+    return lot.upgrade >= sub.upgradeMin && lot.upgrade <= sub.upgradeMax
+  })
+}
 
 /** Сбрасываем снимок грани при новой сессии (логин / перезагрузка), чтобы на первом опросе сработали уведомления по текущим лотам. */
 export function TrackedAuctionDealMonitor() {
@@ -85,74 +105,74 @@ export function TrackedAuctionDealMonitor() {
 
       const nowMs = Date.now()
       const desired = useAuctionDesiredBuyPricesStore.getState().desiredBuyByItemId
-      const rulesByItemId = useAuctionTrackedItemRulesStore.getState().rulesByItemId
+      const subscriptions = useAuctionTrackedSubscriptionsStore.getState().subscriptions
       const prevEdge = readQualifyingEdgeSnapshot()
       const nextEdge: Record<string, boolean> = {}
       const hideout = useHideoutStore.getState()
       const newToasts: AuctionDealToast[] = []
-      let virtualMins: Record<string, { minPrice: number; itemId: string; updatedAt: string }> = {}
-      try {
-        virtualMins = await fetchVirtualActiveLotMins()
-      } catch {
-        virtualMins = {}
-      }
 
-      const virtualTrackings = useAuctionVirtualTrackingsStore.getState().trackings
-      for (const t of virtualTrackings) {
-        // Cache table stores artifact mins per exact upgrade; for диапазона берём минимум по всем upgrade в диапазоне.
-        let minRow: { minPrice: number; itemId: string } | null = null
-        if (t.kind === 'core') {
-          const r = virtualMins[`core|${t.quality}|-1`]
-          if (r) minRow = { minPrice: r.minPrice, itemId: r.itemId }
-        } else {
-          for (let u = t.upgradeMin; u <= t.upgradeMax; u += 1) {
-            const r = virtualMins[`artifact|${t.quality}|${u}`]
-            if (!r) continue
-            if (!minRow || r.minPrice < minRow.minPrice) minRow = { minPrice: r.minPrice, itemId: r.itemId }
-          }
-        }
-        const threshold = parseDesiredBuyRub(t.desiredBuyPrice)
-        const qualifying = threshold !== null && minRow !== null && minRow.minPrice <= threshold
-        const edgeKey = `v|${t.kind}|${t.quality}|${t.upgradeMin}|${t.upgradeMax}`
+      const mineSet = new Set(ids)
+
+      for (const sub of subscriptions) {
+        if (!mineSet.has(sub.itemId)) continue
+        const item = hideout.itemsById[sub.itemId]
+        const name = getItemName(item?.name?.lines) || sub.itemId
+        const isArtifact = isArtifactDataPath(item?.data)
+        const isCore = item ? isModuleCoreItem(item.data, name) : false
+        const applies =
+          (sub.kind === 'core' && isCore) || (sub.kind === 'artifact' && isArtifact)
+        if (!applies) continue
+
+        const lots = nextLots[sub.itemId] ?? []
+        const filtered = filterLotsForSubscription(lots, sub)
+        const minP = minActiveLotUnitPrice(filtered, nowMs)
+        const threshold = parseDesiredBuyRub(sub.desiredBuyPrice)
+        const qualifying = threshold !== null && minP !== null && minP <= threshold
+        const edgeKey = subscriptionEdgeKey(sub)
         nextEdge[edgeKey] = qualifying
-        if (qualifying && minRow && prevEdge[edgeKey] !== true) {
-          const name =
-            t.kind === 'core'
-              ? `Ядро модуля — ${t.quality}`
-              : `Артефакт — ${t.quality} (+${t.upgradeMin}..+${t.upgradeMax})`
+
+        if (qualifying && minP !== null && prevEdge[edgeKey] !== true) {
+          const iconUrl = item ? buildItemIconUrl(item.icon, hideout.realm) : undefined
+          const toastName =
+            sub.kind === 'core'
+              ? `${name} — ${sub.quality}`
+              : `${name} — ${sub.quality} (+${sub.upgradeMin}..+${sub.upgradeMax})`
           newToasts.push({
             id: `${Date.now()}-${edgeKey}-${Math.random().toString(16).slice(2)}`,
-            itemId: minRow.itemId,
-            name,
-            minPrice: minRow.minPrice,
-            initialQuality: t.quality,
+            itemId: sub.itemId,
+            name: toastName,
+            minPrice: minP,
+            iconUrl,
+            initialQuality: sub.quality,
+            initialUpgrade: toastInitialUpgrade(sub),
           })
         }
       }
 
       for (const itemId of ids) {
         const lots = nextLots[itemId] ?? []
-        const threshold = parseDesiredBuyRub(desired[itemId])
         const item = hideout.itemsById[itemId]
         const name = getItemName(item?.name?.lines) || itemId
         const isArtifact = isArtifactDataPath(item?.data)
         const isCore = item ? isModuleCoreItem(item.data, name) : false
 
-        const rule = rulesByItemId[itemId]
-        const filteredLots =
-          rule && rule.qualities.length > 0 && (isArtifact || isCore)
-            ? lots.filter((lot) => {
-                if (!rule.qualities.includes(lot.quality)) return false
-                if (isArtifact && rule.upgrades.length > 0) return rule.upgrades.includes(lot.upgrade)
-                return true
-              })
-            : lots
+        const relevantSubs = subscriptions.filter(
+          (s) =>
+            s.itemId === itemId &&
+            ((s.kind === 'core' && isCore) || (s.kind === 'artifact' && isArtifact)),
+        )
 
-        const minP = minActiveLotUnitPrice(filteredLots, nowMs)
+        if ((isArtifact || isCore) && relevantSubs.length > 0) {
+          continue
+        }
+
+        const threshold = parseDesiredBuyRub(desired[itemId])
+        const minP = minActiveLotUnitPrice(lots, nowMs)
         const qualifying = threshold !== null && minP !== null && minP <= threshold
-        nextEdge[`i|${itemId}`] = qualifying
+        const edgeKey = `i|${itemId}`
+        nextEdge[edgeKey] = qualifying
 
-        if (qualifying && minP !== null && prevEdge[`i|${itemId}`] !== true) {
+        if (qualifying && minP !== null && prevEdge[edgeKey] !== true) {
           const iconUrl = item ? buildItemIconUrl(item.icon, hideout.realm) : undefined
           newToasts.push({
             id: `${Date.now()}-${itemId}-${Math.random().toString(16).slice(2)}`,
