@@ -39,7 +39,7 @@ function toastInitialUpgrade(sub: TrackedItemSubscription): AuctionHistoryUpgrad
 
 function filterLotsForSubscription(lots: AuctionActiveLot[], sub: TrackedItemSubscription): AuctionActiveLot[] {
   return lots.filter((lot) => {
-    if (lot.quality !== sub.quality) return false
+    if (sub.quality !== 'all' && lot.quality !== sub.quality) return false
     if (sub.kind === 'core') return true
     return lot.upgrade >= sub.upgradeMin && lot.upgrade <= sub.upgradeMax
   })
@@ -133,10 +133,11 @@ export function TrackedAuctionDealMonitor() {
 
         if (qualifying && minP !== null && prevEdge[edgeKey] !== true) {
           const iconUrl = item ? buildItemIconUrl(item.icon, hideout.realm) : undefined
+          const qLabel = sub.quality === 'all' ? 'Все редкости' : sub.quality
           const toastName =
             sub.kind === 'core'
-              ? `${name} — ${sub.quality}`
-              : `${name} — ${sub.quality} (+${sub.upgradeMin}..+${sub.upgradeMax})`
+              ? `${name} — ${qLabel}`
+              : `${name} — ${qLabel} (+${sub.upgradeMin}..+${sub.upgradeMax})`
           newToasts.push({
             id: `${Date.now()}-${edgeKey}-${Math.random().toString(16).slice(2)}`,
             itemId: sub.itemId,

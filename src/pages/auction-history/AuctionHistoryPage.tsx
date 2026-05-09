@@ -72,7 +72,7 @@ function pickQualityColor(rawColor: string | undefined, statusState: string | un
   return c || s || undefined
 }
 
-const WIZ_CORE_QUALITY_OPTIONS: Array<{ value: AuctionHistoryQuality; label: string }> = [
+const WIZ_CORE_QUALITIES: Array<{ value: AuctionHistoryQuality; label: string }> = [
   { value: 'normal', label: 'Обычная' },
   { value: 'uncommon', label: 'Необычная' },
   { value: 'special', label: 'Особая' },
@@ -81,8 +81,14 @@ const WIZ_CORE_QUALITY_OPTIONS: Array<{ value: AuctionHistoryQuality; label: str
   { value: 'legendary', label: 'Легендарная' },
 ]
 
+const WIZ_CORE_QUALITY_OPTIONS: Array<{ value: AuctionHistoryQuality; label: string }> = [
+  { value: 'all', label: 'Все' },
+  ...WIZ_CORE_QUALITIES,
+]
+
 const WIZ_ARTIFACT_QUALITY_OPTIONS: Array<{ value: AuctionHistoryQuality; label: string }> = [
-  ...WIZ_CORE_QUALITY_OPTIONS,
+  { value: 'all', label: 'Все' },
+  ...WIZ_CORE_QUALITIES,
   { value: 'unique', label: 'Уникальная' },
 ]
 
@@ -220,6 +226,7 @@ export function AuctionHistoryPage() {
   )
 
   const qualityLabelRu: Record<string, string> = {
+    all: 'Все',
     normal: 'Обычная',
     uncommon: 'Необычная',
     special: 'Особая',
@@ -275,6 +282,7 @@ export function AuctionHistoryPage() {
   }) => {
     const tk = classifyTrackingKind(args.dataPath, args.name)
     if (tk === 'plain') return
+    setIsModalOpened(false)
     setWizError(null)
     setSubscriptionWizard({
       itemId: args.itemId,
@@ -369,7 +377,7 @@ export function AuctionHistoryPage() {
                               : `Артефакт — ${qualityLabelRu[s.quality] ?? s.quality} (+${s.upgradeMin}…+${s.upgradeMax})`
                           const lots = lotsByItemId[s.itemId] ?? []
                           const filtered = lots.filter((lot) => {
-                            if (lot.quality !== s.quality) return false
+                            if (s.quality !== 'all' && lot.quality !== s.quality) return false
                             if (s.kind === 'core') return true
                             return lot.upgrade >= s.upgradeMin && lot.upgrade <= s.upgradeMax
                           })
@@ -748,6 +756,7 @@ export function AuctionHistoryPage() {
             ) : null}
             <TextInput
               label="Желаемая стоимость скупа"
+              description="Необязательно: без цены уведомления о выгоде не приходят"
               placeholder="цена за единицу"
               value={wizPrice}
               onChange={(event) => setWizPrice(event.currentTarget.value.replace(/[^\d]/g, ''))}
@@ -770,10 +779,6 @@ export function AuctionHistoryPage() {
                     return
                   }
                   const priceDigits = wizPrice.replace(/[^\d]/g, '')
-                  if (!priceDigits) {
-                    setWizError('Укажите желаемую цену')
-                    return
-                  }
                   const minU = Number.parseInt(wizUpgMin, 10)
                   const maxU = Number.parseInt(wizUpgMax, 10)
                   if (subscriptionWizard.trackKind === 'artifact') {
@@ -805,7 +810,6 @@ export function AuctionHistoryPage() {
                       desiredBuyPrice: priceDigits,
                     })
                     setSubscriptionWizard(null)
-                    setIsModalOpened(false)
                   } catch (e) {
                     setWizError(e instanceof Error ? e.message : 'Не удалось сохранить')
                   } finally {

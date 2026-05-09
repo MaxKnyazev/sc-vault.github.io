@@ -14,6 +14,9 @@ function normalize_subscription_kind(string $raw): string
 function normalize_subscription_quality(string $raw, string $kind): string
 {
     $q = strtolower(trim($raw));
+    if ($q === 'all') {
+        return 'all';
+    }
     $core = ['normal', 'uncommon', 'special', 'rare', 'exclusive', 'legendary'];
     $artifact = ['normal', 'uncommon', 'special', 'rare', 'exclusive', 'legendary', 'unique'];
     $allowed = $kind === 'artifact' ? $artifact : $core;
