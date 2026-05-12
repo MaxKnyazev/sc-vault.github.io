@@ -28,7 +28,7 @@ function normalize_user_role(string $role): string
 function find_user_by_nickname(PDO $db, string $nickname): ?array
 {
     $stmt = $db->prepare(
-        'SELECT id, email, nickname, role, avatar_url, password_hash, timezone_offset_hours, craft_branch_levels
+        'SELECT id, email, nickname, role, avatar_url, password_hash, timezone_offset_hours, craft_branch_levels, auction_tracking_notifications
          FROM users
          WHERE nickname = ? LIMIT 1'
     );
@@ -40,7 +40,7 @@ function find_user_by_nickname(PDO $db, string $nickname): ?array
 function find_user_by_email(PDO $db, string $email): ?array
 {
     $stmt = $db->prepare(
-        'SELECT id, email, nickname, role, avatar_url, password_hash, timezone_offset_hours, craft_branch_levels
+        'SELECT id, email, nickname, role, avatar_url, password_hash, timezone_offset_hours, craft_branch_levels, auction_tracking_notifications
          FROM users
          WHERE email = ? LIMIT 1'
     );
@@ -64,7 +64,7 @@ function find_user_by_token(PDO $db, string $token): ?array
 {
     $tokenHash = hash('sha256', $token);
     $stmt = $db->prepare(
-        'SELECT u.id, u.email, u.nickname, u.role, u.avatar_url, u.timezone_offset_hours, u.craft_branch_levels
+        'SELECT u.id, u.email, u.nickname, u.role, u.avatar_url, u.timezone_offset_hours, u.craft_branch_levels, u.auction_tracking_notifications
          FROM auth_tokens t
          JOIN users u ON u.id = t.user_id
          WHERE t.token_hash = ? AND t.expires_at > UTC_TIMESTAMP()
@@ -153,25 +153,41 @@ function format_auth_user_payload(array $user): array
         'avatarUrl' => $user['avatar_url'] ?: null,
         'timezoneOffsetHours' => isset($user['timezone_offset_hours']) ? (int)$user['timezone_offset_hours'] : 0,
         'craftBranchLevels' => decode_craft_branch_levels($user['craft_branch_levels'] ?? null),
+        'auctionTrackingNotifications' => !array_key_exists('auction_tracking_notifications', $user)
+            || (int)$user['auction_tracking_notifications'] === 1,
     ];
+}
+
+function normalize_auction_tracking_notifications(mixed $value): bool
+{
+    if ($value === true || $value === 1 || $value === '1') {
+        return true;
+    }
+    if ($value === false || $value === 0 || $value === '0') {
+        return false;
+    }
+    return true;
 }
 
 function update_own_user_preferences(
     PDO $db,
     int $userId,
     int $timezoneOffsetHours,
-    array $craftBranchLevels
+    array $craftBranchLevels,
+    bool $auctionTrackingNotifications
 ): void {
     $normalizedTz = normalize_timezone_offset_hours($timezoneOffsetHours);
     $normalizedLevels = normalize_craft_branch_levels($craftBranchLevels);
+    $notify = $auctionTrackingNotifications ? 1 : 0;
     $stmt = $db->prepare(
         'UPDATE users
-         SET timezone_offset_hours = ?, craft_branch_levels = ?
+         SET timezone_offset_hours = ?, craft_branch_levels = ?, auction_tracking_notifications = ?
          WHERE id = ?'
     );
     $stmt->execute([
         $normalizedTz,
         json_encode($normalizedLevels, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        $notify,
         $userId,
     ]);
 }

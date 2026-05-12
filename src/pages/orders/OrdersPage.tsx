@@ -7,6 +7,7 @@ import {
   Loader,
   Modal,
   NumberInput,
+  Paper,
   ScrollArea,
   Stack,
   Text,
@@ -233,224 +234,217 @@ function OrderCard({
   }, [buyRollup, itemsById, realm])
 
   return (
-    <Stack gap="sm" p="md" bd="1px solid var(--mantine-color-default-border)" style={{ borderRadius: 10 }}>
-      <Group justify="space-between" align="flex-start" wrap="nowrap">
-        <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
-          {editingTitle ? (
-            <Group gap="xs" wrap="nowrap" align="center">
-              <TextInput
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.currentTarget.value)}
-                style={{ flex: 1 }}
-                size="sm"
-              />
-              <ActionIcon
-                color="green"
-                variant="light"
-                aria-label="Подтвердить название"
-                title="Подтвердить"
-                onClick={() => {
-                  void updateTitle(order.id, titleDraft.trim() || order.title).then(() => setEditingTitle(false))
-                }}
-              >
-                <IconCheck />
-              </ActionIcon>
-            </Group>
-          ) : (
-            <Text
-              fw={700}
-              size="lg"
-              style={{ cursor: 'pointer' }}
-              onClick={() => {
-                setTitleDraft(order.title)
-                setEditingTitle(true)
-              }}
-            >
-              {order.title}
-            </Text>
-          )}
-          {remainingMs !== null ? (
-            <Text size="sm" c={remainingMs <= 0 ? 'red' : 'dimmed'}>
-              До дедлайна: {formatRemaining(remainingMs)}
-            </Text>
-          ) : (
-            <Text size="xs" c="dimmed">
-              Срок исполнения не задан
-            </Text>
-          )}
-        </Stack>
-        <ActionIcon color="red" variant="light" aria-label="Удалить заказ" onClick={() => void removeOrder(order.id)}>
-          <IconTrash />
-        </ActionIcon>
-      </Group>
-
-      <Group align="flex-end" wrap="wrap" gap="xs">
-        <NumberInput
-          label="Часы на исполнение"
-          description="Необязательно; отсчёт с момента сохранения"
-          placeholder="—"
-          min={1}
-          max={9999}
-          value={hoursDraft === '' ? undefined : Number(hoursDraft)}
-          onChange={(v) => setHoursDraft(v === '' || v === undefined ? '' : String(v))}
-          style={{ maxWidth: 200 }}
-        />
-        <Button
-          size="xs"
-          variant="default"
-          onClick={() => {
-            const n = Number.parseInt(hoursDraft, 10)
-            if (!Number.isFinite(n) || n <= 0) {
-              void setDeadlineHours(order.id, null).then(() => setHoursDraft(''))
-            } else {
-              void setDeadlineHours(order.id, n)
-            }
-          }}
-        >
-          Сохранить срок
-        </Button>
-        <Button
-          size="xs"
-          variant="subtle"
-          color="gray"
-          onClick={() => {
-            void setDeadlineHours(order.id, null).then(() => setHoursDraft(''))
-          }}
-        >
-          Сбросить
-        </Button>
-      </Group>
-
-      <Group justify="space-between" align="center">
-        <Text fw={600} size="sm">
-          Позиции
-        </Text>
-        <Button
-          size="xs"
-          variant="light"
-          onClick={() => {
-            setPickSearch('')
-            setPickOpen(true)
-          }}
-        >
-          Добавить
-        </Button>
-      </Group>
-
-      <Stack gap="xs">
-        {sortedLines.length === 0 ? (
-          <Text size="sm" c="dimmed">
-            Пока нет позиций — нажмите «Добавить».
-          </Text>
-        ) : (
-          sortedLines.map((line) => {
-            const recipe = recipeByFavoriteId.get(line.recipeFavoriteId)
-            const primaryId = recipe?.result[0]?.item
-            const primaryName = primaryId
-              ? getItemName(itemsById[primaryId]?.name?.lines) || primaryId
-              : '—'
-            const iconUrl =
-              primaryId && itemsById[primaryId] ? buildItemIconUrl(itemsById[primaryId]!.icon, realm) : undefined
-            const lineTotal =
-              recipe &&
-              computeOrderLineTotalRub(recipe, line.quantity, costModel, buyPricesMerged, energyPrice)
-
-            return (
-              <Group
-                key={line.id}
-                wrap="nowrap"
-                align="center"
-                p="xs"
-                bd="1px solid var(--mantine-color-default-border)"
-                style={{ borderRadius: 8 }}
-              >
-                <ActionIcon
-                  variant="light"
-                  color={line.done ? 'orange' : 'green'}
-                  aria-label={line.done ? 'Вернуть в нужные' : 'Отметить готовым'}
-                  title={line.done ? 'Вернуть в нужные' : 'Готово'}
-                  onClick={() => void toggleLineDone(order.id, line.id, !line.done)}
-                >
-                  {line.done ? <IconCross /> : <IconCheck />}
-                </ActionIcon>
-                <ItemBadge
-                  name={`${primaryName} ×${line.quantity}`}
-                  iconUrl={iconUrl}
-                  size="ingredient"
-                  showFavoriteButton={false}
-                />
-                <Text size="xs" c="dimmed" style={{ flex: 1, minWidth: 0 }} lineClamp={1}>
-                  {recipe ? resolveRecipeBranch(recipe) ?? recipe.bench : 'Рецепт не найден'}
-                </Text>
-                <Text size="xs" fw={600}>
-                  {lineTotal !== null && lineTotal !== undefined ? `${formatAuctionRub(lineTotal)} ₽` : '—'}
-                </Text>
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  aria-label="Изменить количество"
-                  disabled={!recipe}
+    <>
+      <Paper radius="md" withBorder p="sm" shadow="xs">
+        <Stack gap="xs">
+          <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
+            <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
+              {editingTitle ? (
+                <Group gap="xs" wrap="nowrap" align="center">
+                  <TextInput
+                    value={titleDraft}
+                    onChange={(e) => setTitleDraft(e.currentTarget.value)}
+                    style={{ flex: 1 }}
+                    size="sm"
+                  />
+                  <ActionIcon
+                    variant="default"
+                    size="sm"
+                    aria-label="Подтвердить название"
+                    title="Подтвердить"
+                    onClick={() => {
+                      void updateTitle(order.id, titleDraft.trim() || order.title).then(() => setEditingTitle(false))
+                    }}
+                  >
+                    <IconCheck />
+                  </ActionIcon>
+                </Group>
+              ) : (
+                <Text
+                  fw={700}
+                  size="md"
+                  style={{ cursor: 'pointer', lineHeight: 1.25 }}
                   onClick={() => {
-                    if (!recipe) return
-                    setEditQtyDraft(line.quantity)
-                    setEditQtyModal({ line, recipe })
+                    setTitleDraft(order.title)
+                    setEditingTitle(true)
                   }}
                 >
-                  <IconPencil />
-                </ActionIcon>
-                <ActionIcon
-                  variant="subtle"
-                  color="red"
-                  aria-label="Удалить позицию"
-                  onClick={() => void removeLine(order.id, line.id)}
-                >
-                  <IconTrash />
-                </ActionIcon>
-              </Group>
-            )
-          })
-        )}
-      </Stack>
-
-      <Divider />
-      <Stack gap={4}>
-        <Text size="xs" c="dimmed">
-          1) По цене скупа/крафта:{' '}
-          {totalBuyCraft !== null ? `${formatAuctionRub(totalBuyCraft)} ₽` : 'Недостаточно данных'}
-        </Text>
-        <Text size="xs" c="dimmed">
-          2) По цене аукциона: заглушка (будет реализовано далее)
-        </Text>
-        <Text size="xs" c="dimmed">
-          3) Гибридный вариант: заглушка (будет реализовано далее)
-        </Text>
-      </Stack>
-
-      <Button variant="light" color="gray" size="xs" onClick={() => setIngOpen((o) => !o)}>
-        Ингредиенты
-      </Button>
-      {ingOpen ? (
-        <Stack gap="xs" mt="xs">
-          <Text size="xs" c="dimmed">
-            Список к закупке с учётом переноса остатков между строками (сначала неготовые позиции). Остаток от
-            округления запусков крафта учитывается как «запас» для следующих строк.
-          </Text>
-          {rollupRows.length === 0 ? (
-            <Text size="sm" c="dimmed">
-              Нет данных — добавьте позиции или задайте цены ингредиентов.
-            </Text>
-          ) : (
-            rollupRows.map((row) => (
-              <Group key={row.itemId} justify="space-between" wrap="nowrap">
-                <ItemBadge name={row.name} iconUrl={row.iconUrl} size="ingredient" showFavoriteButton={false} />
-                <Text size="sm" fw={600}>
-                  ×{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(row.amount)}
+                  {order.title}
                 </Text>
-              </Group>
-            ))
-          )}
+              )}
+              {remainingMs !== null ? (
+                <Text size="xs" c={remainingMs <= 0 ? 'red' : 'dimmed'}>
+                  До дедлайна: {formatRemaining(remainingMs)}
+                </Text>
+              ) : (
+                <Text size="xs" c="dimmed">
+                  Срок не задан
+                </Text>
+              )}
+            </Stack>
+            <ActionIcon variant="default" size="sm" aria-label="Удалить заказ" onClick={() => void removeOrder(order.id)}>
+              <IconTrash />
+            </ActionIcon>
+          </Group>
+
+          <Group align="flex-end" wrap="wrap" gap="xs">
+            <NumberInput
+              label="Часы на исполнение"
+              placeholder="—"
+              min={1}
+              max={9999}
+              size="xs"
+              value={hoursDraft === '' ? undefined : Number(hoursDraft)}
+              onChange={(v) => setHoursDraft(v === '' || v === undefined ? '' : String(v))}
+              style={{ maxWidth: 160 }}
+            />
+            <Button
+              size="xs"
+              variant="default"
+              onClick={() => {
+                const n = Number.parseInt(hoursDraft, 10)
+                if (!Number.isFinite(n) || n <= 0) {
+                  void setDeadlineHours(order.id, null).then(() => setHoursDraft(''))
+                } else {
+                  void setDeadlineHours(order.id, n)
+                }
+              }}
+            >
+              Сохранить срок
+            </Button>
+            <Button
+              size="xs"
+              variant="subtle"
+              onClick={() => {
+                void setDeadlineHours(order.id, null).then(() => setHoursDraft(''))
+              }}
+            >
+              Сбросить
+            </Button>
+          </Group>
+
+          <Group justify="space-between" align="center" gap="sm">
+            <Text fw={600} size="sm">
+              Позиции
+            </Text>
+            <Button
+              size="xs"
+              variant="default"
+              onClick={() => {
+                setPickSearch('')
+                setPickOpen(true)
+              }}
+            >
+              Добавить
+            </Button>
+          </Group>
+
+          <Stack gap={6}>
+            {sortedLines.length === 0 ? (
+              <Text size="sm" c="dimmed">
+                Пока нет позиций.
+              </Text>
+            ) : (
+              sortedLines.map((line) => {
+                const recipe = recipeByFavoriteId.get(line.recipeFavoriteId)
+                const primaryId = recipe?.result[0]?.item
+                const primaryName = primaryId
+                  ? getItemName(itemsById[primaryId]?.name?.lines) || primaryId
+                  : '—'
+                const iconUrl =
+                  primaryId && itemsById[primaryId] ? buildItemIconUrl(itemsById[primaryId]!.icon, realm) : undefined
+                const lineTotal =
+                  recipe &&
+                  computeOrderLineTotalRub(recipe, line.quantity, costModel, buyPricesMerged, energyPrice)
+
+                return (
+                  <Group
+                    key={line.id}
+                    wrap="nowrap"
+                    align="center"
+                    gap="xs"
+                    py={6}
+                    px={8}
+                    bd="1px solid var(--mantine-color-default-border)"
+                    style={{ borderRadius: 8 }}
+                  >
+                    <ActionIcon
+                      variant={line.done ? 'filled' : 'default'}
+                      size="sm"
+                      color="gray"
+                      aria-label={line.done ? 'Вернуть в нужные' : 'Отметить готовым'}
+                      title={line.done ? 'Вернуть в нужные' : 'Готово'}
+                      onClick={() => void toggleLineDone(order.id, line.id, !line.done)}
+                    >
+                      {line.done ? <IconCross /> : <IconCheck />}
+                    </ActionIcon>
+                    <ItemBadge
+                      name={`${primaryName} ×${line.quantity}`}
+                      iconUrl={iconUrl}
+                      size="ingredient"
+                      showFavoriteButton={false}
+                    />
+                    <Text size="xs" c="dimmed" style={{ flex: 1, minWidth: 0 }} lineClamp={1}>
+                      {recipe ? resolveRecipeBranch(recipe) ?? recipe.bench : 'Рецепт не найден'}
+                    </Text>
+                    <Text size="xs" fw={600} style={{ whiteSpace: 'nowrap' }}>
+                      {lineTotal !== null && lineTotal !== undefined ? `${formatAuctionRub(lineTotal)} ₽` : '—'}
+                    </Text>
+                    <ActionIcon
+                      variant="subtle"
+                      size="sm"
+                      aria-label="Изменить количество"
+                      disabled={!recipe}
+                      onClick={() => {
+                        if (!recipe) return
+                        setEditQtyDraft(line.quantity)
+                        setEditQtyModal({ line, recipe })
+                      }}
+                    >
+                      <IconPencil />
+                    </ActionIcon>
+                    <ActionIcon variant="subtle" size="sm" aria-label="Удалить позицию" onClick={() => void removeLine(order.id, line.id)}>
+                      <IconTrash />
+                    </ActionIcon>
+                  </Group>
+                )
+              })
+            )}
+          </Stack>
+
+          <Divider label="Оценка" labelPosition="center" my={4} />
+          <Group justify="space-between" wrap="nowrap" gap="md">
+            <Text size="sm" c="dimmed">
+              Скуп и крафт
+            </Text>
+            <Text size="sm" fw={600}>
+              {totalBuyCraft !== null ? `${formatAuctionRub(totalBuyCraft)} ₽` : '—'}
+            </Text>
+          </Group>
+
+          <Button variant="subtle" size="xs" px={0} onClick={() => setIngOpen((o) => !o)}>
+            {ingOpen ? 'Скрыть ингредиенты' : 'Ингредиенты'}
+          </Button>
+          {ingOpen ? (
+            <Stack gap={6}>
+              {rollupRows.length === 0 ? (
+                <Text size="sm" c="dimmed">
+                  Нет данных — добавьте позиции или задайте цены ингредиентов.
+                </Text>
+              ) : (
+                rollupRows.map((row) => (
+                  <Group key={row.itemId} justify="space-between" wrap="nowrap" gap="sm">
+                    <ItemBadge name={row.name} iconUrl={row.iconUrl} size="ingredient" showFavoriteButton={false} />
+                    <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
+                      ×{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(row.amount)}
+                    </Text>
+                  </Group>
+                ))
+              )}
+            </Stack>
+          ) : null}
         </Stack>
-      ) : null}
+      </Paper>
 
       <Modal opened={pickOpen} onClose={() => setPickOpen(false)} title="Добавить крафт в заказ" size="lg" centered>
         <Stack gap="sm">
@@ -480,8 +474,8 @@ function OrderCard({
                       {br ?? recipe.bench}
                     </Text>
                     <ActionIcon
-                      color="blue"
-                      variant="light"
+                      variant="default"
+                      size="sm"
                       aria-label="Добавить в заказ"
                       onClick={() => {
                         setQtyDraft(1)
@@ -552,7 +546,7 @@ function OrderCard({
           </Stack>
         ) : null}
       </Modal>
-    </Stack>
+    </>
   )
 }
 

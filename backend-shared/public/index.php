@@ -220,8 +220,9 @@ if ($path === '/user/profile') {
     $body = read_json_body();
     $timezoneOffsetHours = (int)($body['timezoneOffsetHours'] ?? 0);
     $craftBranchLevels = $body['craftBranchLevels'] ?? null;
+    $auctionTrackingNotifications = normalize_auction_tracking_notifications($body['auctionTrackingNotifications'] ?? true);
     try {
-        update_own_user_preferences($db, (int)$user['id'], $timezoneOffsetHours, is_array($craftBranchLevels) ? $craftBranchLevels : []);
+        update_own_user_preferences($db, (int)$user['id'], $timezoneOffsetHours, is_array($craftBranchLevels) ? $craftBranchLevels : [], $auctionTrackingNotifications);
         $freshUser = find_user_by_token($db, $token);
         if (!$freshUser) {
             throw new RuntimeException('User not found after update');

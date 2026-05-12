@@ -188,7 +188,8 @@ export function TrackedAuctionDealMonitor() {
 
       writeQualifyingEdgeSnapshot(nextEdge)
 
-      if (newToasts.length > 0) {
+      const auctionNotify = useAuthStore.getState().user?.auctionTrackingNotifications !== false
+      if (newToasts.length > 0 && auctionNotify) {
         const push = useAuctionDealToastsStore.getState().push
         for (const t of newToasts) push(t)
         playAuctionDealSound()

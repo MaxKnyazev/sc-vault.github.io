@@ -1,4 +1,4 @@
-import { Alert, Avatar, Button, Group, NumberInput, Select, Stack, Text } from '@mantine/core'
+import { Alert, Avatar, Button, Checkbox, Group, NumberInput, Select, Stack, Text } from '@mantine/core'
 import { useEffect, useMemo, useState } from 'react'
 import { PageContainer } from '../../components/page-container/PageContainer'
 import { SectionCard } from '../../components/section-card/SectionCard'
@@ -36,6 +36,9 @@ export function ProfilePage() {
       medicine: 1,
     },
   )
+  const [auctionTrackingNotifications, setAuctionTrackingNotifications] = useState(
+    user?.auctionTrackingNotifications !== false,
+  )
   const roleGlowColor =
     user?.role === 'admin' ? '#ef4444' : user?.role === 'user' ? '#3b82f6' : '#ffffff'
 
@@ -43,6 +46,7 @@ export function ProfilePage() {
     if (!user) return
     setTimezoneOffsetHours(user.timezoneOffsetHours)
     setCraftBranchLevels(user.craftBranchLevels)
+    setAuctionTrackingNotifications(user.auctionTrackingNotifications !== false)
   }, [user])
 
   const timezoneOptions = useMemo(() => {
@@ -96,6 +100,7 @@ export function ProfilePage() {
                 void saveProfilePreferences({
                   timezoneOffsetHours,
                   craftBranchLevels,
+                  auctionTrackingNotifications,
                 })
               }
             >
@@ -111,6 +116,11 @@ export function ProfilePage() {
             value={String(timezoneOffsetHours)}
             data={timezoneOptions}
             onChange={(value) => setTimezoneOffsetHours(value ? Number(value) : 0)}
+          />
+          <Checkbox
+            label="Выводить уведомления об отслеживании аукциона"
+            checked={auctionTrackingNotifications}
+            onChange={(e) => setAuctionTrackingNotifications(e.currentTarget.checked)}
           />
           <Stack gap="xs">
             <Text fw={600}>Уровень веток крафта</Text>

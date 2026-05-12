@@ -38,6 +38,7 @@ export function AppShellLayout() {
   const isAdmin = user?.role === 'admin'
   const roleGlowColor =
     user?.role === 'admin' ? '#ef4444' : user?.role === 'user' ? '#3b82f6' : '#ffffff'
+  const auctionDealToastsEnabled = user?.auctionTrackingNotifications !== false
 
   useEffect(() => {
     if (!opened) {
@@ -137,16 +138,6 @@ export function AppShellLayout() {
           {canUseCoreFeatures ? (
             <NavLink
               component={Link}
-              to="/crafts/orders"
-              onClick={close}
-              label="Заказы"
-              active={location.pathname === '/crafts/orders'}
-              styles={getNavItemStyles(location.pathname === '/crafts/orders')}
-            />
-          ) : null}
-          {canUseCoreFeatures ? (
-            <NavLink
-              component={Link}
               to="/crafts"
               onClick={close}
               label="Крафты"
@@ -174,19 +165,29 @@ export function AppShellLayout() {
               styles={getNavItemStyles(location.pathname.startsWith('/auction-history'))}
             />
           ) : null}
-          {isAdmin ? (
+          {canUseCoreFeatures ? (
             <NavLink
               component={Link}
-              to="/users"
+              to="/crafts/orders"
               onClick={close}
-              label="Пользователи"
-              active={location.pathname.startsWith('/users')}
-              styles={getNavItemStyles(location.pathname.startsWith('/users'))}
+              label="Заказы"
+              active={location.pathname === '/crafts/orders'}
+              styles={getNavItemStyles(location.pathname === '/crafts/orders')}
             />
           ) : null}
           </Stack>
 
           <Stack gap="xs" style={{ marginTop: 'auto' }}>
+            {isAdmin ? (
+              <NavLink
+                component={Link}
+                to="/users"
+                onClick={close}
+                label="Пользователи"
+                active={location.pathname.startsWith('/users')}
+                styles={getNavItemStyles(location.pathname.startsWith('/users'))}
+              />
+            ) : null}
             {!user ? (
               <Stack gap="xs">
                 <Button
@@ -289,7 +290,7 @@ export function AppShellLayout() {
         />
         <Outlet />
         <TrackedAuctionDealMonitor />
-        <AuctionDealToastPortal />
+        {auctionDealToastsEnabled ? <AuctionDealToastPortal /> : null}
         <ItemDetailsModal />
         <AuctionHistoryItemModal />
         <AuthModal opened={authOpened} onClose={authModalHandlers.close} initialMode={authMode} />

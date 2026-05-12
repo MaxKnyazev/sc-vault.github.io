@@ -109,6 +109,12 @@ export type AuthUser = {
   avatarUrl?: string | null
   timezoneOffsetHours: number
   craftBranchLevels: CraftBranchLevels
+  /** По умолчанию true: тосты и звук при срабатывании отслеживания аукциона */
+  auctionTrackingNotifications: boolean
+}
+
+function normalizeAuthUser(user: AuthUser): AuthUser {
+  return { ...user, auctionTrackingNotifications: user.auctionTrackingNotifications !== false }
 }
 
 export type AdminUser = {
@@ -681,6 +687,11 @@ function parseBuyPricesPayload(prices: UserBuyPricesResponse['prices']): Record<
   return result
 }
 
+function normalizeAuthUserPayload(payload: AuthResponse): AuthResponse {
+  if (!payload.user) return payload
+  return { ...payload, user: normalizeAuthUser(payload.user as AuthUser) }
+}
+
 export async function loginBackendUser(nickname: string, password: string): Promise<AuthResponse> {
   const url = buildApiUrl('/auth/login')
   const response = await fetch(url, {
@@ -691,7 +702,7 @@ export async function loginBackendUser(nickname: string, password: string): Prom
     },
     body: JSON.stringify({ nickname, password }),
   })
-  return parseJsonOrThrow<AuthResponse>(response)
+  return normalizeAuthUserPayload(await parseJsonOrThrow<AuthResponse>(response))
 }
 
 export async function registerBackendUser(nickname: string, password: string): Promise<AuthResponse> {
@@ -704,7 +715,7 @@ export async function registerBackendUser(nickname: string, password: string): P
     },
     body: JSON.stringify({ nickname, password }),
   })
-  return parseJsonOrThrow<AuthResponse>(response)
+  return normalizeAuthUserPayload(await parseJsonOrThrow<AuthResponse>(response))
 }
 
 export async function fetchBackendMe(token: string): Promise<AuthUser> {
@@ -719,7 +730,7 @@ export async function fetchBackendMe(token: string): Promise<AuthUser> {
   })
   const payload = await parseJsonOrThrow<{ user?: AuthUser }>(response)
   if (!payload.user) throw new Error('Пользователь не найден')
-  return payload.user
+  return normalizeAuthUser(payload.user as AuthUser)
 }
 
 export async function logoutBackendUser(token: string): Promise<void> {
@@ -738,6 +749,7 @@ export async function logoutBackendUser(token: string): Promise<void> {
 export async function updateOwnProfile(input: {
   timezoneOffsetHours: number
   craftBranchLevels: CraftBranchLevels
+  auctionTrackingNotifications: boolean
 }): Promise<AuthUser> {
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация')
@@ -754,7 +766,7 @@ export async function updateOwnProfile(input: {
   })
   const payload = await parseJsonOrThrow<UpdateOwnProfileResponse>(response)
   if (!payload.user) throw new Error('Профиль не получен после сохранения')
-  return payload.user
+  return normalizeAuthUser(payload.user as AuthUser)
 }
 
 export async function fetchRecipeResultOverrides(): Promise<Record<string, RecipeResultOverride>> {

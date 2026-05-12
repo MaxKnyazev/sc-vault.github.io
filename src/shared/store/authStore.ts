@@ -11,6 +11,7 @@ import {
   updateOwnProfile,
 } from '../api/backendApi'
 import { getBackendApiBaseUrl } from '../config/backendApi'
+import { useAuctionDealToastsStore } from './auctionDealToastsStore'
 
 const AUTH_TOKEN_STORAGE_KEY = 'sc-vault-auth-token'
 
@@ -48,6 +49,7 @@ type AuthStore = {
   saveProfilePreferences: (input: {
     timezoneOffsetHours: number
     craftBranchLevels: CraftBranchLevels
+    auctionTrackingNotifications: boolean
   }) => Promise<void>
   clearError: () => void
 }
@@ -130,10 +132,13 @@ export const useAuthStore = create<AuthStore>()(
           set({ token: null, user: null, isSubmitting: false, isAuthResolved: true, error: null })
         }
       },
-      saveProfilePreferences: async ({ timezoneOffsetHours, craftBranchLevels }) => {
+      saveProfilePreferences: async ({ timezoneOffsetHours, craftBranchLevels, auctionTrackingNotifications }) => {
         set({ isSubmitting: true, error: null })
         try {
-          const user = await updateOwnProfile({ timezoneOffsetHours, craftBranchLevels })
+          const user = await updateOwnProfile({ timezoneOffsetHours, craftBranchLevels, auctionTrackingNotifications })
+          if (!auctionTrackingNotifications) {
+            useAuctionDealToastsStore.getState().clear()
+          }
           set({ user, isSubmitting: false, error: null })
         } catch (err) {
           set({
