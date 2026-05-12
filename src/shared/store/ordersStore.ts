@@ -7,6 +7,7 @@ import {
   fetchCraftOrders,
   patchCraftOrder,
   patchCraftOrderLine,
+  patchCraftOrderIngredientDone,
   type CraftOrderDto,
 } from '../api/backendApi'
 
@@ -19,6 +20,12 @@ export type OrderLine = {
   createdOrder: number
 }
 
+export type OrderIngredientDone = {
+  itemId: string
+  done: boolean
+  doneAt: number | null
+}
+
 export type CraftOrder = {
   id: string
   displayNumber: number
@@ -27,6 +34,7 @@ export type CraftOrder = {
   deadlineHours: number | null
   deadlineSetAt: number | null
   lines: OrderLine[]
+  ingredientDone: OrderIngredientDone[]
 }
 
 function mapDto(o: CraftOrderDto): CraftOrder {
@@ -45,6 +53,11 @@ function mapDto(o: CraftOrderDto): CraftOrder {
       doneAt: l.doneAt,
       createdOrder: l.createdOrder,
     })),
+    ingredientDone: (o.ingredientDone ?? []).map((r) => ({
+      itemId: String(r.itemId),
+      done: r.done,
+      doneAt: r.doneAt ?? null,
+    })),
   }
 }
 
@@ -62,6 +75,7 @@ type OrdersState = {
   updateLineQuantity: (orderId: string, lineId: string, quantity: number) => Promise<void>
   removeLine: (orderId: string, lineId: string) => Promise<void>
   toggleLineDone: (orderId: string, lineId: string, done: boolean) => Promise<void>
+  toggleIngredientDone: (orderId: string, itemId: string, done: boolean) => Promise<void>
   reset: () => void
 }
 
@@ -123,6 +137,10 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
   },
   toggleLineDone: async (_orderId, lineId, done) => {
     await patchCraftOrderLine({ lineId, done })
+    await get().loadRemote()
+  },
+  toggleIngredientDone: async (orderId, itemId, done) => {
+    await patchCraftOrderIngredientDone({ orderId, itemId, done })
     await get().loadRemote()
   },
 }))

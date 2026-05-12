@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   Alert,
+  Box,
   Button,
   Divider,
   Group,
@@ -31,7 +32,9 @@ import { buildCraftCostModel } from '../../shared/lib/costModel'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
 import { getRecipeRequiredSkill } from '../../shared/lib/craftSkills'
-import { rollupOrderIngredientsToBuy, sortOrderLines } from '../../shared/lib/orderIngredientRollup'
+import { pickListingItemQualityColor } from '../../shared/lib/itemQualityColor'
+import { rollupOrderBaseIngredientsToBuy } from '../../shared/lib/orderBaseIngredientRollup'
+import { sortOrderLines } from '../../shared/lib/orderIngredientRollup'
 import { computeOrderLineTotalRub } from '../../shared/lib/orderLineBuyCraftCost'
 import type { CraftOrder, OrderLine } from '../../shared/store/ordersStore'
 import { useOrdersStore } from '../../shared/store/ordersStore'
@@ -166,6 +169,7 @@ function OrderCard({
   const updateLineQuantity = useOrdersStore((s) => s.updateLineQuantity)
   const removeLine = useOrdersStore((s) => s.removeLine)
   const toggleLineDone = useOrdersStore((s) => s.toggleLineDone)
+  const toggleIngredientDone = useOrdersStore((s) => s.toggleIngredientDone)
 
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(order.title)
@@ -200,6 +204,14 @@ function OrderCard({
 
   const sortedLines = useMemo(() => sortOrderLines(order.lines), [order.lines])
 
+  const ingredientDoneMap = useMemo(() => {
+    const m = new Map<string, boolean>()
+    for (const r of order.ingredientDone) {
+      if (r.done) m.set(r.itemId, true)
+    }
+    return m
+  }, [order.ingredientDone])
+
   const totalBuyCraft = useMemo(() => {
     let sum = 0
     let ok = true
@@ -218,8 +230,8 @@ function OrderCard({
 
   const buyRollup = useMemo(() => {
     const sorted = sortOrderLines(order.lines.filter((l) => !l.done))
-    return rollupOrderIngredientsToBuy(sorted, recipeByFavoriteId)
-  }, [order.lines, recipeByFavoriteId])
+    return rollupOrderBaseIngredientsToBuy(sorted, recipeByFavoriteId, costModel, buyPricesMerged)
+  }, [order.lines, recipeByFavoriteId, costModel, buyPricesMerged])
 
   const rollupRows = useMemo(() => {
     return [...buyRollup.entries()]
@@ -229,9 +241,13 @@ function OrderCard({
         amount,
         name: getItemName(itemsById[itemId]?.name?.lines) || itemId,
         iconUrl: itemsById[itemId] ? buildItemIconUrl(itemsById[itemId]!.icon, realm) : undefined,
+        done: ingredientDoneMap.get(itemId) === true,
       }))
-      .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
-  }, [buyRollup, itemsById, realm])
+      .sort((a, b) => {
+        if (a.done !== b.done) return a.done ? 1 : -1
+        return a.name.localeCompare(b.name, 'ru')
+      })
+  }, [buyRollup, itemsById, realm, ingredientDoneMap])
 
   return (
     <>
@@ -366,7 +382,7 @@ function OrderCard({
                     py={6}
                     px={8}
                     bd="1px solid var(--mantine-color-default-border)"
-                    style={{ borderRadius: 8 }}
+                    style={{ borderRadius: 8, opacity: line.done ? 0.48 : 1 }}
                   >
                     <ActionIcon
                       variant={line.done ? 'filled' : 'default'}
@@ -379,8 +395,10 @@ function OrderCard({
                       {line.done ? <IconCross /> : <IconCheck />}
                     </ActionIcon>
                     <ItemBadge
+                      itemId={primaryId}
                       name={`${primaryName} ×${line.quantity}`}
                       iconUrl={iconUrl}
+                      qualityColor={pickListingItemQualityColor(primaryId ? itemsById[primaryId] : undefined)}
                       size="ingredient"
                       showFavoriteButton={false}
                     />
@@ -433,8 +451,34 @@ function OrderCard({
                 </Text>
               ) : (
                 rollupRows.map((row) => (
-                  <Group key={row.itemId} justify="space-between" wrap="nowrap" gap="sm">
-                    <ItemBadge name={row.name} iconUrl={row.iconUrl} size="ingredient" showFavoriteButton={false} />
+                  <Group
+                    key={row.itemId}
+                    justify="space-between"
+                    wrap="nowrap"
+                    gap="sm"
+                    align="center"
+                    style={{ opacity: row.done ? 0.48 : 1 }}
+                  >
+                    <ActionIcon
+                      variant={row.done ? 'filled' : 'default'}
+                      size="sm"
+                      color="gray"
+                      aria-label={row.done ? 'Снять отметку' : 'Уже добыто'}
+                      title={row.done ? 'Снять отметку' : 'Уже добыто'}
+                      onClick={() => void toggleIngredientDone(order.id, row.itemId, !row.done)}
+                    >
+                      {row.done ? <IconCross /> : <IconCheck />}
+                    </ActionIcon>
+                    <Box style={{ flex: 1, minWidth: 0 }}>
+                      <ItemBadge
+                        itemId={row.itemId}
+                        name={row.name}
+                        iconUrl={row.iconUrl}
+                        qualityColor={pickListingItemQualityColor(itemsById[row.itemId])}
+                        size="ingredient"
+                        showFavoriteButton={false}
+                      />
+                    </Box>
                     <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
                       ×{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(row.amount)}
                     </Text>
@@ -469,7 +513,14 @@ function OrderCard({
                     bd="1px solid var(--mantine-color-default-border)"
                     style={{ borderRadius: 8 }}
                   >
-                    <ItemBadge name={nm} iconUrl={iu} size="ingredient" showFavoriteButton={false} />
+                    <ItemBadge
+                      itemId={pid}
+                      name={nm}
+                      iconUrl={iu}
+                      qualityColor={pickListingItemQualityColor(pid ? itemsById[pid] : undefined)}
+                      size="ingredient"
+                      showFavoriteButton={false}
+                    />
                     <Text size="xs" c="dimmed" style={{ flex: 1, minWidth: 0 }} lineClamp={1}>
                       {br ?? recipe.bench}
                     </Text>

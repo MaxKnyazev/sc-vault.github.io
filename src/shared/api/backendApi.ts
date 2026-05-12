@@ -457,6 +457,12 @@ export type CraftOrderLineDto = {
   createdOrder: number
 }
 
+export type CraftOrderIngredientDoneDto = {
+  itemId: string
+  done: boolean
+  doneAt?: number | null
+}
+
 export type CraftOrderDto = {
   id: string
   displayNumber: number
@@ -465,6 +471,7 @@ export type CraftOrderDto = {
   deadlineHours: number | null
   deadlineSetAt: number | null
   lines: CraftOrderLineDto[]
+  ingredientDone?: CraftOrderIngredientDoneDto[]
 }
 
 export async function fetchCraftOrders(): Promise<{ orders: CraftOrderDto[]; migrationsPending: boolean }> {
@@ -603,6 +610,31 @@ export async function deleteCraftOrderLine(lineId: string | number): Promise<voi
       'X-Auth-Token': token,
     },
     body: JSON.stringify({ lineId: Number(lineId) }),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function patchCraftOrderIngredientDone(body: {
+  orderId: string | number
+  itemId: string
+  done: boolean
+}): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl('/user/craft-order-ingredients')
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify({
+      orderId: Number(body.orderId),
+      itemId: body.itemId,
+      done: body.done,
+    }),
   })
   await parseJsonOrThrow<{ ok?: boolean }>(response)
 }

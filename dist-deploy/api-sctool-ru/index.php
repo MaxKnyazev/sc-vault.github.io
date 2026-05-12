@@ -43,7 +43,7 @@ function resolve_allowed_origin_header(array $config): string
 header('Vary: Origin');
 header('Access-Control-Allow-Origin: ' . resolve_allowed_origin_header($config));
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token, Accept');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS');
 header('Access-Control-Max-Age: 86400');
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);

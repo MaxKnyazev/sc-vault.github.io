@@ -56,8 +56,44 @@ function list_user_craft_orders_with_lines(PDO $db, int $userId): array
             'deadlineHours' => $dh === null ? null : (int)$dh,
             'deadlineSetAt' => mysql_utc_datetime_to_ms($row['deadline_set_at'] ?? null),
             'lines' => $lines,
+            'ingredientDone' => [],
         ];
     }
+    if (count($orders) > 0) {
+        try {
+            $orderIds = array_map(static fn ($o) => (int)$o['id'], $orders);
+            $placeholders = implode(',', array_fill(0, count($orderIds), '?'));
+            $istmt = $db->prepare(
+                "SELECT order_id, item_id, done, done_at
+                 FROM user_craft_order_ingredient_done
+                 WHERE order_id IN ($placeholders)"
+            );
+            $istmt->execute($orderIds);
+            $byOrder = [];
+            while ($ir = $istmt->fetch(PDO::FETCH_ASSOC)) {
+                $oid = (int)($ir['order_id'] ?? 0);
+                if (!isset($byOrder[$oid])) {
+                    $byOrder[$oid] = [];
+                }
+                $byOrder[$oid][] = [
+                    'itemId' => (string)($ir['item_id'] ?? ''),
+                    'done' => ((int)($ir['done'] ?? 0)) === 1,
+                    'doneAt' => mysql_utc_datetime_to_ms($ir['done_at'] ?? null),
+                ];
+            }
+            foreach ($orders as &$o) {
+                $oid = (int)$o['id'];
+                $o['ingredientDone'] = $byOrder[$oid] ?? [];
+            }
+            unset($o);
+        } catch (Throwable $e) {
+            foreach ($orders as &$o) {
+                $o['ingredientDone'] = [];
+            }
+            unset($o);
+        }
+    }
+
     return $orders;
 }
 
@@ -93,6 +129,7 @@ function create_user_craft_order(PDO $db, int $userId): array
         'deadlineHours' => null,
         'deadlineSetAt' => null,
         'lines' => [],
+        'ingredientDone' => [],
     ];
 }
 
@@ -234,4 +271,29 @@ function delete_user_craft_order_line(PDO $db, int $userId, int $lineId): void
     if ($stmt->rowCount() === 0) {
         throw new InvalidArgumentException('line not found');
     }
+}
+
+function update_user_craft_order_ingredient_done(PDO $db, int $userId, int $orderId, string $itemId, bool $done): void
+{
+    assert_order_owned($db, $userId, $orderId);
+    $iid = trim($itemId);
+    if ($iid === '' || strlen($iid) > 256) {
+        throw new InvalidArgumentException('itemId required');
+    }
+    if ($done) {
+        $stmt = $db->prepare(
+            'INSERT INTO user_craft_order_ingredient_done (order_id, item_id, done, done_at, created_at, updated_at)
+             VALUES (?, ?, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())
+             ON DUPLICATE KEY UPDATE done = 1, done_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()',
+        );
+        $stmt->execute([$orderId, $iid]);
+    } else {
+        $stmt = $db->prepare(
+            'INSERT INTO user_craft_order_ingredient_done (order_id, item_id, done, done_at, created_at, updated_at)
+             VALUES (?, ?, 0, NULL, UTC_TIMESTAMP(), UTC_TIMESTAMP())
+             ON DUPLICATE KEY UPDATE done = 0, done_at = NULL, updated_at = UTC_TIMESTAMP()',
+        );
+        $stmt->execute([$orderId, $iid]);
+    }
+    $db->prepare('UPDATE user_craft_orders SET updated_at = UTC_TIMESTAMP() WHERE id = ?')->execute([$orderId]);
 }

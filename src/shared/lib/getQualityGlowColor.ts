@@ -29,7 +29,7 @@ export function getQualityGlowColor(qualityColor?: string): string {
     case 'RANK_LEGENDARY':
       return '#f59e0b'
     case 'RANK_LOCKPICK':
-      return '#f59e0b'
+      return '#64748b'
     case 'DEFAULT':
     default:
       return '#ffffff'

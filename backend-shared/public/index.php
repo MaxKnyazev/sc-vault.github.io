@@ -53,7 +53,7 @@ function resolve_allowed_origin_header(array $config): string
 header('Vary: Origin');
 header('Access-Control-Allow-Origin: ' . resolve_allowed_origin_header($config));
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token, Accept');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS');
 header('Access-Control-Max-Age: 86400');
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);
@@ -1087,6 +1087,56 @@ if ($path === '/user/craft-order-lines') {
         } catch (Throwable $e) {
             if (api_is_missing_db_table($e)) {
                 send_json(503, ['error' => 'Не найдена таблица в БД. Выполните миграцию: 020_user_craft_orders.sql.']);
+                exit;
+            }
+            send_json(500, ['error' => $e->getMessage()]);
+            exit;
+        }
+        send_json(200, ['ok' => true]);
+        exit;
+    }
+
+    send_json(405, ['error' => 'Method not allowed']);
+    exit;
+}
+
+if ($path === '/user/craft-order-ingredients') {
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    enforce_auth_user($user);
+    $userId = (int)$user['id'];
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'PATCH') {
+        require_method('PATCH');
+        $body = read_json_body();
+        $orderId = (int)($body['orderId'] ?? 0);
+        $itemId = (string)($body['itemId'] ?? '');
+        if ($orderId <= 0) {
+            send_json(400, ['error' => 'orderId required']);
+            exit;
+        }
+        if (!array_key_exists('done', $body)) {
+            send_json(400, ['error' => 'done required']);
+            exit;
+        }
+        $raw = $body['done'];
+        $done = $raw === true || $raw === 1 || $raw === '1' || $raw === 'true';
+        try {
+            update_user_craft_order_ingredient_done($db, $userId, $orderId, $itemId, $done);
+        } catch (InvalidArgumentException $e) {
+            send_json(400, ['error' => $e->getMessage()]);
+            exit;
+        } catch (Throwable $e) {
+            if (api_is_missing_db_table($e)) {
+                send_json(503, ['error' => 'Не найдена таблица в БД. Выполните миграцию: 022_user_craft_order_ingredient_done.sql.']);
                 exit;
             }
             send_json(500, ['error' => $e->getMessage()]);
