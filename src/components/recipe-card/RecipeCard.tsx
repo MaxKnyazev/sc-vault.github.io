@@ -13,6 +13,7 @@ import { useRecipeOverridesStore } from '../../shared/store/recipeOverridesStore
 import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
 import { AdminAuctionTrackingButton } from '../admin-auction-ignore/AdminAuctionTrackingButton'
 import { getRecipeRequiredSkill, getUserSkillLevel } from '../../shared/lib/craftSkills'
+import { getDuplicateCraftDisplayLabel } from '../../shared/lib/craftDuplicateRecipeLabels'
 
 function createEnergyIconSvg(fillColor: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -76,6 +77,7 @@ export function RecipeCard({
   const colorScheme = useComputedColorScheme('dark')
   const primaryResultItemId = recipe.result[0]?.item
   const recipeId = recipeFavoriteId || getRecipeFavoriteId(recipe)
+  const duplicateCraftTitle = getDuplicateCraftDisplayLabel(recipe)
   const [isCraftOpen, setIsCraftOpen] = useState(defaultCraftOpen)
   const [isCostTreeHovered, setIsCostTreeHovered] = useState(false)
   const [isEditingBonus, setIsEditingBonus] = useState(false)
@@ -154,8 +156,13 @@ export function RecipeCard({
 
       {!hideRecipeTitle ? (
         <Group justify="space-between" align="flex-start" wrap="nowrap">
-          <Stack gap={2} style={{ minWidth: 0 }}>
-            <Text size="sm" fw={600} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+          <Stack gap={4} style={{ minWidth: 0 }}>
+            {duplicateCraftTitle ? (
+              <Text size="md" fw={700} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                {duplicateCraftTitle}
+              </Text>
+            ) : null}
+            <Text size="sm" fw={600} c={duplicateCraftTitle ? 'dimmed' : undefined} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
               {getLocalizedLine(recipe.category.lines)}
               {recipe.subcategory?.lines ? ` / ${getLocalizedLine(recipe.subcategory.lines)}` : ''}
             </Text>

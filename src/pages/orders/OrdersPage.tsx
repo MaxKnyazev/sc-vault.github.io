@@ -33,6 +33,7 @@ import { mergeUserAndDefaultBuyPrices } from '../../shared/lib/craftCostBuyPrice
 import { buildCraftCostModel } from '../../shared/lib/costModel'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
+import { getDuplicateCraftDisplayLabel } from '../../shared/lib/craftDuplicateRecipeLabels'
 import { getRecipeRequiredSkill } from '../../shared/lib/craftSkills'
 import { pickListingItemQualityColor } from '../../shared/lib/itemQualityColor'
 import { buildOrderIngredientLedger, type LedgerMethod } from '../../shared/lib/orderIngredientLedger'
@@ -207,8 +208,12 @@ function OrderCard({
     const q = pickSearch.trim().toLowerCase()
     return pickableRecipes.filter((r) => {
       if (!q) return true
-      const names = r.result
-        .map((e) => `${e.item} ${getItemName(itemsById[e.item]?.name?.lines)}`.toLowerCase())
+      const dup = getDuplicateCraftDisplayLabel(r)
+      const names = [
+        ...r.result.map((e) => `${e.item} ${getItemName(itemsById[e.item]?.name?.lines)}`.toLowerCase()),
+        dup ? dup.toLowerCase() : '',
+      ]
+        .filter(Boolean)
         .join(' ')
       return names.includes(q)
     })
@@ -382,6 +387,8 @@ function OrderCard({
                 const primaryName = primaryId
                   ? getItemName(itemsById[primaryId]?.name?.lines) || primaryId
                   : '—'
+                const lineCraftLabel = recipe ? getDuplicateCraftDisplayLabel(recipe) : null
+                const lineDisplayName = lineCraftLabel ?? primaryName
                 const iconUrl =
                   primaryId && itemsById[primaryId] ? buildItemIconUrl(itemsById[primaryId]!.icon, realm) : undefined
                 const lineTotal =
@@ -411,7 +418,7 @@ function OrderCard({
                     </ActionIcon>
                     <ItemBadge
                       itemId={primaryId}
-                      name={`${primaryName} ×${line.quantity}`}
+                      name={`${lineDisplayName} ×${line.quantity}`}
                       iconUrl={iconUrl}
                       qualityColor={pickListingItemQualityColor(primaryId ? itemsById[primaryId] : undefined)}
                       size="ingredient"
@@ -582,6 +589,7 @@ function OrderCard({
               {filteredPick.map((recipe) => {
                 const pid = recipe.result[0]?.item
                 const nm = pid ? getItemName(itemsById[pid]?.name?.lines) || pid : '—'
+                const pickName = getDuplicateCraftDisplayLabel(recipe) ?? nm
                 const iu = pid && itemsById[pid] ? buildItemIconUrl(itemsById[pid]!.icon, realm) : undefined
                 const br = resolveRecipeBranch(recipe)
                 return (
@@ -595,7 +603,7 @@ function OrderCard({
                   >
                     <ItemBadge
                       itemId={pid}
-                      name={nm}
+                      name={pickName}
                       iconUrl={iu}
                       qualityColor={pickListingItemQualityColor(pid ? itemsById[pid] : undefined)}
                       size="ingredient"
