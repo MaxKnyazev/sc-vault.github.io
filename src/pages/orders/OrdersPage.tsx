@@ -11,6 +11,7 @@ import {
   Paper,
   ScrollArea,
   Stack,
+  Table,
   Text,
   TextInput,
 } from '@mantine/core'
@@ -23,6 +24,7 @@ import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import type { HideoutRecipe } from '../../entities/hideout/types'
 import type { ListingItemWithId } from '../../entities/item/types'
 import type { Realm } from '../../shared/config/app'
+import type { CraftBranchLevels, RecipeResultOverride } from '../../shared/api/backendApi'
 import { useAuthStore } from '../../shared/store/authStore'
 import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
 import { useRecipeOverridesStore } from '../../shared/store/recipeOverridesStore'
@@ -33,7 +35,7 @@ import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
 import { getRecipeRequiredSkill } from '../../shared/lib/craftSkills'
 import { pickListingItemQualityColor } from '../../shared/lib/itemQualityColor'
-import { rollupOrderBaseIngredientsToBuy } from '../../shared/lib/orderBaseIngredientRollup'
+import { buildOrderIngredientLedger, type LedgerMethod } from '../../shared/lib/orderIngredientLedger'
 import { sortOrderLines } from '../../shared/lib/orderIngredientRollup'
 import { computeOrderLineTotalRub } from '../../shared/lib/orderLineBuyCraftCost'
 import type { CraftOrder, OrderLine } from '../../shared/store/ordersStore'
@@ -48,6 +50,12 @@ const BRANCH_BY_PERK: Record<string, string> = {
   brewing: 'Самогоноварение',
   medicine: 'Медицина',
   materials: 'Сырье и материалы',
+}
+
+function ledgerMethodRu(m: LedgerMethod): string {
+  if (m === 'craft') return 'Крафт'
+  if (m === 'vendor') return 'Скуп'
+  return 'Аукцион'
 }
 
 function resolveRecipeBranch(recipe: HideoutRecipe): string | null {
@@ -146,6 +154,8 @@ type OrderCardProps = {
   itemsById: Record<string, ListingItemWithId>
   realm: Realm
   recipeByFavoriteId: Map<string, HideoutRecipe>
+  recipeOverridesById: Record<string, RecipeResultOverride>
+  craftBranchLevels: CraftBranchLevels | null
   costModel: ReturnType<typeof buildCraftCostModel>
   buyPricesMerged: Record<string, string>
   energyPrice: string
@@ -157,6 +167,8 @@ function OrderCard({
   itemsById,
   realm,
   recipeByFavoriteId,
+  recipeOverridesById,
+  craftBranchLevels,
   costModel,
   buyPricesMerged,
   energyPrice,
@@ -228,26 +240,29 @@ function OrderCard({
     return ok ? sum : null
   }, [order.lines, recipeByFavoriteId, costModel, buyPricesMerged, energyPrice])
 
-  const buyRollup = useMemo(() => {
-    const sorted = sortOrderLines(order.lines.filter((l) => !l.done))
-    return rollupOrderBaseIngredientsToBuy(sorted, recipeByFavoriteId, costModel, buyPricesMerged)
-  }, [order.lines, recipeByFavoriteId, costModel, buyPricesMerged])
-
-  const rollupRows = useMemo(() => {
-    return [...buyRollup.entries()]
-      .filter(([, amt]) => amt > 1e-6)
-      .map(([itemId, amount]) => ({
-        itemId,
-        amount,
-        name: getItemName(itemsById[itemId]?.name?.lines) || itemId,
-        iconUrl: itemsById[itemId] ? buildItemIconUrl(itemsById[itemId]!.icon, realm) : undefined,
-        done: ingredientDoneMap.get(itemId) === true,
-      }))
-      .sort((a, b) => {
-        if (a.done !== b.done) return a.done ? 1 : -1
-        return a.name.localeCompare(b.name, 'ru')
-      })
-  }, [buyRollup, itemsById, realm, ingredientDoneMap])
+  const ingredientLedger = useMemo(() => {
+    return buildOrderIngredientLedger({
+      lines: order.lines,
+      recipeByFavoriteId,
+      recipeOverridesById,
+      craftBranchLevels,
+      costModel,
+      buyPricesMerged,
+      energyPrice,
+      itemName: (id) => getItemName(itemsById[id]?.name?.lines) || id,
+      itemIconUrl: (id) => (itemsById[id] ? buildItemIconUrl(itemsById[id]!.icon, realm) : undefined),
+    })
+  }, [
+    order.lines,
+    recipeByFavoriteId,
+    recipeOverridesById,
+    craftBranchLevels,
+    costModel,
+    buyPricesMerged,
+    energyPrice,
+    itemsById,
+    realm,
+  ])
 
   return (
     <>
@@ -444,46 +459,111 @@ function OrderCard({
             {ingOpen ? 'Скрыть ингредиенты' : 'Ингредиенты'}
           </Button>
           {ingOpen ? (
-            <Stack gap={6}>
-              {rollupRows.length === 0 ? (
+            <Stack gap="sm">
+              {ingredientLedger.rows.length === 0 && ingredientLedger.surplus.length === 0 ? (
                 <Text size="sm" c="dimmed">
                   Нет данных — добавьте позиции или задайте цены ингредиентов.
                 </Text>
               ) : (
-                rollupRows.map((row) => (
-                  <Group
-                    key={row.itemId}
-                    justify="space-between"
-                    wrap="nowrap"
-                    gap="sm"
-                    align="center"
-                    style={{ opacity: row.done ? 0.48 : 1 }}
-                  >
-                    <ActionIcon
-                      variant={row.done ? 'filled' : 'default'}
-                      size="sm"
-                      color="gray"
-                      aria-label={row.done ? 'Снять отметку' : 'Уже добыто'}
-                      title={row.done ? 'Снять отметку' : 'Уже добыто'}
-                      onClick={() => void toggleIngredientDone(order.id, row.itemId, !row.done)}
-                    >
-                      {row.done ? <IconCross /> : <IconCheck />}
-                    </ActionIcon>
-                    <Box style={{ flex: 1, minWidth: 0 }}>
-                      <ItemBadge
-                        itemId={row.itemId}
-                        name={row.name}
-                        iconUrl={row.iconUrl}
-                        qualityColor={pickListingItemQualityColor(itemsById[row.itemId])}
-                        size="ingredient"
-                        showFavoriteButton={false}
-                      />
-                    </Box>
-                    <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
-                      ×{new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(row.amount)}
-                    </Text>
-                  </Group>
-                ))
+                <>
+                  {ingredientLedger.rows.length > 0 ? (
+                    <Table.ScrollContainer minWidth={720}>
+                      <Table verticalSpacing="xs" horizontalSpacing="xs" striped withTableBorder>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th w={44} />
+                            <Table.Th>Предмет</Table.Th>
+                            <Table.Th style={{ whiteSpace: 'nowrap' }}>Нужно, шт.</Table.Th>
+                            <Table.Th style={{ whiteSpace: 'nowrap' }}>Способ</Table.Th>
+                            <Table.Th style={{ whiteSpace: 'nowrap' }}>Крафтов</Table.Th>
+                            <Table.Th style={{ whiteSpace: 'nowrap' }}>За шт.</Table.Th>
+                            <Table.Th style={{ whiteSpace: 'nowrap' }}>Всего</Table.Th>
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {ingredientLedger.rows.map((row) => {
+                            const done = ingredientDoneMap.get(row.itemId) === true
+                            return (
+                              <Table.Tr key={row.key} style={{ opacity: done ? 0.48 : 1 }}>
+                                <Table.Td>
+                                  <ActionIcon
+                                    variant={done ? 'filled' : 'default'}
+                                    size="sm"
+                                    color="gray"
+                                    aria-label={done ? 'Снять отметку' : 'Уже добыто'}
+                                    title={done ? 'Снять отметку' : 'Уже добыто'}
+                                    onClick={() => void toggleIngredientDone(order.id, row.itemId, !done)}
+                                  >
+                                    {done ? <IconCross /> : <IconCheck />}
+                                  </ActionIcon>
+                                </Table.Td>
+                                <Table.Td>
+                                  <ItemBadge
+                                    itemId={row.itemId}
+                                    name={row.name}
+                                    iconUrl={row.iconUrl}
+                                    qualityColor={pickListingItemQualityColor(itemsById[row.itemId])}
+                                    size="ingredient"
+                                    showFavoriteButton={false}
+                                  />
+                                </Table.Td>
+                                <Table.Td>
+                                  <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
+                                    {row.qtyDisplay}
+                                  </Text>
+                                </Table.Td>
+                                <Table.Td>
+                                  <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
+                                    {ledgerMethodRu(row.method)}
+                                  </Text>
+                                </Table.Td>
+                                <Table.Td>
+                                  <Text size="sm" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+                                    {row.craftRunsDisplay}
+                                  </Text>
+                                </Table.Td>
+                                <Table.Td>
+                                  <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
+                                    {row.unitRubDisplay}
+                                  </Text>
+                                </Table.Td>
+                                <Table.Td>
+                                  <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
+                                    {row.totalRubDisplay}
+                                  </Text>
+                                </Table.Td>
+                              </Table.Tr>
+                            )
+                          })}
+                        </Table.Tbody>
+                      </Table>
+                    </Table.ScrollContainer>
+                  ) : null}
+                  {ingredientLedger.surplus.length > 0 ? (
+                    <Stack gap={6}>
+                      <Text size="xs" fw={600} c="dimmed" tt="uppercase">
+                        Остаток после заказа
+                      </Text>
+                      {ingredientLedger.surplus.map((s) => (
+                        <Group key={s.itemId} justify="space-between" wrap="nowrap" gap="sm">
+                          <Box style={{ flex: 1, minWidth: 0 }}>
+                            <ItemBadge
+                              itemId={s.itemId}
+                              name={s.name}
+                              iconUrl={itemsById[s.itemId] ? buildItemIconUrl(itemsById[s.itemId]!.icon, realm) : undefined}
+                              qualityColor={pickListingItemQualityColor(itemsById[s.itemId])}
+                              size="ingredient"
+                              showFavoriteButton={false}
+                            />
+                          </Box>
+                          <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
+                            +{s.qty}
+                          </Text>
+                        </Group>
+                      ))}
+                    </Stack>
+                  ) : null}
+                </>
               )}
             </Stack>
           ) : null}
@@ -723,6 +803,8 @@ export function OrdersPage() {
                   itemsById={itemsById}
                   realm={realm}
                   recipeByFavoriteId={recipeByFavoriteId}
+                  recipeOverridesById={recipeOverridesById}
+                  craftBranchLevels={craftBranchLevels}
                   costModel={costModel}
                   buyPricesMerged={buyPricesMerged}
                   energyPrice={energyPrice}
