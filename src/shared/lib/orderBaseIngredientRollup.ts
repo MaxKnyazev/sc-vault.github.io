@@ -29,8 +29,22 @@ function collectBaseContributions(
   costModel: CraftCostModel,
   buyPricesMerged: Record<string, string>,
   out: LeafContrib[],
+  expanding: Set<string>,
 ): void {
   if (gross <= EPS) return
+
+  // Циклы в графе крафта (SCC): иначе рекурсия бесконечна.
+  if (expanding.has(itemId)) {
+    out.push({ itemId, gross, exact })
+    return
+  }
+
+  // Очень глубокие ациклические цепочки — не рискуем стеком.
+  const MAX_EXPAND_DEPTH = 48
+  if (expanding.size >= MAX_EXPAND_DEPTH) {
+    out.push({ itemId, gross, exact })
+    return
+  }
 
   const best = costModel.bestRecipeOptionByItemId.get(itemId)
   const craftPerUnit = costModel.craftCostByItemId.get(itemId)
@@ -55,10 +69,15 @@ function collectBaseContributions(
   const runs = Math.max(1, Math.ceil((gross - EPS) / batch.batchUnits))
   const exactRuns = gross / batch.batchUnits
 
-  for (const ing of best.recipe.ingredients) {
-    const g = runs * ing.amount
-    const e = exactRuns * ing.amount
-    collectBaseContributions(ing.item, g, e, costModel, buyPricesMerged, out)
+  expanding.add(itemId)
+  try {
+    for (const ing of best.recipe.ingredients) {
+      const g = runs * ing.amount
+      const e = exactRuns * ing.amount
+      collectBaseContributions(ing.item, g, e, costModel, buyPricesMerged, out, expanding)
+    }
+  } finally {
+    expanding.delete(itemId)
   }
 }
 
@@ -90,7 +109,7 @@ export function rollupOrderBaseIngredientsToBuy(
     for (const ing of recipe.ingredients) {
       const gross = runs * ing.amount
       const exact = exactRuns * ing.amount
-      collectBaseContributions(ing.item, gross, exact, costModel, buyPricesMerged, contribs)
+      collectBaseContributions(ing.item, gross, exact, costModel, buyPricesMerged, contribs, new Set())
     }
 
     for (const { itemId, gross, exact } of contribs) {
