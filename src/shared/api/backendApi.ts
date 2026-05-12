@@ -442,6 +442,165 @@ export async function deleteTrackedItemSubscription(
   await parseJsonOrThrow<{ ok?: boolean }>(response)
 }
 
+export type CraftOrderLineDto = {
+  id: string
+  recipeFavoriteId: string
+  quantity: number
+  done: boolean
+  doneAt: number | null
+  createdOrder: number
+}
+
+export type CraftOrderDto = {
+  id: string
+  displayNumber: number
+  title: string
+  createdAt: number
+  deadlineHours: number | null
+  deadlineSetAt: number | null
+  lines: CraftOrderLineDto[]
+}
+
+export async function fetchCraftOrders(): Promise<{ orders: CraftOrderDto[]; migrationsPending: boolean }> {
+  const token = getBackendAuthToken()
+  if (!token) return { orders: [], migrationsPending: false }
+  const url = buildApiUrl('/user/craft-orders')
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+  })
+  const payload = await parseJsonOrThrow<{ orders?: CraftOrderDto[]; migrationsPending?: boolean }>(response)
+  return { orders: payload.orders ?? [], migrationsPending: Boolean(payload.migrationsPending) }
+}
+
+export async function createCraftOrder(): Promise<CraftOrderDto> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl('/user/craft-orders')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+  })
+  const payload = await parseJsonOrThrow<{ order?: CraftOrderDto }>(response)
+  if (!payload.order) throw new Error('Пустой ответ сервера')
+  return payload.order
+}
+
+export async function patchCraftOrder(body: {
+  orderId: string | number
+  title?: string
+  deadlineHours?: number | null
+}): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl('/user/craft-orders')
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify({
+      orderId: Number(body.orderId),
+      ...(body.title !== undefined ? { title: body.title } : {}),
+      ...(body.deadlineHours !== undefined ? { deadlineHours: body.deadlineHours } : {}),
+    }),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function deleteCraftOrder(orderId: string | number): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl('/user/craft-orders')
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify({ orderId: Number(orderId) }),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function addCraftOrderLine(orderId: string | number, recipeFavoriteId: string, quantity: number): Promise<string> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl('/user/craft-order-lines')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify({
+      orderId: Number(orderId),
+      recipeFavoriteId,
+      quantity,
+    }),
+  })
+  const payload = await parseJsonOrThrow<{ lineId?: string }>(response)
+  if (!payload.lineId) throw new Error('Пустой ответ сервера')
+  return payload.lineId
+}
+
+export async function patchCraftOrderLine(body: {
+  lineId: string | number
+  quantity?: number
+  done?: boolean
+}): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl('/user/craft-order-lines')
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify({
+      lineId: Number(body.lineId),
+      ...(body.quantity !== undefined ? { quantity: body.quantity } : {}),
+      ...(body.done !== undefined ? { done: body.done } : {}),
+    }),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
+export async function deleteCraftOrderLine(lineId: string | number): Promise<void> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const url = buildApiUrl('/user/craft-order-lines')
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify({ lineId: Number(lineId) }),
+  })
+  await parseJsonOrThrow<{ ok?: boolean }>(response)
+}
+
 export async function fetchBackendUserBuyPrices(): Promise<FetchUserBuyPricesResult> {
   const token = getBackendAuthToken()
   if (!token) return { itemPrices: {}, energyBuyPrice: '', defaultPrices: {} }

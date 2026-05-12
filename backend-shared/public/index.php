@@ -29,6 +29,7 @@ require $baseDir . '/src/UserBuyPrices.php';
 require $baseDir . '/src/UserEnergyBuyPrice.php';
 require $baseDir . '/src/DefaultBuyPrices.php';
 require $baseDir . '/src/RecipeOverrides.php';
+require $baseDir . '/src/CraftOrders.php';
 
 function resolve_allowed_origin_header(array $config): string
 {
@@ -867,6 +868,229 @@ if ($path === '/user/energy-buy-price') {
             exit;
         }
         set_user_energy_buy_price($db, $userId, $normalized);
+        send_json(200, ['ok' => true]);
+        exit;
+    }
+
+    send_json(405, ['error' => 'Method not allowed']);
+    exit;
+}
+
+if ($path === '/user/craft-orders') {
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    enforce_auth_user($user);
+    $userId = (int)$user['id'];
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+        try {
+            $orders = list_user_craft_orders_with_lines($db, $userId);
+        } catch (Throwable $e) {
+            if (api_is_missing_db_table($e)) {
+                send_json(200, ['orders' => [], 'migrationsPending' => true]);
+                exit;
+            }
+            send_json(500, ['error' => $e->getMessage()]);
+            exit;
+        }
+        send_json(200, ['orders' => $orders, 'migrationsPending' => false]);
+        exit;
+    }
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        require_method('POST');
+        try {
+            $order = create_user_craft_order($db, $userId);
+        } catch (Throwable $e) {
+            if (api_is_missing_db_table($e)) {
+                send_json(503, ['error' => 'Не найдена таблица в БД. Выполните миграцию: 020_user_craft_orders.sql.']);
+                exit;
+            }
+            send_json(400, ['error' => $e->getMessage()]);
+            exit;
+        }
+        send_json(200, ['order' => $order]);
+        exit;
+    }
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'PATCH') {
+        require_method('PATCH');
+        $body = read_json_body();
+        $orderId = (int)($body['orderId'] ?? 0);
+        if ($orderId <= 0) {
+            send_json(400, ['error' => 'orderId required']);
+            exit;
+        }
+        $hasTitle = array_key_exists('title', $body);
+        $hasDh = array_key_exists('deadlineHours', $body);
+        if (!$hasTitle && !$hasDh) {
+            send_json(400, ['error' => 'title or deadlineHours required']);
+            exit;
+        }
+        try {
+            if ($hasTitle) {
+                update_user_craft_order_title($db, $userId, $orderId, (string)($body['title'] ?? ''));
+            }
+            if ($hasDh) {
+                $dh = $body['deadlineHours'];
+                if ($dh === null || $dh === '' || $dh === false) {
+                    update_user_craft_order_deadline($db, $userId, $orderId, null);
+                } else {
+                    update_user_craft_order_deadline($db, $userId, $orderId, (int)$dh);
+                }
+            }
+        } catch (InvalidArgumentException $e) {
+            send_json(400, ['error' => $e->getMessage()]);
+            exit;
+        } catch (Throwable $e) {
+            if (api_is_missing_db_table($e)) {
+                send_json(503, ['error' => 'Не найдена таблица в БД. Выполните миграцию: 020_user_craft_orders.sql.']);
+                exit;
+            }
+            send_json(500, ['error' => $e->getMessage()]);
+            exit;
+        }
+        send_json(200, ['ok' => true]);
+        exit;
+    }
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'DELETE') {
+        require_method('DELETE');
+        $body = read_json_body();
+        $orderId = (int)($body['orderId'] ?? 0);
+        if ($orderId <= 0) {
+            send_json(400, ['error' => 'orderId required']);
+            exit;
+        }
+        try {
+            delete_user_craft_order($db, $userId, $orderId);
+        } catch (InvalidArgumentException $e) {
+            send_json(400, ['error' => $e->getMessage()]);
+            exit;
+        } catch (Throwable $e) {
+            if (api_is_missing_db_table($e)) {
+                send_json(503, ['error' => 'Не найдена таблица в БД. Выполните миграцию: 020_user_craft_orders.sql.']);
+                exit;
+            }
+            send_json(500, ['error' => $e->getMessage()]);
+            exit;
+        }
+        send_json(200, ['ok' => true]);
+        exit;
+    }
+
+    send_json(405, ['error' => 'Method not allowed']);
+    exit;
+}
+
+if ($path === '/user/craft-order-lines') {
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    enforce_auth_user($user);
+    $userId = (int)$user['id'];
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        require_method('POST');
+        $body = read_json_body();
+        $orderId = (int)($body['orderId'] ?? 0);
+        $recipeFavoriteId = (string)($body['recipeFavoriteId'] ?? '');
+        $quantity = (int)($body['quantity'] ?? 1);
+        if ($orderId <= 0) {
+            send_json(400, ['error' => 'orderId required']);
+            exit;
+        }
+        try {
+            $lineId = add_user_craft_order_line($db, $userId, $orderId, $recipeFavoriteId, $quantity);
+        } catch (InvalidArgumentException $e) {
+            send_json(400, ['error' => $e->getMessage()]);
+            exit;
+        } catch (Throwable $e) {
+            if (api_is_missing_db_table($e)) {
+                send_json(503, ['error' => 'Не найдена таблица в БД. Выполните миграцию: 020_user_craft_orders.sql.']);
+                exit;
+            }
+            send_json(500, ['error' => $e->getMessage()]);
+            exit;
+        }
+        send_json(200, ['lineId' => $lineId]);
+        exit;
+    }
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'PATCH') {
+        require_method('PATCH');
+        $body = read_json_body();
+        $lineId = (int)($body['lineId'] ?? 0);
+        if ($lineId <= 0) {
+            send_json(400, ['error' => 'lineId required']);
+            exit;
+        }
+        $hasQty = array_key_exists('quantity', $body);
+        $hasDone = array_key_exists('done', $body);
+        if (!$hasQty && !$hasDone) {
+            send_json(400, ['error' => 'quantity or done required']);
+            exit;
+        }
+        try {
+            if ($hasQty) {
+                update_user_craft_order_line_quantity($db, $userId, $lineId, (int)$body['quantity']);
+            }
+            if ($hasDone) {
+                $raw = $body['done'];
+                $done = $raw === true || $raw === 1 || $raw === '1' || $raw === 'true';
+                update_user_craft_order_line_done($db, $userId, $lineId, $done);
+            }
+        } catch (InvalidArgumentException $e) {
+            send_json(400, ['error' => $e->getMessage()]);
+            exit;
+        } catch (Throwable $e) {
+            if (api_is_missing_db_table($e)) {
+                send_json(503, ['error' => 'Не найдена таблица в БД. Выполните миграцию: 020_user_craft_orders.sql.']);
+                exit;
+            }
+            send_json(500, ['error' => $e->getMessage()]);
+            exit;
+        }
+        send_json(200, ['ok' => true]);
+        exit;
+    }
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'DELETE') {
+        require_method('DELETE');
+        $body = read_json_body();
+        $lineId = (int)($body['lineId'] ?? 0);
+        if ($lineId <= 0) {
+            send_json(400, ['error' => 'lineId required']);
+            exit;
+        }
+        try {
+            delete_user_craft_order_line($db, $userId, $lineId);
+        } catch (InvalidArgumentException $e) {
+            send_json(400, ['error' => $e->getMessage()]);
+            exit;
+        } catch (Throwable $e) {
+            if (api_is_missing_db_table($e)) {
+                send_json(503, ['error' => 'Не найдена таблица в БД. Выполните миграцию: 020_user_craft_orders.sql.']);
+                exit;
+            }
+            send_json(500, ['error' => $e->getMessage()]);
+            exit;
+        }
         send_json(200, ['ok' => true]);
         exit;
     }

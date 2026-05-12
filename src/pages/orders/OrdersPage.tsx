@@ -1,5 +1,6 @@
 import {
   ActionIcon,
+  Alert,
   Button,
   Divider,
   Group,
@@ -11,7 +12,7 @@ import {
   Text,
   TextInput,
 } from '@mantine/core'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { PageContainer } from '../../components/page-container/PageContainer'
 import { SectionCard } from '../../components/section-card/SectionCard'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
@@ -138,7 +139,6 @@ function formatRemaining(ms: number): string {
 
 type OrderCardProps = {
   order: CraftOrder
-  userId: number
   itemsById: Record<string, ListingItemWithId>
   realm: Realm
   recipeByFavoriteId: Map<string, HideoutRecipe>
@@ -150,7 +150,6 @@ type OrderCardProps = {
 
 function OrderCard({
   order,
-  userId,
   itemsById,
   realm,
   recipeByFavoriteId,
@@ -251,8 +250,7 @@ function OrderCard({
                 aria-label="Подтвердить название"
                 title="Подтвердить"
                 onClick={() => {
-                  updateTitle(userId, order.id, titleDraft.trim() || order.title)
-                  setEditingTitle(false)
+                  void updateTitle(order.id, titleDraft.trim() || order.title).then(() => setEditingTitle(false))
                 }}
               >
                 <IconCheck />
@@ -281,7 +279,7 @@ function OrderCard({
             </Text>
           )}
         </Stack>
-        <ActionIcon color="red" variant="light" aria-label="Удалить заказ" onClick={() => removeOrder(userId, order.id)}>
+        <ActionIcon color="red" variant="light" aria-label="Удалить заказ" onClick={() => void removeOrder(order.id)}>
           <IconTrash />
         </ActionIcon>
       </Group>
@@ -303,10 +301,9 @@ function OrderCard({
           onClick={() => {
             const n = Number.parseInt(hoursDraft, 10)
             if (!Number.isFinite(n) || n <= 0) {
-              setDeadlineHours(userId, order.id, null)
-              setHoursDraft('')
+              void setDeadlineHours(order.id, null).then(() => setHoursDraft(''))
             } else {
-              setDeadlineHours(userId, order.id, n)
+              void setDeadlineHours(order.id, n)
             }
           }}
         >
@@ -317,8 +314,7 @@ function OrderCard({
           variant="subtle"
           color="gray"
           onClick={() => {
-            setDeadlineHours(userId, order.id, null)
-            setHoursDraft('')
+            void setDeadlineHours(order.id, null).then(() => setHoursDraft(''))
           }}
         >
           Сбросить
@@ -373,7 +369,7 @@ function OrderCard({
                   color={line.done ? 'orange' : 'green'}
                   aria-label={line.done ? 'Вернуть в нужные' : 'Отметить готовым'}
                   title={line.done ? 'Вернуть в нужные' : 'Готово'}
-                  onClick={() => toggleLineDone(userId, order.id, line.id)}
+                  onClick={() => void toggleLineDone(order.id, line.id, !line.done)}
                 >
                   {line.done ? <IconCross /> : <IconCheck />}
                 </ActionIcon>
@@ -406,7 +402,7 @@ function OrderCard({
                   variant="subtle"
                   color="red"
                   aria-label="Удалить позицию"
-                  onClick={() => removeLine(userId, order.id, line.id)}
+                  onClick={() => void removeLine(order.id, line.id)}
                 >
                   <IconTrash />
                 </ActionIcon>
@@ -517,9 +513,10 @@ function OrderCard({
               </Button>
               <Button
                 onClick={() => {
-                  addLine(userId, order.id, qtyModal.favoriteId, qtyDraft)
-                  setQtyModal(null)
-                  setPickOpen(false)
+                  void addLine(order.id, qtyModal.favoriteId, qtyDraft).then(() => {
+                    setQtyModal(null)
+                    setPickOpen(false)
+                  })
                 }}
               >
                 Добавить
@@ -544,8 +541,9 @@ function OrderCard({
               </Button>
               <Button
                 onClick={() => {
-                  updateLineQuantity(userId, order.id, editQtyModal.line.id, editQtyDraft)
-                  setEditQtyModal(null)
+                  void updateLineQuantity(order.id, editQtyModal.line.id, editQtyDraft).then(() =>
+                    setEditQtyModal(null),
+                  )
                 }}
               >
                 Сохранить
@@ -560,6 +558,7 @@ function OrderCard({
 
 export function OrdersPage() {
   const user = useAuthStore((s) => s.user)
+  const token = useAuthStore((s) => s.token)
   const userId = user?.id
   const { recipes, itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
   const craftBranchLevels = useAuthStore((s) => s.user?.craftBranchLevels ?? null)
@@ -570,8 +569,17 @@ export function OrdersPage() {
   const energyPrice = useIngredientPricesStore((s) => s.energyPrice)
   const loadRemoteBuyPrices = useIngredientPricesStore((s) => s.loadRemoteBuyPrices)
 
-  const byUserId = useOrdersStore((s) => s.byUserId)
+  const orders = useOrdersStore((s) => s.orders)
+  const ordersLoading = useOrdersStore((s) => s.isLoading)
+  const ordersError = useOrdersStore((s) => s.error)
+  const migrationsPending = useOrdersStore((s) => s.migrationsPending)
+  const loadRemoteOrders = useOrdersStore((s) => s.loadRemote)
   const createOrder = useOrdersStore((s) => s.createOrder)
+
+  useEffect(() => {
+    if (!userId || !token) return
+    void loadRemoteOrders()
+  }, [userId, token, loadRemoteOrders])
 
   useEffect(() => {
     void fetchRecipes()
@@ -616,12 +624,6 @@ export function OrdersPage() {
     [adjustedRecipes, buyPricesMerged, energyPrice],
   )
 
-  const orders = userId ? byUserId[userId]?.orders ?? [] : []
-
-  const handleCreate = useCallback(() => {
-    if (userId) void createOrder(userId)
-  }, [createOrder, userId])
-
   if (!userId) {
     return (
       <PageContainer>
@@ -638,7 +640,9 @@ export function OrdersPage() {
             <Text size="xl" fw={700}>
               Заказы
             </Text>
-            <Button onClick={handleCreate}>Создать заказ</Button>
+            <Button onClick={() => void createOrder()} disabled={migrationsPending}>
+              Создать заказ
+            </Button>
           </Group>
 
           {isLoading ? <Loader size="sm" /> : null}
@@ -648,17 +652,29 @@ export function OrdersPage() {
             </Text>
           ) : null}
 
-          {orders.length === 0 ? (
+          {ordersLoading ? <Loader size="sm" /> : null}
+          {ordersError ? (
+            <Text c="red" size="sm">
+              {ordersError}
+            </Text>
+          ) : null}
+          {migrationsPending ? (
+            <Alert color="yellow" title="Синхронизация заказов">
+              На сервере ещё не применена миграция для заказов. Список заказов с других устройств появится после
+              обновления базы.
+            </Alert>
+          ) : null}
+
+          {!ordersLoading && !migrationsPending && orders.length === 0 ? (
             <Text size="sm" c="dimmed">
               Заказов пока нет. Нажмите «Создать заказ».
             </Text>
-          ) : (
+          ) : !migrationsPending && orders.length > 0 ? (
             <Stack gap="lg">
               {orders.map((order) => (
                 <OrderCard
                   key={order.id}
                   order={order}
-                  userId={userId}
                   itemsById={itemsById}
                   realm={realm}
                   recipeByFavoriteId={recipeByFavoriteId}
@@ -669,7 +685,7 @@ export function OrdersPage() {
                 />
               ))}
             </Stack>
-          )}
+          ) : null}
         </Stack>
       </SectionCard>
     </PageContainer>

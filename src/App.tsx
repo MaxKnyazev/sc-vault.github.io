@@ -9,6 +9,7 @@ import { useAuctionDesiredBuyPricesStore } from './shared/store/auctionDesiredBu
 import { useAuctionTrackedLotsStore } from './shared/store/auctionTrackedLotsStore'
 import { useAuctionDealToastsStore } from './shared/store/auctionDealToastsStore'
 import { useAuctionTrackedSubscriptionsStore } from './shared/store/auctionTrackedSubscriptionsStore'
+import { useOrdersStore } from './shared/store/ordersStore'
 
 function App() {
   const bootstrapAuth = useAuthStore((s) => s.bootstrapAuth)
@@ -43,6 +44,7 @@ function App() {
     useAuctionTrackedSubscriptionsStore.getState().reset()
     useAuctionTrackedLotsStore.getState().clearLots()
     useAuctionDealToastsStore.getState().clear()
+    useOrdersStore.getState().reset()
   }, [token])
 
   useEffect(() => {
