@@ -474,14 +474,14 @@ function OrderCard({
               ) : (
                 <>
                   {ingredientLedger.rows.length > 0 ? (
-                    <Table.ScrollContainer minWidth={720}>
+                    <Table.ScrollContainer minWidth={880}>
                       <Table verticalSpacing="xs" horizontalSpacing="xs" striped withTableBorder>
                         <Table.Thead>
                           <Table.Tr>
                             <Table.Th w={44} />
                             <Table.Th>Предмет</Table.Th>
                             <Table.Th style={{ whiteSpace: 'nowrap' }}>Нужно, шт.</Table.Th>
-                            <Table.Th style={{ whiteSpace: 'nowrap' }}>Способ</Table.Th>
+                            <Table.Th miw={200}>Способ</Table.Th>
                             <Table.Th style={{ whiteSpace: 'nowrap' }}>Крафтов</Table.Th>
                             <Table.Th style={{ whiteSpace: 'nowrap' }}>За шт.</Table.Th>
                             <Table.Th style={{ whiteSpace: 'nowrap' }}>Всего</Table.Th>
@@ -519,10 +519,15 @@ function OrderCard({
                                     {row.qtyDisplay}
                                   </Text>
                                 </Table.Td>
-                                <Table.Td>
-                                  <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
-                                    {ledgerMethodRu(row.method)}
-                                  </Text>
+                                <Table.Td maw={280}>
+                                  <Stack gap={4}>
+                                    <Text size="sm">{ledgerMethodRu(row.method)}</Text>
+                                    {row.method === 'craft' && row.craftRecipeLabel ? (
+                                      <Text size="xs" c="dimmed" style={{ wordBreak: 'break-word', lineHeight: 1.35 }}>
+                                        {row.craftRecipeLabel}
+                                      </Text>
+                                    ) : null}
+                                  </Stack>
                                 </Table.Td>
                                 <Table.Td>
                                   <Text size="sm" c="dimmed" style={{ whiteSpace: 'nowrap' }}>

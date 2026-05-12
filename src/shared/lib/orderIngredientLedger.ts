@@ -7,6 +7,7 @@ import type { CraftCostModel } from './orderLineBuyCraftCost'
 import { computeRecipePrimaryUnitRub } from './orderLineBuyCraftCost'
 import { recipeBatchOutputForPrimaryItem } from './recipeBatchOutput'
 import { sortOrderLines } from './orderIngredientRollup'
+import { getDuplicateCraftDisplayLabel } from './craftDuplicateRecipeLabels'
 
 const EPS = 1e-9
 
@@ -19,6 +20,8 @@ export type OrderIngredientLedgerRow = {
   iconUrl?: string
   qtyDisplay: string
   method: LedgerMethod
+  /** Явное имя варианта при method === 'craft' и дублирующихся рецептах (как на странице «Крафты»). */
+  craftRecipeLabel?: string | null
   craftRunsDisplay: string
   unitRubDisplay: string
   totalRubDisplay: string
@@ -191,6 +194,7 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
     runsBest: number,
     runsWorst: number,
     unitCraft: number | null,
+    craftRecipeLabel: string | null,
   ) => {
     const key = `c|${itemId}|${fav}`
     const totalRub = unitCraft !== null ? unitCraft * qtyNeed : null
@@ -206,6 +210,7 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
       prev.row.unitRubDisplay = prev.qtySum > 0 && prev.totalRubSum > 0 ? formatRub(prev.totalRubSum / prev.qtySum) : '—'
       prev.row.unitRub = prev.qtySum > 0 && prev.totalRubSum > 0 ? prev.totalRubSum / prev.qtySum : null
       prev.row.totalRub = prev.totalRubSum > 0 ? prev.totalRubSum : null
+      if (!prev.row.craftRecipeLabel && craftRecipeLabel) prev.row.craftRecipeLabel = craftRecipeLabel
       return
     }
     const row: OrderIngredientLedgerRow = {
@@ -215,6 +220,7 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
       iconUrl: itemIconUrl(itemId),
       qtyDisplay: formatIntRange(qtyNeed, qtyNeed),
       method: 'craft',
+      craftRecipeLabel: craftRecipeLabel || null,
       craftRunsDisplay: formatRunsRange(runsBest, runsWorst),
       unitRubDisplay: formatRub(unitCraft),
       totalRubDisplay: formatRub(totalRub),
@@ -282,7 +288,8 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
     pool.set(itemId, (pool.get(itemId) ?? 0) + surplus)
 
     const unitCraft = computeRecipePrimaryUnitRub(recipeAdj, costModel, buyPricesMerged, energyPrice)
-    pushCraft(itemId, need, fav, runsBest, runsWorst, unitCraft)
+    const craftRecipeLabel = getDuplicateCraftDisplayLabel(recipeAdj)
+    pushCraft(itemId, need, fav, runsBest, runsWorst, unitCraft, craftRecipeLabel)
 
     expanding.add(itemId)
     try {
