@@ -58,7 +58,7 @@ export function AppShellLayout() {
   useEffect(() => {
     const routeTitleMap: Record<string, string> = {
       '/': 'Главная',
-      '/crafts': 'Крафты',
+      '/crafts/orders': 'Заказы',
       '/ingredients': 'Ингредиенты',
       '/auction-history': 'Отслеживание аукциона',
       '/profile': 'Профиль',
@@ -67,7 +67,8 @@ export function AppShellLayout() {
 
     let pageTitle = routeTitleMap[location.pathname]
     if (!pageTitle) {
-      if (location.pathname.startsWith('/crafts')) pageTitle = 'Крафты'
+      if (location.pathname === '/crafts/orders') pageTitle = 'Заказы'
+      else if (location.pathname.startsWith('/crafts')) pageTitle = 'Крафты'
       else if (location.pathname.startsWith('/ingredients')) pageTitle = 'Ингредиенты'
       else if (location.pathname.startsWith('/auction-history')) pageTitle = 'Отслеживание аукциона'
       else if (location.pathname.startsWith('/profile')) pageTitle = 'Профиль'
@@ -136,11 +137,21 @@ export function AppShellLayout() {
           {canUseCoreFeatures ? (
             <NavLink
               component={Link}
+              to="/crafts/orders"
+              onClick={close}
+              label="Заказы"
+              active={location.pathname === '/crafts/orders'}
+              styles={getNavItemStyles(location.pathname === '/crafts/orders')}
+            />
+          ) : null}
+          {canUseCoreFeatures ? (
+            <NavLink
+              component={Link}
               to="/crafts"
               onClick={close}
               label="Крафты"
-              active={location.pathname.startsWith('/crafts')}
-              styles={getNavItemStyles(location.pathname.startsWith('/crafts'))}
+              active={location.pathname === '/crafts'}
+              styles={getNavItemStyles(location.pathname === '/crafts')}
             />
           ) : null}
           {canUseCoreFeatures ? (

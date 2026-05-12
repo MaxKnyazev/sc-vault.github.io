@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router-dom'
 import { AppShellLayout } from '../widgets/app-shell/AppShellLayout'
 import { HomePage } from '../pages/home/HomePage'
 import { CraftsPage } from '../pages/crafts/CraftsPage'
+import { OrdersPage } from '../pages/orders/OrdersPage'
 import { IngredientsPage } from '../pages/ingredients/IngredientsPage'
 import { NotFoundPage } from '../pages/not-found/NotFoundPage'
 import { ProfilePage } from '../pages/profile/ProfilePage'
@@ -26,6 +27,10 @@ export const appRouter = createBrowserRouter(
             {
               index: true,
               element: <CraftsPage />,
+            },
+            {
+              path: 'orders',
+              element: <OrdersPage />,
             },
           ],
         },
