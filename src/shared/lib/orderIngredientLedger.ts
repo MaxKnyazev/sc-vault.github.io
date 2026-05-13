@@ -43,20 +43,19 @@ export type BuildOrderIngredientLedgerInput = {
   itemIconUrl: (itemId: string) => string | undefined
 }
 
-/** Кол-во / крафты в заказе: округление вверх до десятых, отображение с одной дробной цифрой (ru). */
+/** Кол-во / крафты в заказе: округление вверх до десятых; целые без «.0», дробь с точкой. */
 export function formatLedgerQtyCeilTenths(n: number): string {
   if (!Number.isFinite(n) || n < 0) return '—'
   const v = Math.ceil(n * 10 - EPS) / 10
-  return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(v)
+  return parseFloat(v.toFixed(1)).toString()
 }
 
-/** Человекочитаемое число (остаток и др.): допускаются дроби без принудительных десятых. */
+/** Остаток и др.: целые без дроби, дробь с точкой, без лишних нулей. */
 export function formatLedgerQty(n: number): string {
-  if (!Number.isFinite(n)) return '—'
-  if (n < 0) return '—'
+  if (!Number.isFinite(n) || n < 0) return '—'
   const rounded = Math.round(n)
   if (Math.abs(n - rounded) < 1e-6) return String(rounded)
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 6 }).format(n)
+  return parseFloat(n.toFixed(6)).toString()
 }
 
 function parseBuyRub(buyPricesMerged: Record<string, string>, itemId: string): number | null {
