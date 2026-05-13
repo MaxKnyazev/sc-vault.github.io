@@ -1230,6 +1230,7 @@ function get_auction_hybrid_prices_bulk(PDO $db, array $itemIds, array $settings
                         );
                     }
                 }
+                $statsFetchedAt = ($row !== null && isset($row['fetchedAt'])) ? $row['fetchedAt'] : null;
                 $items[$itemId] = [
                     'avgPerUnit' => $avg,
                     'tradeCount' => $tc,
@@ -1239,7 +1240,7 @@ function get_auction_hybrid_prices_bulk(PDO $db, array $itemIds, array $settings
                     'expandedWindow' => $expanded,
                     'undersampled' => !$sufficient && $tc > 0,
                     'expansionMessage' => $expansionMessage,
-                    'statsFetchedAt' => $row['fetchedAt'] ?? null,
+                    'statsFetchedAt' => $statsFetchedAt,
                 ];
             } else {
                 $nextRemaining[] = $itemId;

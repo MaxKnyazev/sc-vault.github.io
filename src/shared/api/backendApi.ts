@@ -127,6 +127,8 @@ export type HybridAuctionPricesResponse = {
   fetchedAt?: string
   settings?: AuctionHybridSettings
   items?: Record<string, HybridAuctionItemMetrics>
+  /** Предупреждения по батчам, если часть запросов упала, а данные всё же собраны */
+  partialErrors?: string[]
 }
 
 function defaultAuctionHybridSettings(): AuctionHybridSettings {
@@ -230,11 +232,12 @@ async function parseJsonOrThrow<T>(response: Response): Promise<T> {
   return data as T
 }
 
-export async function fetchBackendHybridAuctionPrices(itemIds: string[]): Promise<HybridAuctionPricesResponse> {
+/** Меньше лимита бэкенда (400), чтобы тело запроса и запас по длине URL не упирались в ограничения. */
+const HYBRID_AUCTION_PRICES_CHUNK_SIZE = 320
+
+async function fetchBackendHybridAuctionPricesOnce(itemIds: string[]): Promise<HybridAuctionPricesResponse> {
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация')
-  const ids = [...new Set(itemIds)].filter(Boolean)
-  if (ids.length === 0) return { fetchedAt: new Date().toISOString(), items: {} }
   const url = buildApiUrl('/auction/hybrid-prices')
   const response = await fetch(url, {
     method: 'POST',
@@ -244,9 +247,58 @@ export async function fetchBackendHybridAuctionPrices(itemIds: string[]): Promis
       Authorization: `Bearer ${token}`,
       'X-Auth-Token': token,
     },
-    body: JSON.stringify({ itemIds: ids }),
+    body: JSON.stringify({ itemIds }),
   })
   return parseJsonOrThrow<HybridAuctionPricesResponse>(response)
+}
+
+/**
+ * Гибридные цены аукциона по множеству предметов: оркестрация — несколько POST при >320 id,
+ * результаты объединяются. При ошибке отдельных батчей возвращается объединение успешных; если не
+ * загрузилось ни одной записи — бросается ошибка.
+ */
+export async function fetchBackendHybridAuctionPrices(itemIds: string[]): Promise<HybridAuctionPricesResponse> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const ids = [...new Set(itemIds)].filter(Boolean)
+  if (ids.length === 0) return { fetchedAt: new Date().toISOString(), items: {} }
+
+  if (ids.length <= HYBRID_AUCTION_PRICES_CHUNK_SIZE) {
+    return fetchBackendHybridAuctionPricesOnce(ids)
+  }
+
+  const mergedItems: Record<string, HybridAuctionItemMetrics> = {}
+  let lastFetchedAt = ''
+  let mergedSettings: AuctionHybridSettings | undefined
+  const chunkErrors: string[] = []
+
+  for (let offset = 0; offset < ids.length; offset += HYBRID_AUCTION_PRICES_CHUNK_SIZE) {
+    const slice = ids.slice(offset, offset + HYBRID_AUCTION_PRICES_CHUNK_SIZE)
+    try {
+      const part = await fetchBackendHybridAuctionPricesOnce(slice)
+      Object.assign(mergedItems, part.items ?? {})
+      if (part.settings) mergedSettings = part.settings
+      const fa = part.fetchedAt
+      if (fa && fa > lastFetchedAt) lastFetchedAt = fa
+    } catch (e) {
+      const msg = e instanceof BackendApiError ? e.message : e instanceof Error ? e.message : String(e)
+      chunkErrors.push(`батч ${offset + 1}–${offset + slice.length}: ${msg}`)
+    }
+  }
+
+  if (Object.keys(mergedItems).length === 0) {
+    throw new BackendApiError(
+      chunkErrors.length > 0 ? chunkErrors.join('; ') : 'Не удалось загрузить гибридные цены аукциона',
+      400,
+    )
+  }
+
+  return {
+    fetchedAt: lastFetchedAt || new Date().toISOString(),
+    settings: mergedSettings ?? normalizeAuctionHybridSettings(undefined),
+    items: mergedItems,
+    partialErrors: chunkErrors.length > 0 ? chunkErrors : undefined,
+  }
 }
 
 export async function fetchBackendAuctionStats(itemIds: string[]): Promise<Record<string, AuctionAgg24h>> {

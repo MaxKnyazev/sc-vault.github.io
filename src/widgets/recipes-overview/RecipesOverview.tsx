@@ -117,6 +117,7 @@ export function RecipesOverview() {
   const [costTreeItemId, setCostTreeItemId] = useState<string | null>(null)
   const [hybridAuctionByItemId, setHybridAuctionByItemId] = useState<Record<string, HybridAuctionItemMetrics>>({})
   const [hybridAuctionError, setHybridAuctionError] = useState<string | null>(null)
+  const [hybridPartialBatchWarnings, setHybridPartialBatchWarnings] = useState<string[] | null>(null)
 
   useEffect(() => {
     void fetchRecipes()
@@ -222,18 +223,24 @@ export function RecipesOverview() {
     if (!authToken || auctionItemIds.length === 0) {
       setHybridAuctionByItemId({})
       setHybridAuctionError(null)
+      setHybridPartialBatchWarnings(null)
       return
     }
     let cancelled = false
     setHybridAuctionError(null)
+    setHybridPartialBatchWarnings(null)
     void fetchBackendHybridAuctionPrices(auctionItemIds)
       .then((payload) => {
         if (cancelled) return
         setHybridAuctionByItemId(payload.items ?? {})
+        setHybridPartialBatchWarnings(
+          payload.partialErrors && payload.partialErrors.length > 0 ? payload.partialErrors : null,
+        )
       })
       .catch((err: unknown) => {
         if (cancelled) return
         setHybridAuctionByItemId({})
+        setHybridPartialBatchWarnings(null)
         setHybridAuctionError(err instanceof Error ? err.message : String(err))
       })
     return () => {
@@ -506,6 +513,17 @@ export function RecipesOverview() {
             {hybridAuctionError ? (
               <Alert color="red" title="Гибридная оценка аукциона">
                 {hybridAuctionError}
+              </Alert>
+            ) : null}
+            {hybridPartialBatchWarnings?.length ? (
+              <Alert color="yellow" title="Гибрид: часть запросов не удалась">
+                <Stack gap={6}>
+                  {hybridPartialBatchWarnings.map((w) => (
+                    <Text key={w} size="sm">
+                      {w}
+                    </Text>
+                  ))}
+                </Stack>
               </Alert>
             ) : null}
             {hybridExpansionAlerts.map((msg) => (
