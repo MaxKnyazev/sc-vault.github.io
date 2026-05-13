@@ -43,7 +43,14 @@ export type BuildOrderIngredientLedgerInput = {
   itemIconUrl: (itemId: string) => string | undefined
 }
 
-/** Человекочитаемое число для таблицы ингредиентов (допускаются дроби). */
+/** Кол-во / крафты в заказе: округление вверх до десятых, отображение с одной дробной цифрой (ru). */
+export function formatLedgerQtyCeilTenths(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return '—'
+  const v = Math.ceil(n * 10 - EPS) / 10
+  return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(v)
+}
+
+/** Человекочитаемое число (остаток и др.): допускаются дроби без принудительных десятых. */
 export function formatLedgerQty(n: number): string {
   if (!Number.isFinite(n)) return '—'
   if (n < 0) return '—'
@@ -116,7 +123,7 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
     if (prev) {
       prev.qtySum += qty
       prev.totalRubSum += totalRub ?? 0
-      prev.row.qtyDisplay = formatLedgerQty(prev.qtySum)
+      prev.row.qtyDisplay = formatLedgerQtyCeilTenths(prev.qtySum)
       prev.row.totalRubDisplay = formatRub(prev.totalRubSum > 0 ? prev.totalRubSum : null)
       prev.row.unitRubDisplay = prev.qtySum > 0 && prev.totalRubSum > 0 ? formatRub(prev.totalRubSum / prev.qtySum) : '—'
       prev.row.unitRub = prev.qtySum > 0 && prev.totalRubSum > 0 ? prev.totalRubSum / prev.qtySum : null
@@ -128,7 +135,7 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
       itemId,
       name: itemName(itemId),
       iconUrl: itemIconUrl(itemId),
-      qtyDisplay: formatLedgerQty(qty),
+      qtyDisplay: formatLedgerQtyCeilTenths(qty),
       method,
       craftRunsDisplay: '—',
       unitRubDisplay: formatRub(unitRub),
@@ -155,8 +162,8 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
       prev.qtySum += qtyNeed
       prev.totalRubSum += totalRub ?? 0
       prev.runsSum += runsPart
-      prev.row.qtyDisplay = formatLedgerQty(prev.qtySum)
-      prev.row.craftRunsDisplay = formatLedgerQty(prev.runsSum)
+      prev.row.qtyDisplay = formatLedgerQtyCeilTenths(prev.qtySum)
+      prev.row.craftRunsDisplay = formatLedgerQtyCeilTenths(prev.runsSum)
       prev.row.totalRubDisplay = formatRub(prev.totalRubSum > 0 ? prev.totalRubSum : null)
       prev.row.unitRubDisplay = prev.qtySum > 0 && prev.totalRubSum > 0 ? formatRub(prev.totalRubSum / prev.qtySum) : '—'
       prev.row.unitRub = prev.qtySum > 0 && prev.totalRubSum > 0 ? prev.totalRubSum / prev.qtySum : null
@@ -169,10 +176,10 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
       itemId,
       name: itemName(itemId),
       iconUrl: itemIconUrl(itemId),
-      qtyDisplay: formatLedgerQty(qtyNeed),
+      qtyDisplay: formatLedgerQtyCeilTenths(qtyNeed),
       method: 'craft',
       craftRecipeLabel: craftRecipeLabel || null,
-      craftRunsDisplay: formatLedgerQty(runsPart),
+      craftRunsDisplay: formatLedgerQtyCeilTenths(runsPart),
       unitRubDisplay: formatRub(unitCraft),
       totalRubDisplay: formatRub(totalRub),
       unitRub: unitCraft,
