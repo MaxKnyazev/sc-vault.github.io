@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/AuctionHybridSettings.php';
+
 function get_auction_stats(PDO $db, array $itemIds, string $window = '12h'): array
 {
     if (count($itemIds) === 0) {
@@ -1059,5 +1061,212 @@ function get_auction_item_active_lots(PDO $db, array $config, string $itemId, in
 
     usort($normalized, static fn(array $a, array $b): int => (int)($a['price'] <=> $b['price']));
     return $normalized;
+}
+
+/**
+ * Weighted average price per unit over the last N raw trades (all qualities), ordered by sold_at DESC.
+ *
+ * @return array{tradeCount:int, avgPerUnit:float|null, sampleCap:int}
+ */
+function auction_aggregate_last_n_raw_trades(PDO $db, string $itemId, int $n): array
+{
+    $allowed = [50, 100, 200, 500, 1000];
+    if (!in_array($n, $allowed, true)) {
+        $n = 100;
+    }
+    $stmt = $db->prepare(
+        'SELECT
+            COALESCE(SUM(x.price), 0) AS rev,
+            COALESCE(SUM(x.amount), 0) AS qty,
+            COUNT(*) AS cnt
+         FROM (
+            SELECT price, amount
+            FROM auction_raw_trades
+            WHERE item_id = ?
+            ORDER BY sold_at DESC
+            LIMIT ' . (string)$n . '
+         ) x'
+    );
+    $stmt->execute([$itemId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $cnt = $row ? (int)$row['cnt'] : 0;
+    $qty = $row ? (float)$row['qty'] : 0.0;
+    $rev = $row ? (float)$row['rev'] : 0.0;
+    $avg = $cnt > 0 && $qty > 0.0 ? $rev / $qty : null;
+    return ['tradeCount' => $cnt, 'avgPerUnit' => $avg, 'sampleCap' => $n];
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function auction_hybrid_price_last_sales_for_item(PDO $db, string $itemId, array $settings): array
+{
+    $minTr = (int)$settings['minTrades'];
+    $presets = [50, 100, 200, 500, 1000];
+    $requested = (int)$settings['lastSalesCount'];
+    $startIdx = 0;
+    foreach ($presets as $i => $p) {
+        if ($p >= $requested) {
+            $startIdx = $i;
+            break;
+        }
+    }
+    $expanded = false;
+    $expansionMessage = null;
+    $lastAgg = null;
+    for ($i = $startIdx; $i < count($presets); $i++) {
+        $n = $presets[$i];
+        $agg = auction_aggregate_last_n_raw_trades($db, $itemId, $n);
+        $lastAgg = $agg;
+        if ($i > $startIdx) {
+            $expanded = true;
+        }
+        $sufficient = $agg['tradeCount'] >= $minTr;
+        $atMax = $i === count($presets) - 1;
+        if ($sufficient || $atMax) {
+            if ($expanded) {
+                if ($sufficient) {
+                    $expansionMessage = sprintf(
+                        'Окно расширено: для «%d последних продаж» сделок было меньше порога (%d); использованы последние %d продаж (%d сделок).',
+                        $requested,
+                        $minTr,
+                        $n,
+                        $agg['tradeCount']
+                    );
+                } else {
+                    $expansionMessage = sprintf(
+                        'Окно расширено до %d последних продаж; сделок всё ещё меньше порога (%d при необходимости %d).',
+                        $n,
+                        $agg['tradeCount'],
+                        $minTr
+                    );
+                }
+            }
+            $undersampled = !$sufficient && $agg['tradeCount'] > 0;
+            return [
+                'avgPerUnit' => $agg['avgPerUnit'],
+                'tradeCount' => $agg['tradeCount'],
+                'sampleSize' => $agg['sampleCap'],
+                'windowUsed' => 'last_' . $n,
+                'windowRequested' => 'last_' . $requested,
+                'expandedWindow' => $expanded,
+                'undersampled' => $undersampled,
+                'expansionMessage' => $expansionMessage,
+                'statsFetchedAt' => null,
+            ];
+        }
+    }
+    $agg = $lastAgg ?? auction_aggregate_last_n_raw_trades($db, $itemId, 100);
+    return [
+        'avgPerUnit' => $agg['avgPerUnit'],
+        'tradeCount' => $agg['tradeCount'],
+        'sampleSize' => $agg['sampleCap'],
+        'windowUsed' => 'last_' . $agg['sampleCap'],
+        'windowRequested' => 'last_' . $requested,
+        'expandedWindow' => false,
+        'undersampled' => $agg['tradeCount'] < $minTr && $agg['tradeCount'] > 0,
+        'expansionMessage' => null,
+        'statsFetchedAt' => null,
+    ];
+}
+
+/**
+ * @param array<string, mixed> $settings normalized hybrid settings
+ * @return array{fetchedAt:string, settings:array, items:array<string, array<string, mixed>>}
+ */
+function get_auction_hybrid_prices_bulk(PDO $db, array $itemIds, array $settings): array
+{
+    $settings = normalize_auction_hybrid_settings_array($settings);
+    $fetchedAt = gmdate('c');
+    $items = [];
+
+    if ($settings['mode'] === 'last_sales') {
+        foreach ($itemIds as $itemId) {
+            $items[$itemId] = auction_hybrid_price_last_sales_for_item($db, (string)$itemId, $settings);
+        }
+        return ['fetchedAt' => $fetchedAt, 'settings' => $settings, 'items' => $items];
+    }
+
+    $windows = ['1h', '6h', '12h', '24h'];
+    $requestedW = (string)$settings['timeWindow'];
+    $startIdx = 0;
+    foreach ($windows as $i => $w) {
+        if ($w === $requestedW) {
+            $startIdx = $i;
+            break;
+        }
+    }
+    $minTr = (int)$settings['minTrades'];
+    $remaining = $itemIds;
+
+    for ($i = $startIdx; $i < count($windows); $i++) {
+        $w = $windows[$i];
+        $stats = count($remaining) > 0 ? get_auction_stats($db, $remaining, $w) : [];
+        $nextRemaining = [];
+        foreach ($remaining as $itemId) {
+            $row = $stats[$itemId] ?? null;
+            $tc = $row ? (int)$row['tradeCount'] : 0;
+            $avg = $row && $row['avgPerUnit'] !== null ? (float)$row['avgPerUnit'] : null;
+            $sufficient = $tc >= $minTr && $avg !== null && $avg > 0.0;
+            $expanded = $i > $startIdx;
+            $atMax = $i === count($windows) - 1;
+            if ($sufficient || $atMax) {
+                $expansionMessage = null;
+                if ($expanded) {
+                    if ($sufficient) {
+                        $expansionMessage = sprintf(
+                            'Окно расширено: для периода «%s» сделок было меньше порога (%d); использован агрегат за «%s» (%d сделок).',
+                            $requestedW,
+                            $minTr,
+                            $w,
+                            $tc
+                        );
+                    } else {
+                        $expansionMessage = sprintf(
+                            'Окно расширено до «%s»; сделок всё ещё меньше порога (%d при необходимости %d).',
+                            $w,
+                            $tc,
+                            $minTr
+                        );
+                    }
+                }
+                $items[$itemId] = [
+                    'avgPerUnit' => $avg,
+                    'tradeCount' => $tc,
+                    'sampleSize' => $tc,
+                    'windowUsed' => $w,
+                    'windowRequested' => $requestedW,
+                    'expandedWindow' => $expanded,
+                    'undersampled' => !$sufficient && $tc > 0,
+                    'expansionMessage' => $expansionMessage,
+                    'statsFetchedAt' => $row['fetchedAt'] ?? null,
+                ];
+            } else {
+                $nextRemaining[] = $itemId;
+            }
+        }
+        $remaining = $nextRemaining;
+        if (count($remaining) === 0) {
+            break;
+        }
+    }
+
+    foreach ($itemIds as $itemId) {
+        if (!isset($items[$itemId])) {
+            $items[$itemId] = [
+                'avgPerUnit' => null,
+                'tradeCount' => 0,
+                'sampleSize' => 0,
+                'windowUsed' => $requestedW,
+                'windowRequested' => $requestedW,
+                'expandedWindow' => false,
+                'undersampled' => false,
+                'expansionMessage' => null,
+                'statsFetchedAt' => null,
+            ];
+        }
+    }
+
+    return ['fetchedAt' => $fetchedAt, 'settings' => $settings, 'items' => $items];
 }
 

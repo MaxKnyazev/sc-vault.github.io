@@ -13,12 +13,13 @@ function parsePositiveNumber(raw: string | null | undefined): number | null {
   return n
 }
 
-/** Себестоимость 1 шт. основного продукта рецепта: min(крафт по effectiveCost, скуп). */
+/** Себестоимость 1 шт. основного продукта рецепта: min(крафт по effectiveCost, min(скуп, аукцион)). */
 export function computeRecipePrimaryUnitRub(
   recipe: HideoutRecipe,
   costModel: CraftCostModel,
   buyPricesMerged: Record<string, string>,
   energyPriceRaw: string,
+  auctionUnitByItemId?: ReadonlyMap<string, number> | null,
 ): number | null {
   const batch = recipeBatchOutputForPrimaryItem(recipe)
   if (!batch || batch.batchUnits <= 0) return null
@@ -42,8 +43,13 @@ export function computeRecipePrimaryUnitRub(
 
   const recipeCraftPerUnit = totalInputCost / batch.batchUnits
   const buyPerUnit = parsePositiveNumber(buyPricesMerged[batch.primaryItemId] ?? null)
-  if (recipeCraftPerUnit !== null && buyPerUnit !== null) return Math.min(recipeCraftPerUnit, buyPerUnit)
-  return recipeCraftPerUnit ?? buyPerUnit
+  const aucRaw = auctionUnitByItemId?.get(batch.primaryItemId)
+  const auc =
+    aucRaw !== undefined && Number.isFinite(aucRaw) && aucRaw > 0 ? aucRaw : null
+  const leafPrimary =
+    buyPerUnit !== null && auc !== null ? Math.min(buyPerUnit, auc) : buyPerUnit ?? auc
+  if (recipeCraftPerUnit !== null && leafPrimary !== null) return Math.min(recipeCraftPerUnit, leafPrimary)
+  return recipeCraftPerUnit ?? leafPrimary
 }
 
 export function computeOrderLineTotalRub(
@@ -52,8 +58,15 @@ export function computeOrderLineTotalRub(
   costModel: CraftCostModel,
   buyPricesMerged: Record<string, string>,
   energyPriceRaw: string,
+  auctionUnitByItemId?: ReadonlyMap<string, number> | null,
 ): number | null {
-  const unit = computeRecipePrimaryUnitRub(recipe, costModel, buyPricesMerged, energyPriceRaw)
+  const unit = computeRecipePrimaryUnitRub(
+    recipe,
+    costModel,
+    buyPricesMerged,
+    energyPriceRaw,
+    auctionUnitByItemId,
+  )
   if (unit === null) return null
   return unit * Math.max(0, quantityItems)
 }

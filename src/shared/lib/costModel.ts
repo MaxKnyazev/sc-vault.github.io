@@ -1,8 +1,9 @@
 import type { HideoutRecipe } from '../../entities/hideout/types'
 
 /**
- * Себестоимость крафта: для каждого предмета min(скуп, дешёвый крафт по рецептам).
- * Циклы (SCC): итеративное обновление min(скуп, крафт) внутри компоненты до сходимости;
+ * Себестоимость крафта: для каждого предмета min(листовая цена, дешёвый крафт по рецептам),
+ * где листовая цена = min(скуп, аукцион за шт.) если передан словарь аукциона, иначе только скуп.
+ * Циклы (SCC): итеративное обновление min(лист, крафт) внутри компоненты до сходимости;
  * вне цикла — уже посчитанные effectiveCost по ингредиентам.
  */
 type RecipeOption = {
@@ -35,6 +36,7 @@ export function buildCraftCostModel(
   recipes: HideoutRecipe[],
   buyPricesByItemId: Record<string, string>,
   energyPriceRaw: string,
+  auctionUnitByItemId?: ReadonlyMap<string, number> | null,
 ): {
   effectiveCostByItemId: Map<string, number>
   craftCostByItemId: Map<string, number>
@@ -52,8 +54,23 @@ export function buildCraftCostModel(
     const parsed = parsePositiveNumber(raw)
     if (parsed !== null) buyCostByItemId.set(itemId, parsed)
   }
+  const leafCostByItemId = new Map<string, number>()
+  const leafKeys = new Set<string>([...buyCostByItemId.keys()])
+  if (auctionUnitByItemId) {
+    for (const k of auctionUnitByItemId.keys()) leafKeys.add(k)
+  }
+  for (const itemId of leafKeys) {
+    const buy = buyCostByItemId.get(itemId)
+    const aucRaw = auctionUnitByItemId?.get(itemId)
+    const auc = aucRaw !== undefined && Number.isFinite(aucRaw) && aucRaw > 0 ? aucRaw : undefined
+    const parts: number[] = []
+    if (buy !== undefined) parts.push(buy)
+    if (auc !== undefined) parts.push(auc)
+    if (parts.length === 0) continue
+    leafCostByItemId.set(itemId, Math.min(...parts))
+  }
   const energyCost = parsePositiveNumber(energyPriceRaw)
-  const effectiveCostByItemId = new Map<string, number>(buyCostByItemId)
+  const effectiveCostByItemId = new Map<string, number>(leafCostByItemId)
   const craftCostByItemId = new Map<string, number>()
   const outputAmountByItemId = new Map<string, number>()
   const recipeOptionsByItemId = new Map<string, RecipeOption[]>()
@@ -173,7 +190,7 @@ export function buildCraftCostModel(
     if (isCyclicComponent) {
       const compItemsSorted = [...compItems].sort((a, b) => a.localeCompare(b))
       const localCost = new Map<string, number | undefined>()
-      for (const itemId of compItemsSorted) localCost.set(itemId, buyCostByItemId.get(itemId))
+      for (const itemId of compItemsSorted) localCost.set(itemId, leafCostByItemId.get(itemId))
       let reachedMaxIterations = true
       const maxIter = Math.max(96, compItems.length * 48)
       for (let iter = 0; iter < maxIter; iter += 1) {
@@ -188,8 +205,8 @@ export function buildCraftCostModel(
             })
             if (option.craftPerUnit !== null) bestCraft = Math.min(bestCraft, option.craftPerUnit)
           }
-          const buy = buyCostByItemId.get(itemId)
-          const candidate = Math.min(buy ?? Number.POSITIVE_INFINITY, Number.isFinite(bestCraft) ? bestCraft : Number.POSITIVE_INFINITY)
+          const leaf = leafCostByItemId.get(itemId)
+          const candidate = Math.min(leaf ?? Number.POSITIVE_INFINITY, Number.isFinite(bestCraft) ? bestCraft : Number.POSITIVE_INFINITY)
           if (!Number.isFinite(candidate)) continue
           const prev = localCost.get(itemId)
           if (prev === undefined || candidate < prev - EPS) {
@@ -219,8 +236,8 @@ export function buildCraftCostModel(
       const option = evaluateRecipeOption(variant.recipe, variant.outputAmount, (ingredientId) => effectiveCostByItemId.get(ingredientId))
       if (option.craftPerUnit !== null) bestCraft = Math.min(bestCraft, option.craftPerUnit)
     }
-    const buy = buyCostByItemId.get(itemId)
-    const nextEffective = Math.min(buy ?? Number.POSITIVE_INFINITY, Number.isFinite(bestCraft) ? bestCraft : Number.POSITIVE_INFINITY)
+    const leaf = leafCostByItemId.get(itemId)
+    const nextEffective = Math.min(leaf ?? Number.POSITIVE_INFINITY, Number.isFinite(bestCraft) ? bestCraft : Number.POSITIVE_INFINITY)
     if (Number.isFinite(nextEffective)) effectiveCostByItemId.set(itemId, nextEffective)
     else effectiveCostByItemId.delete(itemId)
   }
@@ -243,9 +260,16 @@ export function buildCraftCostModel(
       craftCostByItemId.delete(itemId)
       outputAmountByItemId.delete(itemId)
     }
-    const buy = buyCostByItemId.get(itemId)
+    const leaf = leafCostByItemId.get(itemId)
     const bestCraft = best?.craftPerUnit ?? null
-    const nextEffective = buy !== undefined && bestCraft !== null ? Math.min(buy, bestCraft) : buy !== undefined ? buy : bestCraft !== null ? bestCraft : null
+    const nextEffective =
+      leaf !== undefined && bestCraft !== null
+        ? Math.min(leaf, bestCraft)
+        : leaf !== undefined
+          ? leaf
+          : bestCraft !== null
+            ? bestCraft
+            : null
     if (nextEffective !== null) effectiveCostByItemId.set(itemId, nextEffective)
     else effectiveCostByItemId.delete(itemId)
   }
@@ -256,7 +280,7 @@ export function buildCraftCostModel(
     const missingIngredientIds = [...new Set(options.flatMap((option) => option.missingIngredientIds))]
     const missingEnergy = options.some((option) => option.hasEnergyGap)
     const noRecipes = options.length === 0
-    const noBuy = !buyCostByItemId.has(id)
+    const noBuy = !leafCostByItemId.has(id)
     const cycleUnanchored = cyclicItemIds.has(id) && !cycleAnchoredItemIds.has(id)
     const unstableCycle = unstableCycleItemIds.has(id)
     const meta: UnresolvedMeta = { missingIngredientIds, missingEnergy, noRecipes, noBuy, cycleUnanchored, unstableCycle }

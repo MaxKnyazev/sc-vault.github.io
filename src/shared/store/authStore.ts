@@ -7,6 +7,7 @@ import {
   logoutBackendUser,
   registerBackendUser,
   type AuthUser,
+  type AuctionHybridSettings,
   type CraftBranchLevels,
   updateOwnProfile,
 } from '../api/backendApi'
@@ -50,6 +51,7 @@ type AuthStore = {
     timezoneOffsetHours: number
     craftBranchLevels: CraftBranchLevels
     auctionTrackingNotifications: boolean
+    auctionHybridSettings: AuctionHybridSettings
   }) => Promise<void>
   clearError: () => void
 }
@@ -132,10 +134,20 @@ export const useAuthStore = create<AuthStore>()(
           set({ token: null, user: null, isSubmitting: false, isAuthResolved: true, error: null })
         }
       },
-      saveProfilePreferences: async ({ timezoneOffsetHours, craftBranchLevels, auctionTrackingNotifications }) => {
+      saveProfilePreferences: async ({
+        timezoneOffsetHours,
+        craftBranchLevels,
+        auctionTrackingNotifications,
+        auctionHybridSettings,
+      }) => {
         set({ isSubmitting: true, error: null })
         try {
-          const user = await updateOwnProfile({ timezoneOffsetHours, craftBranchLevels, auctionTrackingNotifications })
+          const user = await updateOwnProfile({
+            timezoneOffsetHours,
+            craftBranchLevels,
+            auctionTrackingNotifications,
+            auctionHybridSettings,
+          })
           if (!auctionTrackingNotifications) {
             useAuctionDealToastsStore.getState().clear()
           }

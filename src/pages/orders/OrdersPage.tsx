@@ -28,6 +28,9 @@ import { useAuthStore } from '../../shared/store/authStore'
 import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
 import { useRecipeOverridesStore } from '../../shared/store/recipeOverridesStore'
 import { applyRecipeResultOverride } from '../../shared/lib/applyRecipeResultOverride'
+import { collectHideoutItemIds } from '../../shared/lib/collectHideoutItemIds'
+import { fetchBackendHybridAuctionPrices, type HybridAuctionItemMetrics } from '../../shared/api/backendApi'
+import { buildHybridAuctionAvgMap } from '../../shared/lib/hybridAuctionAvgMap'
 import { mergeUserAndDefaultBuyPrices } from '../../shared/lib/craftCostBuyPrices'
 import { buildCraftCostModel } from '../../shared/lib/costModel'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
@@ -157,6 +160,7 @@ type OrderCardProps = {
   costModel: ReturnType<typeof buildCraftCostModel>
   buyPricesMerged: Record<string, string>
   energyPrice: string
+  auctionUnitByItemId: Map<string, number>
   pickableRecipes: HideoutRecipe[]
 }
 
@@ -168,6 +172,7 @@ function OrderCard({
   costModel,
   buyPricesMerged,
   energyPrice,
+  auctionUnitByItemId,
   pickableRecipes,
 }: OrderCardProps) {
   const updateTitle = useOrdersStore((s) => s.updateTitle)
@@ -233,12 +238,19 @@ function OrderCard({
         ok = false
         continue
       }
-      const v = computeOrderLineTotalRub(r, line.quantity, costModel, buyPricesMerged, energyPrice)
+      const v = computeOrderLineTotalRub(
+        r,
+        line.quantity,
+        costModel,
+        buyPricesMerged,
+        energyPrice,
+        auctionUnitByItemId,
+      )
       if (v === null) ok = false
       else sum += v
     }
     return ok ? sum : null
-  }, [order.lines, recipeByFavoriteId, costModel, buyPricesMerged, energyPrice])
+  }, [order.lines, recipeByFavoriteId, costModel, buyPricesMerged, energyPrice, auctionUnitByItemId])
 
   const ingredientLedger = useMemo(() => {
     return buildOrderIngredientLedger({
@@ -247,10 +259,11 @@ function OrderCard({
       costModel,
       buyPricesMerged,
       energyPrice,
+      auctionUnitByItemId,
       itemName: (id) => getItemName(itemsById[id]?.name?.lines) || id,
       itemIconUrl: (id) => (itemsById[id] ? buildItemIconUrl(itemsById[id]!.icon, realm) : undefined),
     })
-  }, [order.lines, recipeByFavoriteId, costModel, buyPricesMerged, energyPrice, itemsById, realm])
+  }, [order.lines, recipeByFavoriteId, costModel, buyPricesMerged, energyPrice, auctionUnitByItemId, itemsById, realm])
 
   return (
     <>
@@ -376,7 +389,14 @@ function OrderCard({
                   primaryId && itemsById[primaryId] ? buildItemIconUrl(itemsById[primaryId]!.icon, realm) : undefined
                 const lineTotal =
                   recipe &&
-                  computeOrderLineTotalRub(recipe, line.quantity, costModel, buyPricesMerged, energyPrice)
+                  computeOrderLineTotalRub(
+                    recipe,
+                    line.quantity,
+                    costModel,
+                    buyPricesMerged,
+                    energyPrice,
+                    auctionUnitByItemId,
+                  )
 
                 return (
                   <Group
@@ -435,10 +455,10 @@ function OrderCard({
             )}
           </Stack>
 
-          <Divider label="Оценка" labelPosition="center" my={4} />
+          <Divider label="Оценка (гибрид)" labelPosition="center" my={4} />
           <Group justify="space-between" wrap="nowrap" gap="md">
             <Text size="sm" c="dimmed">
-              Скуп и крафт
+              min(скуп, аукцион, крафт)
             </Text>
             <Text size="sm" fw={600}>
               {totalBuyCraft !== null ? `${formatAuctionRub(totalBuyCraft)} ₽` : '—'}
@@ -720,6 +740,8 @@ export function OrdersPage() {
     void loadRemoteBuyPrices()
   }, [loadRemoteBuyPrices])
 
+  const [hybridAuctionRows, setHybridAuctionRows] = useState<Record<string, HybridAuctionItemMetrics>>({})
+
   const adjustedRecipes = useMemo(
     () => recipes.map((r) => applyRecipeResultOverride(r, recipeOverridesById, craftBranchLevels)),
     [recipes, recipeOverridesById, craftBranchLevels],
@@ -748,9 +770,31 @@ export function OrdersPage() {
     [buyPricesByItemId, defaultBuyPricesByItemId],
   )
 
+  const hybridHydrateItemIds = useMemo(() => collectHideoutItemIds(adjustedRecipes), [adjustedRecipes])
+
+  useEffect(() => {
+    if (!token || hybridHydrateItemIds.length === 0) {
+      setHybridAuctionRows({})
+      return
+    }
+    let cancelled = false
+    void fetchBackendHybridAuctionPrices(hybridHydrateItemIds)
+      .then((payload) => {
+        if (!cancelled) setHybridAuctionRows(payload.items ?? {})
+      })
+      .catch(() => {
+        if (!cancelled) setHybridAuctionRows({})
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token, hybridHydrateItemIds])
+
+  const hybridAvgMap = useMemo(() => buildHybridAuctionAvgMap(hybridAuctionRows), [hybridAuctionRows])
+
   const costModel = useMemo(
-    () => buildCraftCostModel(adjustedRecipes, buyPricesMerged, energyPrice),
-    [adjustedRecipes, buyPricesMerged, energyPrice],
+    () => buildCraftCostModel(adjustedRecipes, buyPricesMerged, energyPrice, hybridAvgMap),
+    [adjustedRecipes, buyPricesMerged, energyPrice, hybridAvgMap],
   )
 
   if (!userId) {
@@ -810,6 +854,7 @@ export function OrdersPage() {
                   costModel={costModel}
                   buyPricesMerged={buyPricesMerged}
                   energyPrice={energyPrice}
+                  auctionUnitByItemId={hybridAvgMap}
                   pickableRecipes={pickableRecipes}
                 />
               ))}

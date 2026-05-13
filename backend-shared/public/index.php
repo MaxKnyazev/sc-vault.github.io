@@ -221,8 +221,19 @@ if ($path === '/user/profile') {
     $timezoneOffsetHours = (int)($body['timezoneOffsetHours'] ?? 0);
     $craftBranchLevels = $body['craftBranchLevels'] ?? null;
     $auctionTrackingNotifications = normalize_auction_tracking_notifications($body['auctionTrackingNotifications'] ?? true);
+    $auctionHybridSettings = null;
+    if (array_key_exists('auctionHybridSettings', $body)) {
+        $auctionHybridSettings = normalize_auction_hybrid_settings_array($body['auctionHybridSettings']);
+    }
     try {
-        update_own_user_preferences($db, (int)$user['id'], $timezoneOffsetHours, is_array($craftBranchLevels) ? $craftBranchLevels : [], $auctionTrackingNotifications);
+        update_own_user_preferences(
+            $db,
+            (int)$user['id'],
+            $timezoneOffsetHours,
+            is_array($craftBranchLevels) ? $craftBranchLevels : [],
+            $auctionTrackingNotifications,
+            $auctionHybridSettings
+        );
         $freshUser = find_user_by_token($db, $token);
         if (!$freshUser) {
             throw new RuntimeException('User not found after update');
@@ -265,6 +276,49 @@ if ($path === '/auction/stats') {
     $idsForStats = filter_item_ids_not_blacklisted($db, $ids);
     $items = count($idsForStats) > 0 ? get_auction_stats($db, $idsForStats, $windowName) : [];
     send_json(200, ['items' => $items]);
+    exit;
+}
+
+if ($path === '/auction/hybrid-prices') {
+    require_method('POST');
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    enforce_auth_user($user);
+    $body = read_json_body();
+    $rawIds = $body['itemIds'] ?? null;
+    if (!is_array($rawIds)) {
+        send_json(400, ['error' => 'itemIds must be an array']);
+        exit;
+    }
+    $ids = [];
+    foreach ($rawIds as $x) {
+        $t = trim((string)$x);
+        if ($t !== '') {
+            $ids[] = $t;
+        }
+    }
+    $ids = array_values(array_unique($ids));
+    if (count($ids) > 400) {
+        send_json(400, ['error' => 'Too many itemIds']);
+        exit;
+    }
+    $ids = filter_item_ids_not_blacklisted($db, $ids);
+    $settings = decode_auction_hybrid_settings_column($user['auction_hybrid_settings'] ?? null);
+    try {
+        $payload = get_auction_hybrid_prices_bulk($db, $ids, $settings);
+    } catch (Throwable $e) {
+        send_json(400, ['error' => $e->getMessage()]);
+        exit;
+    }
+    send_json(200, $payload);
     exit;
 }
 

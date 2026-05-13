@@ -34,6 +34,8 @@ import { buildCraftCostModel } from '../../shared/lib/costModel'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 import { recipeBatchOutputForPrimaryItem } from '../../shared/lib/recipeBatchOutput'
 import { getDuplicateCraftDisplayLabel } from '../../shared/lib/craftDuplicateRecipeLabels'
+import { fetchBackendHybridAuctionPrices, type HybridAuctionItemMetrics } from '../../shared/api/backendApi'
+import { buildHybridAuctionAvgMap } from '../../shared/lib/hybridAuctionAvgMap'
 
 const CANON_BRANCHES = [
   'Боеприпасы',
@@ -104,6 +106,7 @@ export function RecipesOverview() {
   const { recipes, itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
   const favoriteCraftIds = useFavoritesStore((state) => state.favoriteCraftIds)
   const craftBranchLevels = useAuthStore((s) => s.user?.craftBranchLevels ?? null)
+  const authToken = useAuthStore((s) => s.token)
   const recipeOverridesById = useRecipeOverridesStore((s) => s.byRecipeId)
   const loadOverrides = useRecipeOverridesStore((s) => s.loadOverrides)
   const buyPricesByItemId = useIngredientPricesStore((s) => s.buyPricesByItemId)
@@ -112,6 +115,8 @@ export function RecipesOverview() {
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState<'all' | 'favorites' | string>('all')
   const [costTreeItemId, setCostTreeItemId] = useState<string | null>(null)
+  const [hybridAuctionByItemId, setHybridAuctionByItemId] = useState<Record<string, HybridAuctionItemMetrics>>({})
+  const [hybridAuctionError, setHybridAuctionError] = useState<string | null>(null)
 
   useEffect(() => {
     void fetchRecipes()
@@ -213,10 +218,55 @@ export function RecipesOverview() {
     [buyPricesByItemId, defaultBuyPricesByItemId],
   )
 
+  useEffect(() => {
+    if (!authToken || auctionItemIds.length === 0) {
+      setHybridAuctionByItemId({})
+      setHybridAuctionError(null)
+      return
+    }
+    let cancelled = false
+    setHybridAuctionError(null)
+    void fetchBackendHybridAuctionPrices(auctionItemIds)
+      .then((payload) => {
+        if (cancelled) return
+        setHybridAuctionByItemId(payload.items ?? {})
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setHybridAuctionByItemId({})
+        setHybridAuctionError(err instanceof Error ? err.message : String(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [authToken, auctionItemIds])
+
+  const hybridAvgUnitByItemId = useMemo(
+    () => buildHybridAuctionAvgMap(hybridAuctionByItemId),
+    [hybridAuctionByItemId],
+  )
+
   const costModel = useMemo(
     () => buildCraftCostModel(adjustedRecipes, buyPricesMerged, energyPrice),
     [adjustedRecipes, buyPricesMerged, energyPrice],
   )
+  const costModelHybrid = useMemo(
+    () => buildCraftCostModel(adjustedRecipes, buyPricesMerged, energyPrice, hybridAvgUnitByItemId),
+    [adjustedRecipes, buyPricesMerged, energyPrice, hybridAvgUnitByItemId],
+  )
+  const hybridExpansionAlerts = useMemo(() => {
+    const out: string[] = []
+    const seen = new Set<string>()
+    for (const row of Object.values(hybridAuctionByItemId)) {
+      const m = row?.expansionMessage
+      if (m && !seen.has(m)) {
+        seen.add(m)
+        out.push(m)
+      }
+    }
+    return out
+  }, [hybridAuctionByItemId])
+
   const costTreeItemName = useMemo(() => {
     if (!costTreeItemId) return ''
     return getItemName(itemsById[costTreeItemId]?.name?.lines) || costTreeItemId
@@ -243,7 +293,7 @@ export function RecipesOverview() {
     const leftoversByItemId = new Map<string, number>()
 
     const getUnresolvedReasons = (itemId: string): string[] => {
-      const meta = costModel.unresolvedMetaByItemId.get(itemId)
+      const meta = costModelHybrid.unresolvedMetaByItemId.get(itemId)
       if (!meta) return []
       const reasons: string[] = []
       if (meta.cycleUnanchored) reasons.push('цикл без ценового якоря')
@@ -257,7 +307,7 @@ export function RecipesOverview() {
         )
       }
       if (meta.noRecipes) reasons.push('нет крафтовых рецептов')
-      if (meta.noBuy) reasons.push('нет цены скупа')
+      if (meta.noBuy) reasons.push('нет базовой цены (скуп/аукцион)')
       return reasons
     }
 
@@ -279,13 +329,21 @@ export function RecipesOverview() {
         return { source: 'unknown', bestRecipe: null, buyCost: null, reasons: ['нет цены энергии'] }
       }
       const buyCost = parsePositiveNumber(buyPricesMerged[itemId] ?? null)
-      const bestRecipe = costModel.bestRecipeOptionByItemId.get(itemId) ?? null
+      const aucN = hybridAvgUnitByItemId.get(itemId)
+      const leafCost =
+        buyCost !== null && aucN !== undefined
+          ? Math.min(buyCost, aucN)
+          : buyCost ?? aucN ?? null
+      const bestRecipe = costModelHybrid.bestRecipeOptionByItemId.get(itemId) ?? null
       const canCraft = bestRecipe?.craftPerUnit !== null
-      if (canCraft && (buyCost === null || (bestRecipe?.craftPerUnit ?? Number.POSITIVE_INFINITY) <= buyCost + 1e-9)) {
-        return { source: 'craft', bestRecipe, buyCost, reasons: [] }
+      if (
+        canCraft &&
+        (leafCost === null || (bestRecipe?.craftPerUnit ?? Number.POSITIVE_INFINITY) <= leafCost + 1e-9)
+      ) {
+        return { source: 'craft', bestRecipe, buyCost: leafCost, reasons: [] }
       }
-      if (buyCost !== null) return { source: 'buy', bestRecipe, buyCost, reasons: [] }
-      return { source: 'unknown', bestRecipe, buyCost, reasons: getUnresolvedReasons(itemId) }
+      if (leafCost !== null) return { source: 'buy', bestRecipe, buyCost: leafCost, reasons: [] }
+      return { source: 'unknown', bestRecipe, buyCost: leafCost, reasons: getUnresolvedReasons(itemId) }
     }
 
     const addRow = (
@@ -350,7 +408,7 @@ export function RecipesOverview() {
       let normalizedNeeded = normalizeAmount(amountNeeded)
       if (normalizedNeeded <= 0) return
       if (path.includes(itemId)) {
-        const anchoredCycleCost = costModel.effectiveCostByItemId.get(itemId)
+        const anchoredCycleCost = costModelHybrid.effectiveCostByItemId.get(itemId)
         if (anchoredCycleCost !== undefined && Number.isFinite(anchoredCycleCost)) {
           addRow(itemId, normalizedNeeded, 0, 'craft', anchoredCycleCost, [
             'обнаружен цикл в выбранной ветке',
@@ -421,7 +479,7 @@ export function RecipesOverview() {
         return aName.localeCompare(bName, 'ru')
       })
     return { rootSource: rootResolved.source, rootReasons: rootResolved.reasons, rootOutputAmount, rows, leftovers }
-  }, [buyPricesMerged, costModel, costTreeItemId, energyPrice, itemsById])
+  }, [buyPricesMerged, costModelHybrid, costTreeItemId, energyPrice, hybridAvgUnitByItemId, itemsById])
 
   return (
     <SectionCard title="" description="">
@@ -445,6 +503,16 @@ export function RecipesOverview() {
               Крафты
             </Text>
             <AuctionRefreshStatus itemIds={auctionItemIds} />
+            {hybridAuctionError ? (
+              <Alert color="red" title="Гибридная оценка аукциона">
+                {hybridAuctionError}
+              </Alert>
+            ) : null}
+            {hybridExpansionAlerts.map((msg) => (
+              <Alert key={msg} color="blue" variant="light" title="Аукцион для гибрида">
+                {msg}
+              </Alert>
+            ))}
             <Group align="flex-end" wrap="wrap">
               <TextInput
                 placeholder="Поиск по названию итогового предмета..."
@@ -626,6 +694,101 @@ export function RecipesOverview() {
 
                           return base
                         })()
+                        const line3 = (() => {
+                          if (!authToken) return 'Войдите, чтобы считать гибрид (скуп + аукцион + крафт).'
+                          if (!primaryResultItemId || !batchOut) return 'Недостаточно данных для расчета себестоимости'
+                          const batchUnits = batchOut.batchUnits
+                          if (batchUnits <= 0) return 'Недостаточно данных для расчета себестоимости'
+
+                          let totalInputCost = 0
+                          const missingReasons: string[] = []
+                          for (const ingredient of recipe.ingredients) {
+                            const perUnit = costModelHybrid.effectiveCostByItemId.get(ingredient.item)
+                            if (perUnit === undefined) {
+                              const missingName =
+                                getItemName(itemsById[ingredient.item]?.name?.lines) || ingredient.item
+                              missingReasons.push(`нет цены ингредиента: ${missingName}`)
+                              continue
+                            }
+                            totalInputCost += perUnit * ingredient.amount
+                          }
+                          if (recipe.energy > 0) {
+                            const energyUnitCost = parsePositiveNumber(energyPrice)
+                            if (energyUnitCost === null) {
+                              missingReasons.push('нет цены энергии')
+                            } else {
+                              totalInputCost += energyUnitCost * recipe.energy
+                            }
+                          }
+
+                          const recipeCraftPerUnit =
+                            missingReasons.length === 0 ? totalInputCost / batchUnits : null
+                          const buyPerUnit = parsePositiveNumber(buyPricesMerged[primaryResultItemId] ?? null)
+                          const aucRaw = hybridAvgUnitByItemId.get(primaryResultItemId)
+                          const aucN =
+                            aucRaw !== undefined && Number.isFinite(aucRaw) && aucRaw > 0 ? aucRaw : null
+                          const leafPrimary =
+                            buyPerUnit !== null && aucN !== null
+                              ? Math.min(buyPerUnit, aucN)
+                              : buyPerUnit ?? aucN
+                          const resolved =
+                            recipeCraftPerUnit !== null && leafPrimary !== null
+                              ? Math.min(recipeCraftPerUnit, leafPrimary)
+                              : recipeCraftPerUnit ?? leafPrimary
+
+                          let base: string
+                          if (resolved !== null) base = `${formatAuctionRub(resolved)} ₽/шт`
+                          else {
+                            const meta = costModelHybrid.unresolvedMetaByItemId.get(primaryResultItemId)
+                            if (!meta && missingReasons.length === 0) base = 'Недостаточно данных для расчета себестоимости'
+                            else {
+                              const reasons: string[] = []
+                              reasons.push(...missingReasons)
+                              if (!leafPrimary) reasons.push('нет базовой цены (скуп/аукцион)')
+                              if (meta?.cycleUnanchored) reasons.push('цикл без ценового якоря')
+                              if (meta?.unstableCycle) reasons.push('цикл не сошелся')
+                              if (meta?.missingEnergy) reasons.push('нет цены энергии')
+                              if ((meta?.missingIngredientIds.length ?? 0) > 0) {
+                                reasons.push(
+                                  `нет цен ингредиентов: ${meta!.missingIngredientIds
+                                    .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
+                                    .join(', ')}`,
+                                )
+                              }
+                              if (meta?.noRecipes) reasons.push('нет крафтовых рецептов')
+                              if (meta?.noBuy) reasons.push('нет базовой цены (скуп/аукцион)')
+                              base =
+                                reasons.length > 0
+                                  ? `Недостаточно данных (${reasons.join('; ')})`
+                                  : 'Недостаточно данных для расчета себестоимости'
+                            }
+                          }
+
+                          const dup = getDuplicateCraftDisplayLabel(recipe)
+                          const best = costModelHybrid.bestRecipeOptionByItemId.get(primaryResultItemId)
+                          if (
+                            dup &&
+                            best &&
+                            best.craftPerUnit !== null &&
+                            recipeCraftPerUnit !== null &&
+                            recipeCraftPerUnit > best.craftPerUnit + 1e-6
+                          ) {
+                            const bestDup = getDuplicateCraftDisplayLabel(best.recipe)
+                            if (bestDup) {
+                              base = `${base} · среди дублей выгоднее крафт: ${bestDup} (${formatAuctionRub(best.craftPerUnit)} ₽/шт)`
+                            }
+                          }
+
+                          const h = hybridAuctionByItemId[primaryResultItemId]
+                          if (h?.expansionMessage) {
+                            base = `${base} · ${h.expansionMessage}`
+                          }
+                          if (h?.undersampled) {
+                            base = `${base} · мало сделок относительно порога (${h.tradeCount} < выбранного минимума)`
+                          }
+
+                          return base
+                        })()
                         return (
                           <RecipeCard
                             key={`${categoryName}-${recipe.bench}-${index}`}
@@ -636,7 +799,7 @@ export function RecipesOverview() {
                             showAdminOverrideControls
                             costLine1={line1}
                             costLine2="Заглушка (будет реализовано далее)"
-                            costLine3="Заглушка (будет реализовано далее)"
+                            costLine3={line3}
                             onOpenCostTree={setCostTreeItemId}
                           />
                         )
@@ -687,8 +850,8 @@ export function RecipesOverview() {
                     </Text>
                     {ingredientFlow.rootSource === 'buy' ? (
                       <Text size="sm" c="dimmed">
-                        Для итогового предмета выбран скуп. Дополнительные ингредиенты в цепочке крафта не
-                        используются.
+                        Для итогового предмета выбрана базовая закупка (min цены скупа и аукциона по вашим
+                        настройкам). Дополнительные ингредиенты в цепочке крафта не используются.
                       </Text>
                     ) : null}
                     {ingredientFlow.rootSource === 'unknown' ? (

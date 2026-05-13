@@ -102,6 +102,62 @@ export type CraftBranchLevels = {
   medicine: number
 }
 
+export type AuctionHybridMode = 'last_sales' | 'time_window'
+
+export type AuctionHybridSettings = {
+  mode: AuctionHybridMode
+  minTrades: number
+  lastSalesCount: 50 | 100 | 200 | 500 | 1000
+  timeWindow: '1h' | '6h' | '12h' | '24h'
+}
+
+export type HybridAuctionItemMetrics = {
+  avgPerUnit: number | null
+  tradeCount: number
+  sampleSize: number
+  windowUsed: string
+  windowRequested: string
+  expandedWindow: boolean
+  undersampled: boolean
+  expansionMessage: string | null
+  statsFetchedAt: string | null
+}
+
+export type HybridAuctionPricesResponse = {
+  fetchedAt?: string
+  settings?: AuctionHybridSettings
+  items?: Record<string, HybridAuctionItemMetrics>
+}
+
+function defaultAuctionHybridSettings(): AuctionHybridSettings {
+  return {
+    mode: 'last_sales',
+    minTrades: 5,
+    lastSalesCount: 100,
+    timeWindow: '12h',
+  }
+}
+
+export function normalizeAuctionHybridSettings(raw: Partial<AuctionHybridSettings> | undefined): AuctionHybridSettings {
+  const d = defaultAuctionHybridSettings()
+  if (!raw || typeof raw !== 'object') return d
+  const mode = raw.mode === 'time_window' ? 'time_window' : 'last_sales'
+  let minTrades = Number(raw.minTrades)
+  if (!Number.isFinite(minTrades)) minTrades = d.minTrades
+  minTrades = Math.min(200, Math.max(1, Math.round(minTrades)))
+  const allowedN = [50, 100, 200, 500, 1000] as const
+  const rawN = Number(raw.lastSalesCount)
+  const lastSalesCount = (allowedN as readonly number[]).includes(rawN)
+    ? (rawN as AuctionHybridSettings['lastSalesCount'])
+    : d.lastSalesCount
+  const allowedW = ['1h', '6h', '12h', '24h'] as const
+  const tw = raw.timeWindow
+  const timeWindow = (allowedW as readonly string[]).includes(String(tw))
+    ? (tw as AuctionHybridSettings['timeWindow'])
+    : d.timeWindow
+  return { mode, minTrades, lastSalesCount, timeWindow }
+}
+
 export type AuthUser = {
   id: number
   nickname: string
@@ -111,10 +167,17 @@ export type AuthUser = {
   craftBranchLevels: CraftBranchLevels
   /** По умолчанию true: тосты и звук при срабатывании отслеживания аукциона */
   auctionTrackingNotifications: boolean
+  auctionHybridSettings: AuctionHybridSettings
 }
 
 function normalizeAuthUser(user: AuthUser): AuthUser {
-  return { ...user, auctionTrackingNotifications: user.auctionTrackingNotifications !== false }
+  return {
+    ...user,
+    auctionTrackingNotifications: user.auctionTrackingNotifications !== false,
+    auctionHybridSettings: normalizeAuctionHybridSettings(
+      (user as { auctionHybridSettings?: AuctionHybridSettings }).auctionHybridSettings,
+    ),
+  }
 }
 
 export type AdminUser = {
@@ -165,6 +228,25 @@ async function parseJsonOrThrow<T>(response: Response): Promise<T> {
     throw new BackendApiError(msg, response.status)
   }
   return data as T
+}
+
+export async function fetchBackendHybridAuctionPrices(itemIds: string[]): Promise<HybridAuctionPricesResponse> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const ids = [...new Set(itemIds)].filter(Boolean)
+  if (ids.length === 0) return { fetchedAt: new Date().toISOString(), items: {} }
+  const url = buildApiUrl('/auction/hybrid-prices')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+    body: JSON.stringify({ itemIds: ids }),
+  })
+  return parseJsonOrThrow<HybridAuctionPricesResponse>(response)
 }
 
 export async function fetchBackendAuctionStats(itemIds: string[]): Promise<Record<string, AuctionAgg24h>> {
@@ -782,10 +864,19 @@ export async function updateOwnProfile(input: {
   timezoneOffsetHours: number
   craftBranchLevels: CraftBranchLevels
   auctionTrackingNotifications: boolean
+  auctionHybridSettings?: AuctionHybridSettings
 }): Promise<AuthUser> {
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация')
   const url = buildApiUrl('/user/profile')
+  const body: Record<string, unknown> = {
+    timezoneOffsetHours: input.timezoneOffsetHours,
+    craftBranchLevels: input.craftBranchLevels,
+    auctionTrackingNotifications: input.auctionTrackingNotifications,
+  }
+  if (input.auctionHybridSettings !== undefined) {
+    body.auctionHybridSettings = normalizeAuctionHybridSettings(input.auctionHybridSettings)
+  }
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -794,7 +885,7 @@ export async function updateOwnProfile(input: {
       Authorization: `Bearer ${token}`,
       'X-Auth-Token': token,
     },
-    body: JSON.stringify(input),
+    body: JSON.stringify(body),
   })
   const payload = await parseJsonOrThrow<UpdateOwnProfileResponse>(response)
   if (!payload.user) throw new Error('Профиль не получен после сохранения')

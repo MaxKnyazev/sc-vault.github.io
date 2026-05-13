@@ -39,6 +39,8 @@ export type BuildOrderIngredientLedgerInput = {
   costModel: CraftCostModel
   buyPricesMerged: Record<string, string>
   energyPrice: string
+  /** min(скуп, аукцион) для базовых материалов; энергия по-прежнему только из скупа в рецепте */
+  auctionUnitByItemId?: ReadonlyMap<string, number> | null
   itemName: (itemId: string) => string
   itemIconUrl: (itemId: string) => string | undefined
 }
@@ -68,16 +70,34 @@ function parseBuyRub(buyPricesMerged: Record<string, string>, itemId: string): n
   return num
 }
 
+function leafVendorAuction(
+  buyPricesMerged: Record<string, string>,
+  itemId: string,
+  auctionUnitByItemId: ReadonlyMap<string, number> | null | undefined,
+): { unitRub: number | null; method: LedgerMethod } {
+  const buy = parseBuyRub(buyPricesMerged, itemId)
+  const aucRaw = auctionUnitByItemId?.get(itemId)
+  const auc = aucRaw !== undefined && Number.isFinite(aucRaw) && aucRaw > 0 ? aucRaw : null
+  if (buy !== null && auc !== null) {
+    if (buy <= auc + EPS) return { unitRub: buy, method: 'vendor' }
+    return { unitRub: auc, method: 'auction' }
+  }
+  if (buy !== null) return { unitRub: buy, method: 'vendor' }
+  if (auc !== null) return { unitRub: auc, method: 'auction' }
+  return { unitRub: null, method: 'vendor' }
+}
+
 function shouldBuyAsBase(
   itemId: string,
   costModel: CraftCostModel,
   buyPricesMerged: Record<string, string>,
+  auctionUnitByItemId?: ReadonlyMap<string, number> | null,
 ): boolean {
   const best = costModel.bestRecipeOptionByItemId.get(itemId)
   const craftPerUnit = costModel.craftCostByItemId.get(itemId)
-  const buyPerUnit = parseBuyRub(buyPricesMerged, itemId)
+  const { unitRub: leaf } = leafVendorAuction(buyPricesMerged, itemId, auctionUnitByItemId)
   if (!best || craftPerUnit === undefined) return true
-  if (buyPerUnit !== null && buyPerUnit <= craftPerUnit + EPS) return true
+  if (leaf !== null && leaf <= craftPerUnit + EPS) return true
   return false
 }
 
@@ -107,15 +127,15 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
   rows: OrderIngredientLedgerRow[]
   surplus: OrderIngredientSurplusRow[]
 } {
-  const { lines, recipeByFavoriteId, costModel, buyPricesMerged, energyPrice, itemName, itemIconUrl } = input
+  const { lines, recipeByFavoriteId, costModel, buyPricesMerged, energyPrice, auctionUnitByItemId, itemName, itemIconUrl } =
+    input
 
   const pool = new Map<string, number>()
   const vendorAgg = new Map<string, VendorAgg>()
   const craftAgg = new Map<string, CraftAgg>()
 
-  const pushVendor = (itemId: string, qty: number, method: LedgerMethod) => {
-    const buy = parseBuyRub(buyPricesMerged, itemId)
-    const unitRub = method === 'auction' ? null : buy
+  const pushVendor = (itemId: string, qty: number) => {
+    const { unitRub, method } = leafVendorAuction(buyPricesMerged, itemId, auctionUnitByItemId)
     const totalRub = unitRub !== null ? unitRub * qty : null
     const key = `v|${itemId}|${method}`
     const prev = vendorAgg.get(key)
@@ -197,13 +217,11 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
     if (qty <= EPS) return
 
     if (expanding.has(itemId)) {
-      const buy = parseBuyRub(buyPricesMerged, itemId)
-      pushVendor(itemId, qty, buy === null ? 'auction' : 'vendor')
+      pushVendor(itemId, qty)
       return
     }
     if (expanding.size >= 48) {
-      const buy = parseBuyRub(buyPricesMerged, itemId)
-      pushVendor(itemId, qty, buy === null ? 'auction' : 'vendor')
+      pushVendor(itemId, qty)
       return
     }
 
@@ -214,16 +232,14 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
     const need = qty - fromPool
     if (need <= EPS) return
 
-    if (shouldBuyAsBase(itemId, costModel, buyPricesMerged)) {
-      const buy = parseBuyRub(buyPricesMerged, itemId)
-      pushVendor(itemId, need, buy === null ? 'auction' : 'vendor')
+    if (shouldBuyAsBase(itemId, costModel, buyPricesMerged, auctionUnitByItemId)) {
+      pushVendor(itemId, need)
       return
     }
 
     const best = costModel.bestRecipeOptionByItemId.get(itemId)
     if (!best) {
-      const buy = parseBuyRub(buyPricesMerged, itemId)
-      pushVendor(itemId, need, buy === null ? 'auction' : 'vendor')
+      pushVendor(itemId, need)
       return
     }
 
@@ -231,8 +247,7 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
     const recipeAdj = recipeByFavoriteId.get(fav) ?? best.recipe
     const batch = recipeBatchOutputForPrimaryItem(recipeAdj)
     if (!batch || batch.batchUnits <= EPS) {
-      const buy = parseBuyRub(buyPricesMerged, itemId)
-      pushVendor(itemId, need, buy === null ? 'auction' : 'vendor')
+      pushVendor(itemId, need)
       return
     }
 
@@ -242,7 +257,13 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
     const surplus = produced - need
     pool.set(itemId, (pool.get(itemId) ?? 0) + surplus)
 
-    const unitCraft = computeRecipePrimaryUnitRub(recipeAdj, costModel, buyPricesMerged, energyPrice)
+    const unitCraft = computeRecipePrimaryUnitRub(
+      recipeAdj,
+      costModel,
+      buyPricesMerged,
+      energyPrice,
+      auctionUnitByItemId,
+    )
     const craftRecipeLabel = getDuplicateCraftDisplayLabel(recipeAdj)
     pushCraft(itemId, need, fav, detPerRun, unitCraft, craftRecipeLabel)
 
