@@ -45,11 +45,42 @@ export type BuildOrderIngredientLedgerInput = {
   itemIconUrl: (itemId: string) => string | undefined
 }
 
-/** Кол-во / крафты в заказе: округление вверх до десятых; целые без «.0», дробь с точкой. */
-export function formatLedgerQtyCeilTenths(n: number): string {
+/** Кол-во / кол-во крафтов в заказе: округление вверх до целого; те же значения для рублей «Всего». */
+export function formatLedgerQtyCeilInt(n: number): string {
   if (!Number.isFinite(n) || n < 0) return '—'
-  const v = Math.ceil(n * 10 - EPS) / 10
-  return parseFloat(v.toFixed(1)).toString()
+  return String(Math.ceil(n - EPS))
+}
+
+function applyVendorCeilTotals(row: OrderIngredientLedgerRow, qtySum: number): void {
+  const qI = Math.max(0, Math.ceil(qtySum - EPS))
+  row.qtyDisplay = String(qI)
+  const u = row.unitRub
+  if (u !== null && qI > 0) {
+    row.totalRub = u * qI
+    row.totalRubDisplay = formatRub(row.totalRub)
+    row.unitRubDisplay = formatRub(u)
+  } else {
+    row.totalRub = null
+    row.totalRubDisplay = '—'
+    row.unitRubDisplay = formatRub(u)
+  }
+}
+
+function applyCraftCeilTotals(row: OrderIngredientLedgerRow, qtySum: number, runsSum: number): void {
+  const qI = Math.max(0, Math.ceil(qtySum - EPS))
+  const rI = Math.max(0, Math.ceil(runsSum - EPS))
+  row.qtyDisplay = String(qI)
+  row.craftRunsDisplay = String(rI)
+  const u = row.unitRub
+  if (u !== null && qI > 0) {
+    row.totalRub = u * qI
+    row.totalRubDisplay = formatRub(row.totalRub)
+    row.unitRubDisplay = formatRub(u)
+  } else {
+    row.totalRub = null
+    row.totalRubDisplay = '—'
+    row.unitRubDisplay = formatRub(u)
+  }
 }
 
 /** Остаток и др.: целые без дроби, дробь с точкой, без лишних нулей. */
@@ -109,19 +140,17 @@ function formatRub(v: number | null): string {
 type VendorAgg = {
   row: OrderIngredientLedgerRow
   qtySum: number
-  totalRubSum: number
 }
 
 type CraftAgg = {
   row: OrderIngredientLedgerRow
   qtySum: number
-  totalRubSum: number
   runsSum: number
 }
 
 /**
  * Симуляция с пулом остатков между строками заказа; разложение до базы.
- * Количества и запуски крафта — точные значения (допускаются дроби), без диапазонов «от–до».
+ * Внутренние количества могут быть дробными; в таблице «Кол-во» и «Кол-во крафтов» — ceil до целого, «Всего» = ₽/шт. × ceil(кол-во).
  */
 export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInput): {
   rows: OrderIngredientLedgerRow[]
@@ -136,17 +165,11 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
 
   const pushVendor = (itemId: string, qty: number) => {
     const { unitRub, method } = leafVendorAuction(buyPricesMerged, itemId, auctionUnitByItemId)
-    const totalRub = unitRub !== null ? unitRub * qty : null
     const key = `v|${itemId}|${method}`
     const prev = vendorAgg.get(key)
     if (prev) {
       prev.qtySum += qty
-      prev.totalRubSum += totalRub ?? 0
-      prev.row.qtyDisplay = formatLedgerQtyCeilTenths(prev.qtySum)
-      prev.row.totalRubDisplay = formatRub(prev.totalRubSum > 0 ? prev.totalRubSum : null)
-      prev.row.unitRubDisplay = prev.qtySum > 0 && prev.totalRubSum > 0 ? formatRub(prev.totalRubSum / prev.qtySum) : '—'
-      prev.row.unitRub = prev.qtySum > 0 && prev.totalRubSum > 0 ? prev.totalRubSum / prev.qtySum : null
-      prev.row.totalRub = prev.totalRubSum > 0 ? prev.totalRubSum : null
+      applyVendorCeilTotals(prev.row, prev.qtySum)
       return
     }
     const row: OrderIngredientLedgerRow = {
@@ -154,15 +177,16 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
       itemId,
       name: itemName(itemId),
       iconUrl: itemIconUrl(itemId),
-      qtyDisplay: formatLedgerQtyCeilTenths(qty),
+      qtyDisplay: '0',
       method,
       craftRunsDisplay: '—',
-      unitRubDisplay: formatRub(unitRub),
-      totalRubDisplay: formatRub(totalRub),
+      unitRubDisplay: '—',
+      totalRubDisplay: '—',
       unitRub,
-      totalRub,
+      totalRub: null,
     }
-    vendorAgg.set(key, { row, qtySum: qty, totalRubSum: totalRub ?? 0 })
+    applyVendorCeilTotals(row, qty)
+    vendorAgg.set(key, { row, qtySum: qty })
   }
 
   const pushCraft = (
@@ -175,18 +199,11 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
   ) => {
     const key = `c|${itemId}|${fav}`
     const runsPart = detPerRun > EPS ? qtyNeed / detPerRun : 0
-    const totalRub = unitCraft !== null ? unitCraft * qtyNeed : null
     const prev = craftAgg.get(key)
     if (prev) {
       prev.qtySum += qtyNeed
-      prev.totalRubSum += totalRub ?? 0
       prev.runsSum += runsPart
-      prev.row.qtyDisplay = formatLedgerQtyCeilTenths(prev.qtySum)
-      prev.row.craftRunsDisplay = formatLedgerQtyCeilTenths(prev.runsSum)
-      prev.row.totalRubDisplay = formatRub(prev.totalRubSum > 0 ? prev.totalRubSum : null)
-      prev.row.unitRubDisplay = prev.qtySum > 0 && prev.totalRubSum > 0 ? formatRub(prev.totalRubSum / prev.qtySum) : '—'
-      prev.row.unitRub = prev.qtySum > 0 && prev.totalRubSum > 0 ? prev.totalRubSum / prev.qtySum : null
-      prev.row.totalRub = prev.totalRubSum > 0 ? prev.totalRubSum : null
+      applyCraftCeilTotals(prev.row, prev.qtySum, prev.runsSum)
       if (!prev.row.craftRecipeLabel && craftRecipeLabel) prev.row.craftRecipeLabel = craftRecipeLabel
       return
     }
@@ -195,19 +212,19 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
       itemId,
       name: itemName(itemId),
       iconUrl: itemIconUrl(itemId),
-      qtyDisplay: formatLedgerQtyCeilTenths(qtyNeed),
+      qtyDisplay: '0',
       method: 'craft',
       craftRecipeLabel: craftRecipeLabel || null,
-      craftRunsDisplay: formatLedgerQtyCeilTenths(runsPart),
-      unitRubDisplay: formatRub(unitCraft),
-      totalRubDisplay: formatRub(totalRub),
+      craftRunsDisplay: '0',
+      unitRubDisplay: '—',
+      totalRubDisplay: '—',
       unitRub: unitCraft,
-      totalRub,
+      totalRub: null,
     }
+    applyCraftCeilTotals(row, qtyNeed, runsPart)
     craftAgg.set(key, {
       row,
       qtySum: qtyNeed,
-      totalRubSum: totalRub ?? 0,
       runsSum: runsPart,
     })
   }

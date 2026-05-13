@@ -536,7 +536,7 @@ function OrderCard({
                             <Table.Th>Предмет</Table.Th>
                             <Table.Th style={{ whiteSpace: 'nowrap' }}>Кол-во</Table.Th>
                             <Table.Th miw={200}>Способ</Table.Th>
-                            <Table.Th style={{ whiteSpace: 'nowrap' }}>Крафтов</Table.Th>
+                            <Table.Th style={{ whiteSpace: 'nowrap' }}>Кол-во Крафтов</Table.Th>
                             <Table.Th style={{ whiteSpace: 'nowrap' }}>₽/шт.</Table.Th>
                             <Table.Th style={{ whiteSpace: 'nowrap' }}>Всего</Table.Th>
                           </Table.Tr>
