@@ -24,7 +24,6 @@ import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import type { HideoutRecipe } from '../../entities/hideout/types'
 import type { ListingItemWithId } from '../../entities/item/types'
 import type { Realm } from '../../shared/config/app'
-import type { CraftBranchLevels, RecipeResultOverride } from '../../shared/api/backendApi'
 import { useAuthStore } from '../../shared/store/authStore'
 import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
 import { useRecipeOverridesStore } from '../../shared/store/recipeOverridesStore'
@@ -36,7 +35,7 @@ import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
 import { getDuplicateCraftDisplayLabel } from '../../shared/lib/craftDuplicateRecipeLabels'
 import { getRecipeRequiredSkill } from '../../shared/lib/craftSkills'
 import { pickListingItemQualityColor } from '../../shared/lib/itemQualityColor'
-import { buildOrderIngredientLedger, type LedgerMethod } from '../../shared/lib/orderIngredientLedger'
+import { buildOrderIngredientLedger, formatLedgerQty, type LedgerMethod } from '../../shared/lib/orderIngredientLedger'
 import { sortOrderLines } from '../../shared/lib/orderIngredientRollup'
 import { computeOrderLineTotalRub } from '../../shared/lib/orderLineBuyCraftCost'
 import type { CraftOrder, OrderLine } from '../../shared/store/ordersStore'
@@ -155,8 +154,6 @@ type OrderCardProps = {
   itemsById: Record<string, ListingItemWithId>
   realm: Realm
   recipeByFavoriteId: Map<string, HideoutRecipe>
-  recipeOverridesById: Record<string, RecipeResultOverride>
-  craftBranchLevels: CraftBranchLevels | null
   costModel: ReturnType<typeof buildCraftCostModel>
   buyPricesMerged: Record<string, string>
   energyPrice: string
@@ -168,8 +165,6 @@ function OrderCard({
   itemsById,
   realm,
   recipeByFavoriteId,
-  recipeOverridesById,
-  craftBranchLevels,
   costModel,
   buyPricesMerged,
   energyPrice,
@@ -249,25 +244,13 @@ function OrderCard({
     return buildOrderIngredientLedger({
       lines: order.lines,
       recipeByFavoriteId,
-      recipeOverridesById,
-      craftBranchLevels,
       costModel,
       buyPricesMerged,
       energyPrice,
       itemName: (id) => getItemName(itemsById[id]?.name?.lines) || id,
       itemIconUrl: (id) => (itemsById[id] ? buildItemIconUrl(itemsById[id]!.icon, realm) : undefined),
     })
-  }, [
-    order.lines,
-    recipeByFavoriteId,
-    recipeOverridesById,
-    craftBranchLevels,
-    costModel,
-    buyPricesMerged,
-    energyPrice,
-    itemsById,
-    realm,
-  ])
+  }, [order.lines, recipeByFavoriteId, costModel, buyPricesMerged, energyPrice, itemsById, realm])
 
   return (
     <>
@@ -475,7 +458,14 @@ function OrderCard({
                 <>
                   {ingredientLedger.rows.length > 0 ? (
                     <Table.ScrollContainer minWidth={880}>
-                      <Table verticalSpacing="xs" horizontalSpacing="xs" striped withTableBorder>
+                      <Box
+                        style={{
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                          border: '1px solid var(--mantine-color-default-border)',
+                        }}
+                      >
+                        <Table verticalSpacing="xs" horizontalSpacing="xs" striped withTableBorder={false}>
                         <Table.Thead>
                           <Table.Tr>
                             <Table.Th w={44} />
@@ -549,6 +539,7 @@ function OrderCard({
                           })}
                         </Table.Tbody>
                       </Table>
+                      </Box>
                     </Table.ScrollContainer>
                   ) : null}
                   {ingredientLedger.surplus.length > 0 ? (
@@ -569,7 +560,7 @@ function OrderCard({
                             />
                           </Box>
                           <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
-                            +{s.qty}
+                            +{formatLedgerQty(s.qty)}
                           </Text>
                         </Group>
                       ))}
@@ -816,8 +807,6 @@ export function OrdersPage() {
                   itemsById={itemsById}
                   realm={realm}
                   recipeByFavoriteId={recipeByFavoriteId}
-                  recipeOverridesById={recipeOverridesById}
-                  craftBranchLevels={craftBranchLevels}
                   costModel={costModel}
                   buyPricesMerged={buyPricesMerged}
                   energyPrice={energyPrice}
