@@ -261,18 +261,6 @@ export function RecipesOverview() {
     () => buildCraftCostModel(adjustedRecipes, buyPricesMerged, energyPrice, hybridAvgUnitByItemId),
     [adjustedRecipes, buyPricesMerged, energyPrice, hybridAvgUnitByItemId],
   )
-  const hybridExpansionAlerts = useMemo(() => {
-    const out: string[] = []
-    const seen = new Set<string>()
-    for (const row of Object.values(hybridAuctionByItemId)) {
-      const m = row?.expansionMessage
-      if (m && !seen.has(m)) {
-        seen.add(m)
-        out.push(m)
-      }
-    }
-    return out
-  }, [hybridAuctionByItemId])
 
   const costTreeItemName = useMemo(() => {
     if (!costTreeItemId) return ''
@@ -526,11 +514,6 @@ export function RecipesOverview() {
                 </Stack>
               </Alert>
             ) : null}
-            {hybridExpansionAlerts.map((msg) => (
-              <Alert key={msg} color="blue" variant="light" title="Аукцион для гибрида">
-                {msg}
-              </Alert>
-            ))}
             <Group align="flex-end" wrap="wrap">
               <TextInput
                 placeholder="Поиск по названию итогового предмета..."

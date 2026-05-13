@@ -158,6 +158,7 @@ type OrderCardProps = {
   realm: Realm
   recipeByFavoriteId: Map<string, HideoutRecipe>
   costModel: ReturnType<typeof buildCraftCostModel>
+  costModelBuyCraftOnly: ReturnType<typeof buildCraftCostModel>
   buyPricesMerged: Record<string, string>
   energyPrice: string
   auctionUnitByItemId: Map<string, number>
@@ -170,6 +171,7 @@ function OrderCard({
   realm,
   recipeByFavoriteId,
   costModel,
+  costModelBuyCraftOnly,
   buyPricesMerged,
   energyPrice,
   auctionUnitByItemId,
@@ -251,6 +253,29 @@ function OrderCard({
     }
     return ok ? sum : null
   }, [order.lines, recipeByFavoriteId, costModel, buyPricesMerged, energyPrice, auctionUnitByItemId])
+
+  const totalBuyCraftScupCraftOnly = useMemo(() => {
+    let sum = 0
+    let ok = true
+    for (const line of order.lines) {
+      const r = recipeByFavoriteId.get(line.recipeFavoriteId)
+      if (!r) {
+        ok = false
+        continue
+      }
+      const v = computeOrderLineTotalRub(
+        r,
+        line.quantity,
+        costModelBuyCraftOnly,
+        buyPricesMerged,
+        energyPrice,
+        undefined,
+      )
+      if (v === null) ok = false
+      else sum += v
+    }
+    return ok ? sum : null
+  }, [order.lines, recipeByFavoriteId, costModelBuyCraftOnly, buyPricesMerged, energyPrice])
 
   const ingredientLedger = useMemo(() => {
     return buildOrderIngredientLedger({
@@ -455,15 +480,34 @@ function OrderCard({
             )}
           </Stack>
 
-          <Divider label="Оценка (гибрид)" labelPosition="center" my={4} />
-          <Group justify="space-between" wrap="nowrap" gap="md">
-            <Text size="sm" c="dimmed">
-              min(скуп, аукцион, крафт)
-            </Text>
-            <Text size="sm" fw={600}>
-              {totalBuyCraft !== null ? `${formatAuctionRub(totalBuyCraft)} ₽` : '—'}
-            </Text>
-          </Group>
+          <Divider label="Оценка" labelPosition="center" my={4} />
+          <Box
+            p="sm"
+            style={{
+              borderRadius: 8,
+              border: '1px solid var(--mantine-color-default-border)',
+              background: 'var(--mantine-color-body)',
+            }}
+          >
+            <Stack gap={10}>
+              <Group justify="space-between" wrap="nowrap" gap="md" align="flex-start">
+                <Text size="sm" style={{ flex: 1, minWidth: 0, lineHeight: 1.35 }}>
+                  По цене скупа/крафта
+                </Text>
+                <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
+                  {totalBuyCraftScupCraftOnly !== null ? `${formatAuctionRub(totalBuyCraftScupCraftOnly)} ₽` : '—'}
+                </Text>
+              </Group>
+              <Group justify="space-between" wrap="nowrap" gap="md" align="flex-start">
+                <Text size="sm" style={{ flex: 1, minWidth: 0, lineHeight: 1.35 }}>
+                  По цене скупа/крафта + аукцион
+                </Text>
+                <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
+                  {totalBuyCraft !== null ? `${formatAuctionRub(totalBuyCraft)} ₽` : '—'}
+                </Text>
+              </Group>
+            </Stack>
+          </Box>
 
           <Button variant="subtle" size="xs" px={0} onClick={() => setIngOpen((o) => !o)}>
             {ingOpen ? 'Скрыть ингредиенты' : 'Ингредиенты'}
@@ -797,6 +841,11 @@ export function OrdersPage() {
     [adjustedRecipes, buyPricesMerged, energyPrice, hybridAvgMap],
   )
 
+  const costModelBuyCraftOnly = useMemo(
+    () => buildCraftCostModel(adjustedRecipes, buyPricesMerged, energyPrice, undefined),
+    [adjustedRecipes, buyPricesMerged, energyPrice],
+  )
+
   if (!userId) {
     return (
       <PageContainer>
@@ -852,6 +901,7 @@ export function OrdersPage() {
                   realm={realm}
                   recipeByFavoriteId={recipeByFavoriteId}
                   costModel={costModel}
+                  costModelBuyCraftOnly={costModelBuyCraftOnly}
                   buyPricesMerged={buyPricesMerged}
                   energyPrice={energyPrice}
                   auctionUnitByItemId={hybridAvgMap}
