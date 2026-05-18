@@ -29,7 +29,12 @@ import { useIngredientPricesStore } from '../../shared/store/ingredientPricesSto
 import { useRecipeOverridesStore } from '../../shared/store/recipeOverridesStore'
 import { applyRecipeResultOverride } from '../../shared/lib/applyRecipeResultOverride'
 import { collectHideoutItemIds } from '../../shared/lib/collectHideoutItemIds'
-import { fetchBackendHybridAuctionPrices, type HybridAuctionItemMetrics } from '../../shared/api/backendApi'
+import {
+  auctionHybridSettingsKey,
+  fetchBackendHybridAuctionPrices,
+  type HybridAuctionItemMetrics,
+} from '../../shared/api/backendApi'
+import { PageTitleWithHybridSettings } from '../../components/auction-hybrid-settings/PageTitleWithHybridSettings'
 import { buildHybridAuctionAvgMap } from '../../shared/lib/hybridAuctionAvgMap'
 import { mergeUserAndDefaultBuyPrices } from '../../shared/lib/craftCostBuyPrices'
 import { buildCraftCostModel } from '../../shared/lib/costModel'
@@ -752,6 +757,7 @@ function OrderCard({
 export function OrdersPage() {
   const user = useAuthStore((s) => s.user)
   const token = useAuthStore((s) => s.token)
+  const hybridSettingsKey = useAuthStore((s) => auctionHybridSettingsKey(s.user?.auctionHybridSettings))
   const userId = user?.id
   const { recipes, itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
   const craftBranchLevels = useAuthStore((s) => s.user?.craftBranchLevels ?? null)
@@ -832,7 +838,7 @@ export function OrdersPage() {
     return () => {
       cancelled = true
     }
-  }, [token, hybridHydrateItemIds])
+  }, [token, hybridHydrateItemIds, hybridSettingsKey])
 
   const hybridAvgMap = useMemo(() => buildHybridAuctionAvgMap(hybridAuctionRows), [hybridAuctionRows])
 
@@ -859,9 +865,7 @@ export function OrdersPage() {
       <SectionCard title="" description="">
         <Stack gap="md">
           <Group justify="space-between" align="center" wrap="wrap">
-            <Text size="xl" fw={700}>
-              Заказы
-            </Text>
+            <PageTitleWithHybridSettings title="Заказы" />
             <Button onClick={() => void createOrder()} disabled={migrationsPending}>
               Создать заказ
             </Button>

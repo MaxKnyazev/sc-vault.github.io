@@ -34,7 +34,12 @@ import { buildCraftCostModel } from '../../shared/lib/costModel'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 import { recipeBatchOutputForPrimaryItem } from '../../shared/lib/recipeBatchOutput'
 import { getDuplicateCraftDisplayLabel } from '../../shared/lib/craftDuplicateRecipeLabels'
-import { fetchBackendHybridAuctionPrices, type HybridAuctionItemMetrics } from '../../shared/api/backendApi'
+import {
+  auctionHybridSettingsKey,
+  fetchBackendHybridAuctionPrices,
+  type HybridAuctionItemMetrics,
+} from '../../shared/api/backendApi'
+import { PageTitleWithHybridSettings } from '../../components/auction-hybrid-settings/PageTitleWithHybridSettings'
 import { buildHybridAuctionAvgMap } from '../../shared/lib/hybridAuctionAvgMap'
 
 const CANON_BRANCHES = [
@@ -107,6 +112,7 @@ export function RecipesOverview() {
   const favoriteCraftIds = useFavoritesStore((state) => state.favoriteCraftIds)
   const craftBranchLevels = useAuthStore((s) => s.user?.craftBranchLevels ?? null)
   const authToken = useAuthStore((s) => s.token)
+  const hybridSettingsKey = useAuthStore((s) => auctionHybridSettingsKey(s.user?.auctionHybridSettings))
   const recipeOverridesById = useRecipeOverridesStore((s) => s.byRecipeId)
   const loadOverrides = useRecipeOverridesStore((s) => s.loadOverrides)
   const buyPricesByItemId = useIngredientPricesStore((s) => s.buyPricesByItemId)
@@ -246,7 +252,7 @@ export function RecipesOverview() {
     return () => {
       cancelled = true
     }
-  }, [authToken, auctionItemIds])
+  }, [authToken, auctionItemIds, hybridSettingsKey])
 
   const hybridAvgUnitByItemId = useMemo(
     () => buildHybridAuctionAvgMap(hybridAuctionByItemId),
@@ -494,9 +500,7 @@ export function RecipesOverview() {
 
         {!isLoading && !error ? (
           <>
-            <Text size="xl" fw={700}>
-              Крафты
-            </Text>
+            <PageTitleWithHybridSettings title="Крафты" />
             <AuctionRefreshStatus itemIds={auctionItemIds} />
             {hybridAuctionError ? (
               <Alert color="red" title="Гибридная оценка аукциона">

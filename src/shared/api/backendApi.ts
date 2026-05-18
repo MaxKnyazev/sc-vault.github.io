@@ -160,6 +160,11 @@ export function normalizeAuctionHybridSettings(raw: Partial<AuctionHybridSetting
   return { mode, minTrades, lastSalesCount, timeWindow }
 }
 
+/** Ключ для зависимостей useEffect при смене настроек гибрида. */
+export function auctionHybridSettingsKey(raw: Partial<AuctionHybridSettings> | undefined): string {
+  return JSON.stringify(normalizeAuctionHybridSettings(raw))
+}
+
 export type AuthUser = {
   id: number
   nickname: string

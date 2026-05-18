@@ -51,8 +51,9 @@ type AuthStore = {
     timezoneOffsetHours: number
     craftBranchLevels: CraftBranchLevels
     auctionTrackingNotifications: boolean
-    auctionHybridSettings: AuctionHybridSettings
+    auctionHybridSettings?: AuctionHybridSettings
   }) => Promise<void>
+  saveAuctionHybridSettings: (auctionHybridSettings: AuctionHybridSettings) => Promise<void>
   clearError: () => void
 }
 
@@ -146,11 +147,31 @@ export const useAuthStore = create<AuthStore>()(
             timezoneOffsetHours,
             craftBranchLevels,
             auctionTrackingNotifications,
-            auctionHybridSettings,
+            ...(auctionHybridSettings !== undefined ? { auctionHybridSettings } : {}),
           })
           if (!auctionTrackingNotifications) {
             useAuctionDealToastsStore.getState().clear()
           }
+          set({ user, isSubmitting: false, error: null })
+        } catch (err) {
+          set({
+            isSubmitting: false,
+            error: err instanceof Error ? err.message : String(err),
+          })
+          throw err
+        }
+      },
+      saveAuctionHybridSettings: async (auctionHybridSettings) => {
+        const current = get().user
+        if (!current) throw new Error('Нужна авторизация')
+        set({ isSubmitting: true, error: null })
+        try {
+          const user = await updateOwnProfile({
+            timezoneOffsetHours: current.timezoneOffsetHours,
+            craftBranchLevels: current.craftBranchLevels,
+            auctionTrackingNotifications: current.auctionTrackingNotifications,
+            auctionHybridSettings,
+          })
           set({ user, isSubmitting: false, error: null })
         } catch (err) {
           set({
