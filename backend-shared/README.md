@@ -94,7 +94,7 @@ Auth contract:
 - `AUCTION_ITEM_LIMIT` (default `0`, значит без лимита)
 - `AUCTION_PROGRESS_EVERY` (default `25`)
 - `AUCTION_COLLECT_LOOKBACK_MINUTES` (default `65`) — окно сбора сырых лотов
-- `AUCTION_STATS_WINDOWS` (default `12h`) — CSV окон для пересчета `auction_stats`, пример: `1h,12h,24h`
+- `AUCTION_STATS_WINDOWS` (default `1h,6h,12h,24h`) — CSV окон для пересчета `auction_stats` (должны покрывать настройки гибрида в UI)
 - `AUCTION_RAW_RETENTION_HOURS` (default `24`) — сколько хранить `auction_raw_trades`
 - `AUCTION_HOURLY_RETENTION_DAYS` (default `7`) — сколько хранить `auction_hourly_stats` перед переносом в `auction_daily_stats`
 

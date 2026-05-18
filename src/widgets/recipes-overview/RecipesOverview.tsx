@@ -113,6 +113,7 @@ export function RecipesOverview() {
   const craftBranchLevels = useAuthStore((s) => s.user?.craftBranchLevels ?? null)
   const authToken = useAuthStore((s) => s.token)
   const hybridSettingsKey = useAuthStore((s) => auctionHybridSettingsKey(s.user?.auctionHybridSettings))
+  const hybridSettingsMode = useAuthStore((s) => s.user?.auctionHybridSettings?.mode ?? 'last_sales')
   const recipeOverridesById = useRecipeOverridesStore((s) => s.byRecipeId)
   const loadOverrides = useRecipeOverridesStore((s) => s.loadOverrides)
   const buyPricesByItemId = useIngredientPricesStore((s) => s.buyPricesByItemId)
@@ -742,8 +743,24 @@ export function RecipesOverview() {
                               : recipeCraftPerUnit ?? leafPrimary
 
                           let base: string
-                          if (resolved !== null) base = `${formatAuctionRub(resolved)} ₽/шт`
-                          else {
+                          if (resolved !== null) {
+                            base = `${formatAuctionRub(resolved)} ₽/шт`
+                            if (aucN !== null) {
+                              base += ` · аук ${formatAuctionRub(aucN)}`
+                            } else {
+                              const h = hybridAuctionByItemId[primaryResultItemId]
+                              if (h) {
+                                const w = h.windowUsed || h.windowRequested
+                                if (h.tradeCount <= 0) {
+                                  base += ` · аук: нет сделок (окно ${w})`
+                                } else {
+                                  base += ` · аук: нет средней (окно ${w}, ${h.tradeCount} сд.)`
+                                }
+                              } else if (hybridSettingsMode === 'time_window') {
+                                base += ' · аук: нет агрегата за выбранный период'
+                              }
+                            }
+                          } else {
                             const meta = costModelHybrid.unresolvedMetaByItemId.get(primaryResultItemId)
                             if (!meta && missingReasons.length === 0) base = 'Недостаточно данных для расчета себестоимости'
                             else {

@@ -2,6 +2,30 @@
 
 require_once __DIR__ . '/AuctionHybridSettings.php';
 
+/** Окна, которые использует гибридная оценка (режим time_window) и cron по умолчанию. */
+function auction_hybrid_time_windows(): array
+{
+    return ['1h', '6h', '12h', '24h'];
+}
+
+/**
+ * Дозаполняет auction_stats из auction_raw_trades для предметов без строки в окне.
+ */
+function ensure_auction_stats_for_items(PDO $db, array $itemIds, string $window): void
+{
+    if (count($itemIds) === 0) {
+        return;
+    }
+    $windowName = normalize_window_name($window);
+    $existing = get_auction_stats($db, $itemIds, $windowName);
+    foreach ($itemIds as $itemId) {
+        $id = (string)$itemId;
+        if (!isset($existing[$id])) {
+            recalculate_auction_stat_from_raw($db, $id, $windowName);
+        }
+    }
+}
+
 function get_auction_stats(PDO $db, array $itemIds, string $window = '12h'): array
 {
     if (count($itemIds) === 0) {
@@ -1187,7 +1211,7 @@ function get_auction_hybrid_prices_bulk(PDO $db, array $itemIds, array $settings
         return ['fetchedAt' => $fetchedAt, 'settings' => $settings, 'items' => $items];
     }
 
-    $windows = ['1h', '6h', '12h', '24h'];
+    $windows = auction_hybrid_time_windows();
     $requestedW = (string)$settings['timeWindow'];
     $startIdx = 0;
     foreach ($windows as $i => $w) {
@@ -1201,6 +1225,9 @@ function get_auction_hybrid_prices_bulk(PDO $db, array $itemIds, array $settings
 
     for ($i = $startIdx; $i < count($windows); $i++) {
         $w = $windows[$i];
+        if (count($remaining) > 0) {
+            ensure_auction_stats_for_items($db, $remaining, $w);
+        }
         $stats = count($remaining) > 0 ? get_auction_stats($db, $remaining, $w) : [];
         $nextRemaining = [];
         foreach ($remaining as $itemId) {
