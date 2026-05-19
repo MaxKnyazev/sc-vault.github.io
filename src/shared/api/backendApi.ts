@@ -239,6 +239,34 @@ async function parseJsonOrThrow<T>(response: Response): Promise<T> {
 
 /** Меньше лимита бэкенда (400), чтобы тело запроса и запас по длине URL не упирались в ограничения. */
 const HYBRID_AUCTION_PRICES_CHUNK_SIZE = 320
+const LIQUIDITY_VALIDITY_CHUNK_SIZE = 380
+
+export type AuctionLiquidityTier =
+  | 'invalid'
+  | 'below_average'
+  | 'average'
+  | 'above_average'
+  | 'reliable'
+
+export type AuctionLiquidityItem = {
+  tier: AuctionLiquidityTier
+  tradeCount: number
+  ratioToMedian: number | null
+  isTracked: boolean
+}
+
+export type AuctionLiquidityBenchmark = {
+  window: string
+  medianTradeCount: number
+  trackedCount: number
+  activeCount: number
+}
+
+export type AuctionLiquidityValidityResponse = {
+  fetchedAt?: string
+  benchmark?: AuctionLiquidityBenchmark
+  items?: Record<string, AuctionLiquidityItem>
+}
 
 async function fetchBackendHybridAuctionPricesOnce(itemIds: string[]): Promise<HybridAuctionPricesResponse> {
   const token = getBackendAuthToken()
@@ -303,6 +331,60 @@ export async function fetchBackendHybridAuctionPrices(itemIds: string[]): Promis
     settings: mergedSettings ?? normalizeAuctionHybridSettings(undefined),
     items: mergedItems,
     partialErrors: chunkErrors.length > 0 ? chunkErrors : undefined,
+  }
+}
+
+async function fetchAuctionLiquidityValidityOnce(
+  itemIds: string[],
+  window: string,
+): Promise<AuctionLiquidityValidityResponse> {
+  const token = getBackendAuthToken()
+  if (!token) throw new Error('Нужна авторизация')
+  const params = new URLSearchParams({
+    window,
+    ids: itemIds.join(','),
+  })
+  const url = buildApiUrl(`/auction/liquidity-validity?${params.toString()}`)
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      'X-Auth-Token': token,
+    },
+  })
+  return parseJsonOrThrow<AuctionLiquidityValidityResponse>(response)
+}
+
+export async function fetchAuctionLiquidityValidity(
+  itemIds: string[],
+  window = '12h',
+): Promise<AuctionLiquidityValidityResponse> {
+  const ids = [...new Set(itemIds)].filter(Boolean)
+  if (ids.length === 0) {
+    return { fetchedAt: new Date().toISOString(), items: {} }
+  }
+  if (ids.length <= LIQUIDITY_VALIDITY_CHUNK_SIZE) {
+    return fetchAuctionLiquidityValidityOnce(ids, window)
+  }
+
+  const mergedItems: Record<string, AuctionLiquidityItem> = {}
+  let benchmark: AuctionLiquidityBenchmark | undefined
+  let lastFetchedAt = ''
+
+  for (let offset = 0; offset < ids.length; offset += LIQUIDITY_VALIDITY_CHUNK_SIZE) {
+    const slice = ids.slice(offset, offset + LIQUIDITY_VALIDITY_CHUNK_SIZE)
+    const part = await fetchAuctionLiquidityValidityOnce(slice, window)
+    Object.assign(mergedItems, part.items ?? {})
+    if (part.benchmark) benchmark = part.benchmark
+    const fa = part.fetchedAt
+    if (fa && fa > lastFetchedAt) lastFetchedAt = fa
+  }
+
+  return {
+    fetchedAt: lastFetchedAt || new Date().toISOString(),
+    benchmark,
+    items: mergedItems,
   }
 }
 

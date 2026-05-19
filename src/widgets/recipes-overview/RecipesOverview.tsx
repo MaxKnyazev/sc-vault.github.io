@@ -41,6 +41,8 @@ import {
 } from '../../shared/api/backendApi'
 import { PageTitleWithHybridSettings } from '../../components/auction-hybrid-settings/PageTitleWithHybridSettings'
 import { buildHybridAuctionAvgMap } from '../../shared/lib/hybridAuctionAvgMap'
+import { auctionLiquidityShortLabel } from '../../shared/lib/auctionLiquidityValidity'
+import { useAuctionLiquidityStore } from '../../shared/store/auctionLiquidityStore'
 
 const CANON_BRANCHES = [
   'Боеприпасы',
@@ -254,6 +256,12 @@ export function RecipesOverview() {
       cancelled = true
     }
   }, [authToken, auctionItemIds, hybridSettingsKey])
+
+  const liquidityByItemId = useAuctionLiquidityStore((s) => s.byItemId)
+  useEffect(() => {
+    if (!authToken || auctionItemIds.length === 0) return
+    void useAuctionLiquidityStore.getState().ensureForItems(auctionItemIds)
+  }, [authToken, auctionItemIds])
 
   const hybridAvgUnitByItemId = useMemo(
     () => buildHybridAuctionAvgMap(hybridAuctionByItemId),
@@ -807,6 +815,11 @@ export function RecipesOverview() {
                           }
                           if (h?.undersampled) {
                             base = `${base} · мало сделок относительно порога (${h.tradeCount} < выбранного минимума)`
+                          }
+
+                          const liq = liquidityByItemId[primaryResultItemId]
+                          if (liq && (aucN !== null || h)) {
+                            base = `${base} · ликвидность: ${auctionLiquidityShortLabel(liq.tier)}`
                           }
 
                           return base

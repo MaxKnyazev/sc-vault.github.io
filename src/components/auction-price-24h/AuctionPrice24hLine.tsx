@@ -1,9 +1,11 @@
 import { ActionIcon, Group, Text } from '@mantine/core'
 import { useState } from 'react'
+import { AuctionLiquidityBadge } from '../auction-liquidity-badge/AuctionLiquidityBadge'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 import { useAuctionPricesStore } from '../../shared/store/auctionPricesStore'
 import { useAuctionBlacklistStore } from '../../shared/store/auctionBlacklistStore'
 import { useAuctionHistoryItemModalStore } from '../../shared/store/auctionHistoryItemModalStore'
+import { getBackendApiBaseUrl } from '../../shared/config/backendApi'
 
 type AuctionPrice24hLineProps = {
   itemId: string
@@ -75,6 +77,7 @@ export function AuctionPrice24hLine({
       >
         {content}
       </Text>
+      {getBackendApiBaseUrl() ? <AuctionLiquidityBadge itemId={itemId} size={size === 'sm' ? 'sm' : 'xs'} /> : null}
     </Group>
   )
 

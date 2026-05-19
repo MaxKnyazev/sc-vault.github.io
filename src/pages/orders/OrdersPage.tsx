@@ -36,6 +36,8 @@ import {
 } from '../../shared/api/backendApi'
 import { PageTitleWithHybridSettings } from '../../components/auction-hybrid-settings/PageTitleWithHybridSettings'
 import { buildHybridAuctionAvgMap } from '../../shared/lib/hybridAuctionAvgMap'
+import { AuctionLiquidityBadge } from '../../components/auction-liquidity-badge/AuctionLiquidityBadge'
+import { useAuctionLiquidityStore } from '../../shared/store/auctionLiquidityStore'
 import { mergeUserAndDefaultBuyPrices } from '../../shared/lib/craftCostBuyPrices'
 import { buildCraftCostModel } from '../../shared/lib/costModel'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
@@ -564,14 +566,19 @@ function OrderCard({
                                   </ActionIcon>
                                 </Table.Td>
                                 <Table.Td>
-                                  <ItemBadge
-                                    itemId={row.itemId}
-                                    name={row.name}
-                                    iconUrl={row.iconUrl}
-                                    qualityColor={pickListingItemQualityColor(itemsById[row.itemId])}
-                                    size="ingredient"
-                                    showFavoriteButton={false}
-                                  />
+                                  <Stack gap={4}>
+                                    <ItemBadge
+                                      itemId={row.itemId}
+                                      name={row.name}
+                                      iconUrl={row.iconUrl}
+                                      qualityColor={pickListingItemQualityColor(itemsById[row.itemId])}
+                                      size="ingredient"
+                                      showFavoriteButton={false}
+                                    />
+                                    {auctionUnitByItemId.has(row.itemId) ? (
+                                      <AuctionLiquidityBadge itemId={row.itemId} size="xs" />
+                                    ) : null}
+                                  </Stack>
                                 </Table.Td>
                                 <Table.Td>
                                   <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
@@ -815,6 +822,11 @@ export function OrdersPage() {
       cancelled = true
     }
   }, [token, hybridHydrateItemIds, hybridSettingsKey])
+
+  useEffect(() => {
+    if (!token || hybridHydrateItemIds.length === 0) return
+    void useAuctionLiquidityStore.getState().ensureForItems(hybridHydrateItemIds)
+  }, [token, hybridHydrateItemIds])
 
   const hybridAvgMap = useMemo(() => buildHybridAuctionAvgMap(hybridAuctionRows), [hybridAuctionRows])
 

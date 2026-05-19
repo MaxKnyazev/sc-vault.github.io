@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { AuctionAgg24h } from '../api/stalcraftAuction'
 import { aggregateAuctionPurchases24h } from '../api/stalcraftAuction'
 import { fetchBackendAuctionStats } from '../api/backendApi'
+import { useAuctionLiquidityStore } from './auctionLiquidityStore'
 import { getBackendApiBaseUrl } from '../config/backendApi'
 import { getStalcraftAuctionRefreshConcurrency } from '../config/stalcraftApi'
 import { useAuctionBlacklistStore } from './auctionBlacklistStore'
@@ -113,6 +114,7 @@ export const useAuctionPricesStore = create<AuctionPricesState>()(
                 error: null,
                 lastRefreshAt: new Date().toISOString(),
               })
+              void useAuctionLiquidityStore.getState().ensureForItems(tracked)
               return
             } catch (err) {
               const message =

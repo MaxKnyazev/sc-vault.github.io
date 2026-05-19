@@ -9,6 +9,7 @@ import {
   type WheelEvent,
 } from 'react'
 import { ItemBadge } from '../../components/item-badge/ItemBadge'
+import { AuctionLiquidityBadge } from '../../components/auction-liquidity-badge/AuctionLiquidityBadge'
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
 import { getQualityModalGlowBoxShadow } from '../../shared/lib/getQualityGlowColor'
@@ -459,13 +460,16 @@ export function AuctionHistoryItemModal() {
         {itemId ? (
           <Group justify="space-between" align="flex-start" wrap="nowrap">
             <Box style={{ flex: 1, minWidth: 0 }}>
-              <ItemBadge
-                name={itemName || itemId}
-                iconUrl={iconUrl}
-                qualityColor={badgeQualityColor}
-                size="result"
-                showFavoriteButton={false}
-              />
+              <Stack gap={6}>
+                <ItemBadge
+                  name={itemName || itemId}
+                  iconUrl={iconUrl}
+                  qualityColor={badgeQualityColor}
+                  size="result"
+                  showFavoriteButton={false}
+                />
+                <AuctionLiquidityBadge itemId={itemId} size="sm" />
+              </Stack>
             </Box>
             <ActionIcon
               variant="subtle"

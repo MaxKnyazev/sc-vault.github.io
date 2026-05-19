@@ -21,6 +21,7 @@ require $baseDir . '/src/Db.php';
 require $baseDir . '/src/Http.php';
 require $baseDir . '/src/Auth.php';
 require $baseDir . '/src/Auction.php';
+require $baseDir . '/src/AuctionLiquidityValidity.php';
 require $baseDir . '/src/AuctionTrackedItems.php';
 require $baseDir . '/src/AuctionTrackedDesiredBuyPrices.php';
 require $baseDir . '/src/AuctionTrackedSubscriptions.php';
@@ -320,6 +321,40 @@ if ($path === '/auction/hybrid-prices') {
     $settings = decode_auction_hybrid_settings_column($user['auction_hybrid_settings'] ?? null);
     try {
         $payload = get_auction_hybrid_prices_bulk($db, $ids, $settings);
+    } catch (Throwable $e) {
+        send_json(400, ['error' => $e->getMessage()]);
+        exit;
+    }
+    send_json(200, $payload);
+    exit;
+}
+
+if ($path === '/auction/liquidity-validity') {
+    require_method('GET');
+    $token = bearer_token_from_headers();
+    if (!$token) {
+        send_json(401, ['error' => 'Missing token']);
+        exit;
+    }
+    $user = find_user_by_token($db, $token);
+    if (!$user) {
+        send_json(401, ['error' => 'Invalid token']);
+        exit;
+    }
+    enforce_auth_user($user);
+    $idsRaw = trim((string)($_GET['ids'] ?? ''));
+    $windowRaw = trim((string)($_GET['window'] ?? '12h'));
+    if ($idsRaw === '') {
+        send_json(200, ['fetchedAt' => gmdate('c'), 'benchmark' => compute_tracked_liquidity_benchmark($db, $windowRaw), 'items' => []]);
+        exit;
+    }
+    $ids = array_values(array_filter(array_unique(array_map('trim', explode(',', $idsRaw)))));
+    if (count($ids) > 400) {
+        send_json(400, ['error' => 'Too many ids']);
+        exit;
+    }
+    try {
+        $payload = get_auction_liquidity_validity_bulk($db, $ids, $windowRaw);
     } catch (Throwable $e) {
         send_json(400, ['error' => $e->getMessage()]);
         exit;
