@@ -20,7 +20,7 @@ function mysql_utc_datetime_to_ms(?string $s): ?int
 function list_user_craft_orders_with_lines(PDO $db, int $userId): array
 {
     $stmt = $db->prepare(
-        'SELECT id, display_number, title, deadline_hours, deadline_set_at, created_at, updated_at
+        'SELECT id, display_number, title, deadline_hours, deadline_set_at, minimize_surplus, created_at, updated_at
          FROM user_craft_orders
          WHERE user_id = ?
          ORDER BY created_at DESC, id DESC',
@@ -55,6 +55,7 @@ function list_user_craft_orders_with_lines(PDO $db, int $userId): array
             'createdAt' => mysql_utc_datetime_to_ms($row['created_at'] ?? null) ?? 0,
             'deadlineHours' => $dh === null ? null : (int)$dh,
             'deadlineSetAt' => mysql_utc_datetime_to_ms($row['deadline_set_at'] ?? null),
+            'minimizeSurplus' => ((int)($row['minimize_surplus'] ?? 0)) === 1,
             'lines' => $lines,
             'ingredientDone' => [],
         ];
@@ -128,9 +129,21 @@ function create_user_craft_order(PDO $db, int $userId): array
         'createdAt' => (int)floor(microtime(true) * 1000),
         'deadlineHours' => null,
         'deadlineSetAt' => null,
+        'minimizeSurplus' => false,
         'lines' => [],
         'ingredientDone' => [],
     ];
+}
+
+function update_user_craft_order_minimize_surplus(PDO $db, int $userId, int $orderId, bool $minimizeSurplus): void
+{
+    $stmt = $db->prepare(
+        'UPDATE user_craft_orders SET minimize_surplus = ?, updated_at = UTC_TIMESTAMP() WHERE id = ? AND user_id = ?',
+    );
+    $stmt->execute([$minimizeSurplus ? 1 : 0, $orderId, $userId]);
+    if ($stmt->rowCount() === 0) {
+        throw new InvalidArgumentException('order not found');
+    }
 }
 
 function update_user_craft_order_title(PDO $db, int $userId, int $orderId, string $title): void

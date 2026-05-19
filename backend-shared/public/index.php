@@ -91,6 +91,12 @@ function api_is_missing_db_table(Throwable $e): bool
         || str_contains($msg, 'Base table or view not found');
 }
 
+function api_is_missing_db_column(Throwable $e, string $column): bool
+{
+    $msg = $e->getMessage();
+    return str_contains($msg, '1054') && str_contains($msg, $column);
+}
+
 function rate_limit_key(string $action): string
 {
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
@@ -986,8 +992,9 @@ if ($path === '/user/craft-orders') {
         }
         $hasTitle = array_key_exists('title', $body);
         $hasDh = array_key_exists('deadlineHours', $body);
-        if (!$hasTitle && !$hasDh) {
-            send_json(400, ['error' => 'title or deadlineHours required']);
+        $hasMinSurplus = array_key_exists('minimizeSurplus', $body);
+        if (!$hasTitle && !$hasDh && !$hasMinSurplus) {
+            send_json(400, ['error' => 'title, deadlineHours or minimizeSurplus required']);
             exit;
         }
         try {
@@ -1002,12 +1009,19 @@ if ($path === '/user/craft-orders') {
                     update_user_craft_order_deadline($db, $userId, $orderId, (int)$dh);
                 }
             }
+            if ($hasMinSurplus) {
+                update_user_craft_order_minimize_surplus($db, $userId, $orderId, (bool)$body['minimizeSurplus']);
+            }
         } catch (InvalidArgumentException $e) {
             send_json(400, ['error' => $e->getMessage()]);
             exit;
         } catch (Throwable $e) {
             if (api_is_missing_db_table($e)) {
                 send_json(503, ['error' => 'Не найдена таблица в БД. Выполните миграцию: 020_user_craft_orders.sql.']);
+                exit;
+            }
+            if (api_is_missing_db_column($e, 'minimize_surplus')) {
+                send_json(503, ['error' => 'Выполните миграцию: 024_user_craft_orders_minimize_surplus.sql.']);
                 exit;
             }
             send_json(500, ['error' => $e->getMessage()]);

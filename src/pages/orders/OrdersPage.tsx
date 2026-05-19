@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Divider,
   Group,
   Loader,
@@ -185,6 +186,7 @@ function OrderCard({
   const updateTitle = useOrdersStore((s) => s.updateTitle)
   const removeOrder = useOrdersStore((s) => s.removeOrder)
   const setDeadlineHours = useOrdersStore((s) => s.setDeadlineHours)
+  const setMinimizeSurplus = useOrdersStore((s) => s.setMinimizeSurplus)
   const addLine = useOrdersStore((s) => s.addLine)
   const updateLineQuantity = useOrdersStore((s) => s.updateLineQuantity)
   const removeLine = useOrdersStore((s) => s.removeLine)
@@ -200,6 +202,7 @@ function OrderCard({
   const [editQtyModal, setEditQtyModal] = useState<null | { line: OrderLine; recipe: HideoutRecipe }>(null)
   const [editQtyDraft, setEditQtyDraft] = useState(1)
   const [ingOpen, setIngOpen] = useState(false)
+  const [surplusOpen, setSurplusOpen] = useState(false)
   const [hoursDraft, setHoursDraft] = useState<string>(order.deadlineHours !== null ? String(order.deadlineHours) : '')
   const remainingMs = useOrderDeadlineRemaining(order.deadlineHours, order.deadlineSetAt)
 
@@ -290,10 +293,21 @@ function OrderCard({
       buyPricesMerged,
       energyPrice,
       auctionUnitByItemId,
+      minimizeSurplus: order.minimizeSurplus,
       itemName: (id) => getItemName(itemsById[id]?.name?.lines) || id,
       itemIconUrl: (id) => (itemsById[id] ? buildItemIconUrl(itemsById[id]!.icon, realm) : undefined),
     })
-  }, [order.lines, recipeByFavoriteId, costModel, buyPricesMerged, energyPrice, auctionUnitByItemId, itemsById, realm])
+  }, [
+    order.lines,
+    order.minimizeSurplus,
+    recipeByFavoriteId,
+    costModel,
+    buyPricesMerged,
+    energyPrice,
+    auctionUnitByItemId,
+    itemsById,
+    realm,
+  ])
 
   return (
     <>
@@ -374,6 +388,17 @@ function OrderCard({
             >
               Сохранить срок
             </Button>
+          </Group>
+
+          <Checkbox
+            label="Минимизировать остаток"
+            description="При выгодном крафте: неполный хват — докуп с аукциона/скупа вместо лишнего крафта. Если закуп выгоднее крафта — всё с аукциона."
+            checked={order.minimizeSurplus}
+            onChange={(e) => void setMinimizeSurplus(order.id, e.currentTarget.checked)}
+            styles={{ label: { fontWeight: 500 } }}
+          />
+
+          <Group align="flex-end" wrap="wrap" gap="xs">
             <Button
               size="xs"
               variant="subtle"
@@ -519,7 +544,7 @@ function OrderCard({
           </Button>
           {ingOpen ? (
             <Stack gap="sm">
-              {ingredientLedger.rows.length === 0 && ingredientLedger.surplus.length === 0 ? (
+              {ingredientLedger.rows.length === 0 ? (
                 <Text size="sm" c="dimmed">
                   Нет данных — добавьте позиции или задайте цены ингредиентов.
                 </Text>
@@ -611,31 +636,41 @@ function OrderCard({
                       </Box>
                     </Table.ScrollContainer>
                   ) : null}
-                  {ingredientLedger.surplus.length > 0 ? (
-                    <Stack gap={6}>
-                      <Text size="xs" fw={600} c="dimmed" tt="uppercase">
-                        Остаток после заказа
-                      </Text>
-                      {ingredientLedger.surplus.map((s) => (
-                        <Group key={s.itemId} justify="space-between" wrap="nowrap" gap="sm">
-                          <Box style={{ flex: 1, minWidth: 0 }}>
-                            <ItemBadge
-                              itemId={s.itemId}
-                              name={s.name}
-                              iconUrl={itemsById[s.itemId] ? buildItemIconUrl(itemsById[s.itemId]!.icon, realm) : undefined}
-                              qualityColor={pickListingItemQualityColor(itemsById[s.itemId])}
-                              size="ingredient"
-                              showFavoriteButton={false}
-                            />
-                          </Box>
-                          <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
-                            +{formatLedgerQty(s.qty)}
-                          </Text>
-                        </Group>
-                      ))}
-                    </Stack>
-                  ) : null}
                 </>
+              )}
+            </Stack>
+          ) : null}
+
+          <Button variant="subtle" size="xs" px={0} onClick={() => setSurplusOpen((o) => !o)}>
+            {surplusOpen ? 'Скрыть остаток' : 'Остаток'}
+            {ingredientLedger.surplus.length > 0 ? ` (${ingredientLedger.surplus.length})` : ''}
+          </Button>
+          {surplusOpen ? (
+            <Stack gap="sm">
+              {ingredientLedger.surplus.length === 0 ? (
+                <Text size="sm" c="dimmed">
+                  {order.minimizeSurplus
+                    ? 'Остатка нет — включена минимизация остатка или крафты ровно по потребности.'
+                    : 'Остаток появится, когда крафт даёт больше предметов, чем нужно (без минимизации остатка).'}
+                </Text>
+              ) : (
+                ingredientLedger.surplus.map((s) => (
+                  <Group key={s.itemId} justify="space-between" wrap="nowrap" gap="sm">
+                    <Box style={{ flex: 1, minWidth: 0 }}>
+                      <ItemBadge
+                        itemId={s.itemId}
+                        name={s.name}
+                        iconUrl={itemsById[s.itemId] ? buildItemIconUrl(itemsById[s.itemId]!.icon, realm) : undefined}
+                        qualityColor={pickListingItemQualityColor(itemsById[s.itemId])}
+                        size="ingredient"
+                        showFavoriteButton={false}
+                      />
+                    </Box>
+                    <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
+                      +{formatLedgerQty(s.qty)}
+                    </Text>
+                  </Group>
+                ))
               )}
             </Stack>
           ) : null}

@@ -41,8 +41,41 @@ export type BuildOrderIngredientLedgerInput = {
   energyPrice: string
   /** min(скуп, аукцион) для базовых материалов; энергия по-прежнему только из скупа в рецепте */
   auctionUnitByItemId?: ReadonlyMap<string, number> | null
+  /** true: floor(крафты) + докуп остатка; false: ceil(крафты), остаток в пул */
+  minimizeSurplus?: boolean
   itemName: (itemId: string) => string
   itemIconUrl: (itemId: string) => string | undefined
+}
+
+/** План крафта vs докупа при выгодном крафте (не при полной закупке с листа). */
+export function planCraftFulfillment(
+  need: number,
+  batchUnits: number,
+  minimizeSurplus: boolean,
+): { craftRuns: number; craftUnits: number; remainder: number; surplus: number } {
+  if (batchUnits <= EPS || need <= EPS) {
+    return { craftRuns: 0, craftUnits: 0, remainder: need > EPS ? need : 0, surplus: 0 }
+  }
+  if (minimizeSurplus) {
+    const craftRuns = Math.floor((need + EPS) / batchUnits)
+    const craftUnits = craftRuns * batchUnits
+    const remainder = need - craftUnits
+    return {
+      craftRuns,
+      craftUnits,
+      remainder: remainder > EPS ? remainder : 0,
+      surplus: 0,
+    }
+  }
+  const craftRuns = Math.ceil((need - EPS) / batchUnits)
+  const produced = craftRuns * batchUnits
+  const surplus = produced - need
+  return {
+    craftRuns,
+    craftUnits: need,
+    remainder: 0,
+    surplus: surplus > EPS ? surplus : 0,
+  }
 }
 
 /** Кол-во / кол-во крафтов в заказе: округление вверх до целого; те же значения для рублей «Всего». */
@@ -156,8 +189,17 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
   rows: OrderIngredientLedgerRow[]
   surplus: OrderIngredientSurplusRow[]
 } {
-  const { lines, recipeByFavoriteId, costModel, buyPricesMerged, energyPrice, auctionUnitByItemId, itemName, itemIconUrl } =
-    input
+  const {
+    lines,
+    recipeByFavoriteId,
+    costModel,
+    buyPricesMerged,
+    energyPrice,
+    auctionUnitByItemId,
+    minimizeSurplus = false,
+    itemName,
+    itemIconUrl,
+  } = input
 
   const pool = new Map<string, number>()
   const vendorAgg = new Map<string, VendorAgg>()
@@ -191,18 +233,17 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
 
   const pushCraft = (
     itemId: string,
-    qtyNeed: number,
+    craftUnits: number,
+    craftRuns: number,
     fav: string,
-    detPerRun: number,
     unitCraft: number | null,
     craftRecipeLabel: string | null,
   ) => {
     const key = `c|${itemId}|${fav}`
-    const runsPart = detPerRun > EPS ? qtyNeed / detPerRun : 0
     const prev = craftAgg.get(key)
     if (prev) {
-      prev.qtySum += qtyNeed
-      prev.runsSum += runsPart
+      prev.qtySum += craftUnits
+      prev.runsSum += craftRuns
       applyCraftCeilTotals(prev.row, prev.qtySum, prev.runsSum)
       if (!prev.row.craftRecipeLabel && craftRecipeLabel) prev.row.craftRecipeLabel = craftRecipeLabel
       return
@@ -221,11 +262,11 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
       unitRub: unitCraft,
       totalRub: null,
     }
-    applyCraftCeilTotals(row, qtyNeed, runsPart)
+    applyCraftCeilTotals(row, craftUnits, craftRuns)
     craftAgg.set(key, {
       row,
-      qtySum: qtyNeed,
-      runsSum: runsPart,
+      qtySum: craftUnits,
+      runsSum: craftRuns,
     })
   }
 
@@ -269,10 +310,11 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
     }
 
     const detPerRun = batch.batchUnits
-    const runsExact = need / detPerRun
-    const produced = runsExact * detPerRun
-    const surplus = produced - need
-    pool.set(itemId, (pool.get(itemId) ?? 0) + surplus)
+    const plan = planCraftFulfillment(need, detPerRun, minimizeSurplus)
+
+    if (plan.surplus > EPS) {
+      pool.set(itemId, (pool.get(itemId) ?? 0) + plan.surplus)
+    }
 
     const unitCraft = computeRecipePrimaryUnitRub(
       recipeAdj,
@@ -282,15 +324,21 @@ export function buildOrderIngredientLedger(input: BuildOrderIngredientLedgerInpu
       auctionUnitByItemId,
     )
     const craftRecipeLabel = getDuplicateCraftDisplayLabel(recipeAdj)
-    pushCraft(itemId, need, fav, detPerRun, unitCraft, craftRecipeLabel)
 
-    expanding.add(itemId)
-    try {
-      for (const ing of recipeAdj.ingredients) {
-        ensureMaterial(ing.item, runsExact * ing.amount, expanding)
+    if (plan.craftRuns > 0 && plan.craftUnits > EPS) {
+      pushCraft(itemId, plan.craftUnits, plan.craftRuns, fav, unitCraft, craftRecipeLabel)
+      expanding.add(itemId)
+      try {
+        for (const ing of recipeAdj.ingredients) {
+          ensureMaterial(ing.item, plan.craftRuns * ing.amount, expanding)
+        }
+      } finally {
+        expanding.delete(itemId)
       }
-    } finally {
-      expanding.delete(itemId)
+    }
+
+    if (plan.remainder > EPS) {
+      pushVendor(itemId, plan.remainder)
     }
   }
 
