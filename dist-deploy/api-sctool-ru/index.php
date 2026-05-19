@@ -17,10 +17,10 @@ function resolve_api_base_dir(): string
 
 $baseDir = resolve_api_base_dir();
 $config = require $baseDir . '/config.php';
-require $baseDir . '/src/Db.php';
-require $baseDir . '/src/Http.php';
-require $baseDir . '/src/Auth.php';
-require $baseDir . '/src/Auction.php';
+require_once $baseDir . '/src/Db.php';
+require_once $baseDir . '/src/Http.php';
+require_once $baseDir . '/src/Auth.php';
+require_once $baseDir . '/src/Auction.php';
 require $baseDir . '/src/UserBuyPrices.php';
 
 function resolve_allowed_origin_header(array $config): string

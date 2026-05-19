@@ -17,20 +17,20 @@ function resolve_api_base_dir(): string
 
 $baseDir = resolve_api_base_dir();
 $config = require $baseDir . '/config.php';
-require $baseDir . '/src/Db.php';
-require $baseDir . '/src/Http.php';
-require $baseDir . '/src/Auth.php';
-require $baseDir . '/src/Auction.php';
-require $baseDir . '/src/AuctionLiquidityValidity.php';
-require $baseDir . '/src/AuctionTrackedItems.php';
-require $baseDir . '/src/AuctionTrackedDesiredBuyPrices.php';
-require $baseDir . '/src/AuctionTrackedSubscriptions.php';
-require $baseDir . '/src/AuctionBlacklist.php';
-require $baseDir . '/src/UserBuyPrices.php';
-require $baseDir . '/src/UserEnergyBuyPrice.php';
-require $baseDir . '/src/DefaultBuyPrices.php';
-require $baseDir . '/src/RecipeOverrides.php';
-require $baseDir . '/src/CraftOrders.php';
+require_once $baseDir . '/src/Db.php';
+require_once $baseDir . '/src/Http.php';
+require_once $baseDir . '/src/Auth.php';
+require_once $baseDir . '/src/Auction.php';
+require_once $baseDir . '/src/AuctionLiquidityValidity.php';
+require_once $baseDir . '/src/AuctionTrackedItems.php';
+require_once $baseDir . '/src/AuctionTrackedDesiredBuyPrices.php';
+require_once $baseDir . '/src/AuctionTrackedSubscriptions.php';
+require_once $baseDir . '/src/AuctionBlacklist.php';
+require_once $baseDir . '/src/UserBuyPrices.php';
+require_once $baseDir . '/src/UserEnergyBuyPrice.php';
+require_once $baseDir . '/src/DefaultBuyPrices.php';
+require_once $baseDir . '/src/RecipeOverrides.php';
+require_once $baseDir . '/src/CraftOrders.php';
 
 function resolve_allowed_origin_header(array $config): string
 {
