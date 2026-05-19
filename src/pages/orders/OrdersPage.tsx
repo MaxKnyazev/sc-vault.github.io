@@ -3,7 +3,6 @@ import {
   Alert,
   Box,
   Button,
-  Checkbox,
   Divider,
   Group,
   Loader,
@@ -44,7 +43,7 @@ import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
 import { getDuplicateCraftDisplayLabel } from '../../shared/lib/craftDuplicateRecipeLabels'
 import { getRecipeRequiredSkill } from '../../shared/lib/craftSkills'
 import { pickListingItemQualityColor } from '../../shared/lib/itemQualityColor'
-import { buildOrderIngredientLedger, formatLedgerQty, type LedgerMethod } from '../../shared/lib/orderIngredientLedger'
+import { buildOrderIngredientLedger, type LedgerMethod } from '../../shared/lib/orderIngredientLedger'
 import { sortOrderLines } from '../../shared/lib/orderIngredientRollup'
 import { computeOrderLineTotalRub } from '../../shared/lib/orderLineBuyCraftCost'
 import type { CraftOrder, OrderLine } from '../../shared/store/ordersStore'
@@ -186,7 +185,6 @@ function OrderCard({
   const updateTitle = useOrdersStore((s) => s.updateTitle)
   const removeOrder = useOrdersStore((s) => s.removeOrder)
   const setDeadlineHours = useOrdersStore((s) => s.setDeadlineHours)
-  const setMinimizeSurplus = useOrdersStore((s) => s.setMinimizeSurplus)
   const addLine = useOrdersStore((s) => s.addLine)
   const updateLineQuantity = useOrdersStore((s) => s.updateLineQuantity)
   const removeLine = useOrdersStore((s) => s.removeLine)
@@ -202,7 +200,6 @@ function OrderCard({
   const [editQtyModal, setEditQtyModal] = useState<null | { line: OrderLine; recipe: HideoutRecipe }>(null)
   const [editQtyDraft, setEditQtyDraft] = useState(1)
   const [ingOpen, setIngOpen] = useState(false)
-  const [surplusOpen, setSurplusOpen] = useState(false)
   const [hoursDraft, setHoursDraft] = useState<string>(order.deadlineHours !== null ? String(order.deadlineHours) : '')
   const remainingMs = useOrderDeadlineRemaining(order.deadlineHours, order.deadlineSetAt)
 
@@ -293,13 +290,11 @@ function OrderCard({
       buyPricesMerged,
       energyPrice,
       auctionUnitByItemId,
-      minimizeSurplus: order.minimizeSurplus,
       itemName: (id) => getItemName(itemsById[id]?.name?.lines) || id,
       itemIconUrl: (id) => (itemsById[id] ? buildItemIconUrl(itemsById[id]!.icon, realm) : undefined),
     })
   }, [
     order.lines,
-    order.minimizeSurplus,
     recipeByFavoriteId,
     costModel,
     buyPricesMerged,
@@ -387,26 +382,6 @@ function OrderCard({
               }}
             >
               Сохранить срок
-            </Button>
-          </Group>
-
-          <Checkbox
-            label="Минимизировать остаток"
-            description="При выгодном крафте: неполный хват — докуп с аукциона/скупа вместо лишнего крафта. Если закуп выгоднее крафта — всё с аукциона."
-            checked={order.minimizeSurplus}
-            onChange={(e) => void setMinimizeSurplus(order.id, e.currentTarget.checked)}
-            styles={{ label: { fontWeight: 500 } }}
-          />
-
-          <Group align="flex-end" wrap="wrap" gap="xs">
-            <Button
-              size="xs"
-              variant="subtle"
-              onClick={() => {
-                void setDeadlineHours(order.id, null).then(() => setHoursDraft(''))
-              }}
-            >
-              Сбросить
             </Button>
           </Group>
 
@@ -637,40 +612,6 @@ function OrderCard({
                     </Table.ScrollContainer>
                   ) : null}
                 </>
-              )}
-            </Stack>
-          ) : null}
-
-          <Button variant="subtle" size="xs" px={0} onClick={() => setSurplusOpen((o) => !o)}>
-            {surplusOpen ? 'Скрыть остаток' : 'Остаток'}
-            {ingredientLedger.surplus.length > 0 ? ` (${ingredientLedger.surplus.length})` : ''}
-          </Button>
-          {surplusOpen ? (
-            <Stack gap="sm">
-              {ingredientLedger.surplus.length === 0 ? (
-                <Text size="sm" c="dimmed">
-                  {order.minimizeSurplus
-                    ? 'Остатка нет — включена минимизация остатка или крафты ровно по потребности.'
-                    : 'Остаток появится, когда крафт даёт больше предметов, чем нужно (без минимизации остатка).'}
-                </Text>
-              ) : (
-                ingredientLedger.surplus.map((s) => (
-                  <Group key={s.itemId} justify="space-between" wrap="nowrap" gap="sm">
-                    <Box style={{ flex: 1, minWidth: 0 }}>
-                      <ItemBadge
-                        itemId={s.itemId}
-                        name={s.name}
-                        iconUrl={itemsById[s.itemId] ? buildItemIconUrl(itemsById[s.itemId]!.icon, realm) : undefined}
-                        qualityColor={pickListingItemQualityColor(itemsById[s.itemId])}
-                        size="ingredient"
-                        showFavoriteButton={false}
-                      />
-                    </Box>
-                    <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
-                      +{formatLedgerQty(s.qty)}
-                    </Text>
-                  </Group>
-                ))
               )}
             </Stack>
           ) : null}

@@ -33,7 +33,6 @@ export type CraftOrder = {
   createdAt: number
   deadlineHours: number | null
   deadlineSetAt: number | null
-  minimizeSurplus: boolean
   lines: OrderLine[]
   ingredientDone: OrderIngredientDone[]
 }
@@ -46,7 +45,6 @@ function mapDto(o: CraftOrderDto): CraftOrder {
     createdAt: o.createdAt,
     deadlineHours: o.deadlineHours,
     deadlineSetAt: o.deadlineSetAt,
-    minimizeSurplus: o.minimizeSurplus === true,
     lines: (o.lines ?? []).map((l) => ({
       id: String(l.id),
       recipeFavoriteId: l.recipeFavoriteId,
@@ -73,7 +71,6 @@ type OrdersState = {
   updateTitle: (orderId: string, title: string) => Promise<void>
   removeOrder: (orderId: string) => Promise<void>
   setDeadlineHours: (orderId: string, hours: number | null) => Promise<void>
-  setMinimizeSurplus: (orderId: string, minimizeSurplus: boolean) => Promise<void>
   addLine: (orderId: string, recipeFavoriteId: string, quantity: number) => Promise<void>
   updateLineQuantity: (orderId: string, lineId: string, quantity: number) => Promise<void>
   removeLine: (orderId: string, lineId: string) => Promise<void>
@@ -124,10 +121,6 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
   },
   setDeadlineHours: async (orderId, hours) => {
     await patchCraftOrder({ orderId, deadlineHours: hours })
-    await get().loadRemote()
-  },
-  setMinimizeSurplus: async (orderId, minimizeSurplus) => {
-    await patchCraftOrder({ orderId, minimizeSurplus })
     await get().loadRemote()
   },
   addLine: async (orderId, recipeFavoriteId, quantity) => {

@@ -609,7 +609,6 @@ export type CraftOrderDto = {
   createdAt: number
   deadlineHours: number | null
   deadlineSetAt: number | null
-  minimizeSurplus?: boolean
   lines: CraftOrderLineDto[]
   ingredientDone?: CraftOrderIngredientDoneDto[]
 }
@@ -651,7 +650,6 @@ export async function patchCraftOrder(body: {
   orderId: string | number
   title?: string
   deadlineHours?: number | null
-  minimizeSurplus?: boolean
 }): Promise<void> {
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация')
@@ -668,7 +666,6 @@ export async function patchCraftOrder(body: {
       orderId: Number(body.orderId),
       ...(body.title !== undefined ? { title: body.title } : {}),
       ...(body.deadlineHours !== undefined ? { deadlineHours: body.deadlineHours } : {}),
-      ...(body.minimizeSurplus !== undefined ? { minimizeSurplus: body.minimizeSurplus } : {}),
     }),
   })
   await parseJsonOrThrow<{ ok?: boolean }>(response)
