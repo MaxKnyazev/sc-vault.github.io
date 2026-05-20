@@ -9,7 +9,7 @@ import {
   Text,
   TextInput,
 } from '@mantine/core'
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { AuctionPrice24hLine } from '../../components/auction-price-24h/AuctionPrice24hLine'
 import { AuctionRefreshStatus } from '../../components/auction-refresh-status/AuctionRefreshStatus'
 import { PageContainer } from '../../components/page-container/PageContainer'
@@ -47,6 +47,7 @@ const IngredientCard = memo(function IngredientCard({
   defaultBuyPrice,
   setBuyPrice,
   setDefaultBuyPrice,
+  style,
 }: {
   item: IngredientCardItem
   isAdmin: boolean
@@ -54,6 +55,7 @@ const IngredientCard = memo(function IngredientCard({
   defaultBuyPrice: string
   setBuyPrice: (itemId: string, value: string) => void
   setDefaultBuyPrice: (itemId: string, value: string) => Promise<void>
+  style?: CSSProperties
 }) {
   const [draftBuyPrice, setDraftBuyPrice] = useState(buyPrice)
   const [draftDefaultBuyPrice, setDraftDefaultBuyPrice] = useState(defaultBuyPrice)
@@ -67,7 +69,7 @@ const IngredientCard = memo(function IngredientCard({
   }, [defaultBuyPrice])
 
   return (
-    <Stack gap={8} p="md" bd="1px solid var(--mantine-color-default-border)" style={{ borderRadius: 8 }}>
+    <Stack gap={8} p="md" className="surface-card ingredient-tile" style={style}>
       <ItemBadge
         itemId={item.itemId}
         name={item.name}
@@ -289,11 +291,10 @@ export function IngredientsPage() {
 
               <Box mb="md" px={12}>
                 <Stack
-                  className="energy-ingredient-card"
+                  className="energy-ingredient-card surface-card surface-card--static"
                   gap={8}
                   p="md"
-                  bd="1px solid var(--mantine-color-default-border)"
-                  style={{ borderRadius: 8, width: '100%', maxWidth: 420 }}
+                  style={{ width: '100%', maxWidth: 420 }}
                 >
                   <ItemBadge
                     name="Энергия"
@@ -332,9 +333,10 @@ export function IngredientsPage() {
                 px={12}
                 pb={16}
               >
-                {filteredIngredients.map((item) => (
+                {filteredIngredients.map((item, index) => (
                   <IngredientCard
                     key={item.itemId}
+                    style={{ '--sc-stagger': index } as CSSProperties}
                     item={item}
                     isAdmin={isAdmin}
                     buyPrice={buyPricesByItemId[item.itemId] ?? ''}

@@ -75,25 +75,10 @@ export function AppShellLayout() {
     document.title = `SCTool - ${pageTitle}`
   }, [location.pathname])
 
-  const getNavItemStyles = (active: boolean) =>
-    ({
-      root: {
-        borderRadius: 10,
-        border: 'none',
-        background: active ? 'rgba(255,255,255,0.10)' : 'transparent',
-        color: active ? '#ffffff' : 'var(--mantine-color-text)',
-        boxShadow: active ? '0 0 22px 4px rgba(59,130,246,0.95)' : 'none',
-        transition: 'background-color 120ms ease, box-shadow 120ms ease, color 120ms ease',
-        '&:hover': {
-          background: 'rgba(255,255,255,0.10)',
-          color: '#ffffff',
-        },
-      },
-      label: {
-        fontWeight: 700,
-        color: 'inherit',
-      },
-    }) as const
+  const navRootClass = (active: boolean) =>
+    active ? 'app-nav-link app-nav-link--active' : 'app-nav-link'
+
+  const navLabelStyles = { label: { fontWeight: 700 } } as const
 
   return (
     <AppShell
@@ -101,14 +86,14 @@ export function AppShellLayout() {
       padding="md"
       styles={{
         root: {
-          '--app-layout-bg': '#0f1115',
+          '--app-layout-bg': 'var(--sc-bg)',
           backgroundColor: 'var(--app-layout-bg)',
         },
       }}
     >
       <AppShell.Navbar p="md">
         <Stack gap="md" h="100%">
-          <Text fw={700}>SCTool</Text>
+          <Text className="app-brand">SCTool</Text>
 
           <Stack gap={4}>
           <NavLink
@@ -117,7 +102,8 @@ export function AppShellLayout() {
             onClick={close}
             label="Главная"
             active={location.pathname === '/'}
-            styles={getNavItemStyles(location.pathname === '/')}
+            classNames={{ root: navRootClass(location.pathname === '/') }}
+            styles={navLabelStyles}
           />
           {canUseCoreFeatures ? (
             <NavLink
@@ -126,7 +112,8 @@ export function AppShellLayout() {
               onClick={close}
               label="Крафты"
               active={location.pathname === '/crafts'}
-              styles={getNavItemStyles(location.pathname === '/crafts')}
+              classNames={{ root: navRootClass(location.pathname === '/crafts') }}
+              styles={navLabelStyles}
             />
           ) : null}
           {canUseCoreFeatures ? (
@@ -136,7 +123,8 @@ export function AppShellLayout() {
               onClick={close}
               label="Ингредиенты"
               active={location.pathname.startsWith('/ingredients')}
-              styles={getNavItemStyles(location.pathname.startsWith('/ingredients'))}
+              classNames={{ root: navRootClass(location.pathname.startsWith('/ingredients')) }}
+              styles={navLabelStyles}
             />
           ) : null}
           {canUseCoreFeatures ? (
@@ -146,7 +134,8 @@ export function AppShellLayout() {
               onClick={close}
               label="Отслеживание аукциона"
               active={location.pathname.startsWith('/auction-history')}
-              styles={getNavItemStyles(location.pathname.startsWith('/auction-history'))}
+              classNames={{ root: navRootClass(location.pathname.startsWith('/auction-history')) }}
+              styles={navLabelStyles}
             />
           ) : null}
           {canUseCoreFeatures ? (
@@ -156,7 +145,8 @@ export function AppShellLayout() {
               onClick={close}
               label="Заказы"
               active={location.pathname === '/crafts/orders'}
-              styles={getNavItemStyles(location.pathname === '/crafts/orders')}
+              classNames={{ root: navRootClass(location.pathname === '/crafts/orders') }}
+              styles={navLabelStyles}
             />
           ) : null}
           </Stack>
@@ -169,7 +159,8 @@ export function AppShellLayout() {
                 onClick={close}
                 label="Пользователи"
                 active={location.pathname.startsWith('/users')}
-                styles={getNavItemStyles(location.pathname.startsWith('/users'))}
+                classNames={{ root: navRootClass(location.pathname.startsWith('/users')) }}
+                styles={navLabelStyles}
               />
             ) : null}
             {!user ? (
@@ -196,14 +187,7 @@ export function AppShellLayout() {
                 </Button>
               </Stack>
             ) : (
-              <Stack
-                gap={6}
-                p="xs"
-                style={{
-                  background: 'var(--mantine-color-body)',
-                  borderRadius: 10,
-                }}
-              >
+              <Stack gap={6} p="xs" className="app-user-panel">
                 <Group justify="space-between" align="center" wrap="nowrap">
                   <Group
                     wrap="nowrap"

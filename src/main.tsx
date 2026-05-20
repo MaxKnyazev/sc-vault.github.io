@@ -1,9 +1,10 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { createTheme, MantineProvider } from '@mantine/core'
+import { MantineProvider } from '@mantine/core'
 import '@mantine/core/styles.css'
 import App from './App.tsx'
 import './styles/global.scss'
+import { appTheme } from './shared/theme/mantineTheme.ts'
 
 try {
   localStorage.removeItem('sc-vault-color-scheme')
@@ -11,19 +12,9 @@ try {
   /* ignore */
 }
 
-const mantineTheme = createTheme({
-  components: {
-    Modal: {
-      defaultProps: {
-        removeScrollProps: { removeScrollBar: false },
-      },
-    },
-  },
-})
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MantineProvider theme={mantineTheme} forceColorScheme="dark">
+    <MantineProvider theme={appTheme} forceColorScheme="dark">
       <App />
     </MantineProvider>
   </StrictMode>,

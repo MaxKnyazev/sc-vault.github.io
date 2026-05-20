@@ -8,11 +8,15 @@ type SectionCardProps = PropsWithChildren<{
 
 export function SectionCard({ title, description, children }: SectionCardProps) {
   return (
-    <Card className="section-card" withBorder radius="md" padding="lg" h="100%">
+    <Card className="section-card" withBorder={false} radius="md" padding="lg" h="100%">
       <Stack gap="md">
         {title || description ? (
           <Stack gap={4}>
-            {title ? <Title order={3}>{title}</Title> : null}
+            {title ? (
+              <Title order={3} className="section-card__title">
+                {title}
+              </Title>
+            ) : null}
             {description ? (
               <Text size="sm" c="dimmed">
                 {description}

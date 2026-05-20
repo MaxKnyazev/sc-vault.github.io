@@ -562,7 +562,7 @@ export function RecipesOverview() {
               />
             </Group>
 
-            <Group justify="center" gap="xs" wrap="wrap">
+            <Group justify="center" gap="xs" wrap="wrap" className="filter-chip-row">
               <Button
                 variant={activeCategory === 'all' ? 'filled' : 'default'}
                 onClick={() => setActiveCategory('all')}

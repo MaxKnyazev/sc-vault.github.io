@@ -115,12 +115,8 @@ export function RecipeCard({
     <Stack
       gap="sm"
       p="md"
-      bd={isSkillInsufficient ? '1px solid #5a1f1f' : '1px solid var(--mantine-color-default-border)'}
-      style={{
-        borderRadius: 8,
-        position: 'relative',
-        boxShadow: isSkillInsufficient ? '0 0 10px rgba(120, 30, 30, 0.35)' : undefined,
-      }}
+      className={`surface-card recipe-card${isSkillInsufficient ? ' recipe-card--warning' : ''}`}
+      style={{ position: 'relative' }}
     >
       {isSkillInsufficient ? (
         <Text

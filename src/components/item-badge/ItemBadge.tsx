@@ -72,6 +72,7 @@ export function ItemBadge({
         gap="xs"
         wrap="nowrap"
         align="center"
+        className={isClickable ? 'item-badge--clickable' : undefined}
         style={{ cursor: isClickable ? 'pointer' : 'default' }}
         onClick={() => {
           if (onClick) {
@@ -82,6 +83,7 @@ export function ItemBadge({
         }}
       >
         <Box
+          className="item-badge__icon"
           w={iconBoxSize}
           h={iconBoxSize}
           p={iconPadding}

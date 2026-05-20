@@ -308,7 +308,7 @@ function OrderCard({
 
   return (
     <>
-      <Paper radius="md" withBorder p="sm" shadow="xs">
+      <Paper radius="md" withBorder={false} p="sm" className="surface-card surface-card--static">
         <Stack gap="xs">
           <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
             <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
@@ -646,8 +646,7 @@ function OrderCard({
                     justify="space-between"
                     wrap="nowrap"
                     p="xs"
-                    bd="1px solid var(--mantine-color-default-border)"
-                    style={{ borderRadius: 8 }}
+                    className="surface-card surface-card--static"
                   >
                     <ItemBadge
                       itemId={pid}
