@@ -278,7 +278,7 @@ export function RecipeCard({
                   qualityColor={item.qualityColor}
                   size="ingredient"
                 />
-                <AuctionPrice24hLine itemId={item.itemId} />
+                <AuctionPrice24hLine itemId={item.itemId} layout="stacked" />
               </Stack>
             ))}
             <ItemBadge

@@ -80,7 +80,8 @@ function compute_tracked_liquidity_benchmark(PDO $db, string $window): array
  */
 function liquidity_tier_for_trade_count(int $tradeCount, bool $isTracked, array $benchmark): array
 {
-    if (!$isTracked || $tradeCount <= 0) {
+    // Tier по объёму сделок; «не в глобальном отслеживании» — только в isTracked для UI/tooltip.
+    if ($tradeCount <= 0) {
         return ['tier' => 'invalid', 'ratioToMedian' => null];
     }
 

@@ -1,4 +1,4 @@
-import { ActionIcon, Group, Text } from '@mantine/core'
+import { ActionIcon, Box, Group, Stack, Text } from '@mantine/core'
 import { useState } from 'react'
 import { AuctionLiquidityBadge } from '../auction-liquidity-badge/AuctionLiquidityBadge'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
@@ -7,11 +7,15 @@ import { useAuctionBlacklistStore } from '../../shared/store/auctionBlacklistSto
 import { useAuctionHistoryItemModalStore } from '../../shared/store/auctionHistoryItemModalStore'
 import { getBackendApiBaseUrl } from '../../shared/config/backendApi'
 
+const ICON_SIZE = 26
+
 type AuctionPrice24hLineProps = {
   itemId: string
   size?: 'xs' | 'sm'
   showNoCacheHint?: boolean
   hideWhenNoData?: boolean
+  /** В узких карточках ингредиентов бейдж ликвидности — под строкой «Выкупы» */
+  layout?: 'inline' | 'stacked'
 }
 
 export function AuctionPrice24hLine({
@@ -19,6 +23,7 @@ export function AuctionPrice24hLine({
   size = 'xs',
   showNoCacheHint = true,
   hideWhenNoData = false,
+  layout = 'inline',
 }: AuctionPrice24hLineProps) {
   const stat = useAuctionPricesStore((s) => s.byItemId[itemId])
   const isBlacklisted = useAuctionBlacklistStore((s) => s.blacklist.has(itemId))
@@ -29,55 +34,92 @@ export function AuctionPrice24hLine({
     openHistoryModal(itemId)
   }
 
+  const showLiquidityBadge = Boolean(getBackendApiBaseUrl())
+  const badgeSize = size === 'sm' ? 'sm' : 'xs'
+
+  const historyIcon = (
+    <ActionIcon
+      size={ICON_SIZE}
+      radius="md"
+      variant={isHovered ? 'filled' : 'light'}
+      color={isHovered ? 'blue' : 'gray'}
+      aria-label="Открыть историю аукциона"
+      title="Открыть историю аукциона"
+      onClick={openByTextOrIcon}
+      style={{
+        flexShrink: 0,
+        backgroundColor: isHovered ? undefined : 'rgba(255,255,255,0.10)',
+        transition: 'background-color 140ms ease, color 140ms ease, transform 140ms ease',
+      }}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M4 17L9.5 11.5L13 15L20 8"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M17 8H20V11"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </ActionIcon>
+  )
+
+  const buyoutText = (content: string) => (
+    <Text
+      size={size}
+      c={isHovered ? 'gray.3' : 'dimmed'}
+      lh={1.35}
+      onClick={openByTextOrIcon}
+      style={{ cursor: 'pointer', transition: 'color 120ms ease', minWidth: 0 }}
+      title="Открыть историю аукциона"
+    >
+      {content}
+    </Text>
+  )
+
+  const liquidityBadge = showLiquidityBadge ? (
+    <AuctionLiquidityBadge itemId={itemId} size={badgeSize} />
+  ) : null
+
   const line = (content: string) => (
     <Group
       gap={6}
       wrap="nowrap"
-      align="center"
+      align={layout === 'stacked' ? 'flex-start' : 'center'}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <ActionIcon
-        size={26}
-        radius="md"
-        variant={isHovered ? 'filled' : 'light'}
-        color={isHovered ? 'blue' : 'gray'}
-        aria-label="Открыть историю аукциона"
-        title="Открыть историю аукциона"
-        onClick={openByTextOrIcon}
-        style={{
-          backgroundColor: isHovered ? undefined : 'rgba(255,255,255,0.10)',
-          transition: 'background-color 140ms ease, color 140ms ease, transform 140ms ease',
-        }}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M4 17L9.5 11.5L13 15L20 8"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M17 8H20V11"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </ActionIcon>
-      <Text
-        size={size}
-        c={isHovered ? 'gray.3' : 'dimmed'}
-        lh={1.35}
-        onClick={openByTextOrIcon}
-        style={{ cursor: 'pointer', transition: 'color 120ms ease' }}
-        title="Открыть историю аукциона"
-      >
-        {content}
-      </Text>
-      {getBackendApiBaseUrl() ? <AuctionLiquidityBadge itemId={itemId} size={size === 'sm' ? 'sm' : 'xs'} /> : null}
+      {historyIcon}
+      {layout === 'stacked' ? (
+        <Stack gap={4} style={{ minWidth: 0, flex: 1 }}>
+          {buyoutText(content)}
+          {liquidityBadge}
+        </Stack>
+      ) : (
+        <>
+          {buyoutText(content)}
+          {liquidityBadge ? (
+            <Box
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                alignSelf: 'center',
+                height: ICON_SIZE,
+                flexShrink: 0,
+              }}
+            >
+              {liquidityBadge}
+            </Box>
+          ) : null}
+        </>
+      )}
     </Group>
   )
 

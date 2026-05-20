@@ -76,7 +76,7 @@ const IngredientCard = memo(function IngredientCard({
         qualityColor={item.qualityColor}
         size="result"
       />
-      <AuctionPrice24hLine itemId={item.itemId} size="sm" />
+      <AuctionPrice24hLine itemId={item.itemId} size="sm" layout="stacked" />
       <AdminAuctionTrackingButton itemId={item.itemId} itemName={item.name} />
       <Group wrap="nowrap" align="flex-end">
         <TextInput

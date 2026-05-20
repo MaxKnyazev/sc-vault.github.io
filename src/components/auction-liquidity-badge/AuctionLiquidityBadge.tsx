@@ -5,11 +5,18 @@ import {
   type AuctionLiquidityTier,
 } from '../../shared/constants/auctionLiquidityValidity'
 import {
-  auctionLiquidityShortLabel,
+  auctionLiquidityBadgeLabel,
   auctionLiquidityTooltip,
 } from '../../shared/lib/auctionLiquidityValidity'
 import { useAuctionLiquidityStore } from '../../shared/store/auctionLiquidityStore'
 import { getBackendApiBaseUrl } from '../../shared/config/backendApi'
+
+const BADGE_LABEL_STYLE = {
+  textTransform: 'none' as const,
+  lineHeight: 1.25,
+  whiteSpace: 'nowrap' as const,
+  letterSpacing: 0,
+}
 
 type AuctionLiquidityBadgeProps = {
   itemId: string
@@ -36,12 +43,20 @@ export function AuctionLiquidityBadge({ itemId, window = '12h', size = 'xs' }: A
     benchmark?.medianTradeCount ?? null,
     benchmark?.window ?? window,
     row.ratioToMedian,
+    row.isTracked,
   )
 
   return (
     <Tooltip label={label} multiline w={280} withArrow>
-      <Badge size={size} variant="light" color={AUCTION_LIQUIDITY_BADGE_COLOR[tier]} style={{ cursor: 'help' }}>
-        {auctionLiquidityShortLabel(tier)}
+      <Badge
+        size={size}
+        variant="light"
+        color={AUCTION_LIQUIDITY_BADGE_COLOR[tier]}
+        radius="sm"
+        styles={{ label: BADGE_LABEL_STYLE, root: { flexShrink: 0, overflow: 'visible' } }}
+        style={{ cursor: 'help' }}
+      >
+        {auctionLiquidityBadgeLabel(tier)}
       </Badge>
     </Tooltip>
   )
