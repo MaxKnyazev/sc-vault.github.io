@@ -8,6 +8,7 @@ body,
 html {
   overflow-y: scroll;
   scrollbar-gutter: stable;
+  color-scheme: dark;
 }
 
 body {
@@ -93,12 +94,6 @@ button {
   .energy-ingredient-card {
     max-width: none !important;
   }
-}
-
-[data-mantine-color-scheme="light"] {
-  --mantine-color-text: #434c5a;
-  --mantine-color-dimmed: #7b8493;
-  --mantine-color-default-border: #d8dee8;
 }
 
 @keyframes auction-deal-toast-enter {

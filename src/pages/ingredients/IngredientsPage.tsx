@@ -8,7 +8,6 @@ import {
   Stack,
   Text,
   TextInput,
-  useComputedColorScheme,
 } from '@mantine/core'
 import { memo, useEffect, useMemo, useState } from 'react'
 import { AuctionPrice24hLine } from '../../components/auction-price-24h/AuctionPrice24hLine'
@@ -134,7 +133,6 @@ const IngredientCard = memo(function IngredientCard({
 })
 
 export function IngredientsPage() {
-  const colorScheme = useComputedColorScheme('dark')
   const { recipes, itemsById, realm, isLoading, error, fetchRecipes } = useHideoutStore()
   const favoriteItemIds = useFavoritesStore((state) => state.favoriteItemIds)
   const user = useAuthStore((s) => s.user)
@@ -149,7 +147,7 @@ export function IngredientsPage() {
   const [draftEnergyPrice, setDraftEnergyPrice] = useState('')
   const [search, setSearch] = useState('')
   const [activeFilter, setActiveFilter] = useState<'all' | 'base' | 'favorites'>('all')
-  const energyIconSvg = createEnergyIconSvg(colorScheme === 'light' ? '#4b5563' : '#ffffff')
+  const energyIconSvg = createEnergyIconSvg('#ffffff')
 
   useEffect(() => {
     void fetchRecipes()

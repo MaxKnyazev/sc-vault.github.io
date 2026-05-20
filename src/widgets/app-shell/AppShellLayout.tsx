@@ -8,8 +8,6 @@ import {
   NavLink,
   Stack,
   Text,
-  useComputedColorScheme,
-  useMantineColorScheme,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { useEffect, useState } from 'react'
@@ -26,9 +24,6 @@ export function AppShellLayout() {
   const [opened, { toggle, close }] = useDisclosure()
   const [authOpened, authModalHandlers] = useDisclosure()
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
-  const { toggleColorScheme } = useMantineColorScheme()
-  const computedColorScheme = useComputedColorScheme('dark')
-  const isDark = computedColorScheme === 'dark'
   const location = useLocation()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
@@ -106,25 +101,14 @@ export function AppShellLayout() {
       padding="md"
       styles={{
         root: {
-          '--app-layout-bg': isDark ? '#0f1115' : '#ffffff',
+          '--app-layout-bg': '#0f1115',
           backgroundColor: 'var(--app-layout-bg)',
         },
       }}
     >
       <AppShell.Navbar p="md">
         <Stack gap="md" h="100%">
-          <Group justify="space-between" align="center" wrap="nowrap">
-            <Text fw={700}>SCTool</Text>
-            <ActionIcon
-              variant="default"
-              size="lg"
-              onClick={toggleColorScheme}
-              aria-label="Переключить тему"
-              title="Переключить тему"
-            >
-              {isDark ? '🌙' : '☀️'}
-            </ActionIcon>
-          </Group>
+          <Text fw={700}>SCTool</Text>
 
           <Stack gap={4}>
           <NavLink

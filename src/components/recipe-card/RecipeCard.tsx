@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Group, Stack, Text, TextInput, useComputedColorScheme } from '@mantine/core'
+import { ActionIcon, Button, Group, Stack, Text, TextInput } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import { AuctionPrice24hLine } from '../auction-price-24h/AuctionPrice24hLine'
 import { ItemBadge } from '../item-badge/ItemBadge'
@@ -74,7 +74,6 @@ export function RecipeCard({
   const user = useAuthStore((s) => s.user)
   const saveOneOverride = useRecipeOverridesStore((s) => s.saveOne)
   const overridesByRecipeId = useRecipeOverridesStore((s) => s.byRecipeId)
-  const colorScheme = useComputedColorScheme('dark')
   const primaryResultItemId = recipe.result[0]?.item
   const recipeId = recipeFavoriteId || getRecipeFavoriteId(recipe)
   const duplicateCraftTitle = getDuplicateCraftDisplayLabel(recipe)
@@ -83,7 +82,7 @@ export function RecipeCard({
   const [isEditingBonus, setIsEditingBonus] = useState(false)
   const [draftBonus, setDraftBonus] = useState('0')
   const [isSavingLocal, setIsSavingLocal] = useState(false)
-  const energyIconSvg = createEnergyIconSvg(colorScheme === 'light' ? '#4b5563' : '#ffffff')
+  const energyIconSvg = createEnergyIconSvg('#ffffff')
   const canEditOverride =
     showAdminOverrideControls &&
     user?.role === 'admin' &&
