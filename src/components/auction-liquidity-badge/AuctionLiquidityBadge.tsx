@@ -11,22 +11,32 @@ import {
 import { useAuctionLiquidityStore } from '../../shared/store/auctionLiquidityStore'
 import { getBackendApiBaseUrl } from '../../shared/config/backendApi'
 
-const BADGE_LABEL_STYLE = {
-  textTransform: 'none' as const,
-  lineHeight: 1.25,
-  whiteSpace: 'nowrap' as const,
-  letterSpacing: 0,
+const BADGE_STYLES = {
+  root: {
+    flexShrink: 0,
+    overflow: 'visible' as const,
+    paddingInline: 10,
+    minHeight: 24,
+    height: 'auto',
+  },
+  label: {
+    textTransform: 'none' as const,
+    lineHeight: 1.3,
+    whiteSpace: 'nowrap' as const,
+    letterSpacing: 0,
+    paddingTop: 2,
+    paddingBottom: 2,
+    fontSize: 11,
+  },
 }
 
 type AuctionLiquidityBadgeProps = {
   itemId: string
   window?: string
-  size?: 'xs' | 'sm'
 }
 
-export function AuctionLiquidityBadge({ itemId, window = '12h', size = 'xs' }: AuctionLiquidityBadgeProps) {
+export function AuctionLiquidityBadge({ itemId, window = '12h' }: AuctionLiquidityBadgeProps) {
   const row = useAuctionLiquidityStore((s) => s.byItemId[itemId])
-  const benchmark = useAuctionLiquidityStore((s) => s.benchmark)
   const ensureForItems = useAuctionLiquidityStore((s) => s.ensureForItems)
 
   useEffect(() => {
@@ -37,23 +47,24 @@ export function AuctionLiquidityBadge({ itemId, window = '12h', size = 'xs' }: A
   if (!getBackendApiBaseUrl() || !row) return null
 
   const tier = row.tier as AuctionLiquidityTier
-  const label = auctionLiquidityTooltip(
-    tier,
-    row.tradeCount,
-    benchmark?.medianTradeCount ?? null,
-    benchmark?.window ?? window,
-    row.ratioToMedian,
-    row.isTracked,
-  )
+  const label = auctionLiquidityTooltip(tier, row.tradeCount, window)
 
   return (
-    <Tooltip label={label} multiline w={280} withArrow>
+    <Tooltip
+      label={label}
+      multiline
+      w={220}
+      withArrow
+      color="dark"
+      position="top"
+      transitionProps={{ transition: 'fade', duration: 120 }}
+    >
       <Badge
-        size={size}
+        size="sm"
         variant="light"
         color={AUCTION_LIQUIDITY_BADGE_COLOR[tier]}
         radius="sm"
-        styles={{ label: BADGE_LABEL_STYLE, root: { flexShrink: 0, overflow: 'visible' } }}
+        styles={BADGE_STYLES}
         style={{ cursor: 'help' }}
       >
         {auctionLiquidityBadgeLabel(tier)}

@@ -8,6 +8,7 @@ import { useAuctionHistoryItemModalStore } from '../../shared/store/auctionHisto
 import { getBackendApiBaseUrl } from '../../shared/config/backendApi'
 
 const ICON_SIZE = 26
+const LIQUIDITY_BADGE_SLOT_HEIGHT = 28
 
 type AuctionPrice24hLineProps = {
   itemId: string
@@ -35,7 +36,6 @@ export function AuctionPrice24hLine({
   }
 
   const showLiquidityBadge = Boolean(getBackendApiBaseUrl())
-  const badgeSize = size === 'sm' ? 'sm' : 'xs'
 
   const historyIcon = (
     <ActionIcon
@@ -84,9 +84,7 @@ export function AuctionPrice24hLine({
     </Text>
   )
 
-  const liquidityBadge = showLiquidityBadge ? (
-    <AuctionLiquidityBadge itemId={itemId} size={badgeSize} />
-  ) : null
+  const liquidityBadge = showLiquidityBadge ? <AuctionLiquidityBadge itemId={itemId} /> : null
 
   const line = (content: string) => (
     <Group
@@ -111,7 +109,7 @@ export function AuctionPrice24hLine({
                 display: 'flex',
                 alignItems: 'center',
                 alignSelf: 'center',
-                height: ICON_SIZE,
+                height: LIQUIDITY_BADGE_SLOT_HEIGHT,
                 flexShrink: 0,
               }}
             >

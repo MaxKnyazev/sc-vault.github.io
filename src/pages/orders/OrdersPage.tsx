@@ -576,7 +576,7 @@ function OrderCard({
                                       showFavoriteButton={false}
                                     />
                                     {auctionUnitByItemId.has(row.itemId) ? (
-                                      <AuctionLiquidityBadge itemId={row.itemId} size="xs" />
+                                      <AuctionLiquidityBadge itemId={row.itemId} />
                                     ) : null}
                                   </Stack>
                                 </Table.Td>

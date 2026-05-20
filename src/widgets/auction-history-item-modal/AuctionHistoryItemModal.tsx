@@ -468,7 +468,7 @@ export function AuctionHistoryItemModal() {
                   size="result"
                   showFavoriteButton={false}
                 />
-                <AuctionLiquidityBadge itemId={itemId} size="sm" />
+                <AuctionLiquidityBadge itemId={itemId} />
               </Stack>
             </Box>
             <ActionIcon
