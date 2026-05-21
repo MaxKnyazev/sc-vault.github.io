@@ -73,8 +73,46 @@ body::before {
 }
 
 .page-container {
-  max-width: 1440px;
+  width: 100%;
+  max-width: min(1680px, 100%);
   margin-inline: auto;
+  padding-inline: 0;
+}
+
+.app-shell .mantine-AppShell-main {
+  --app-shell-main-px: 10px;
+  --app-shell-main-py: 10px;
+}
+
+.app-shell-navbar {
+  transition: width 200ms ease;
+}
+
+.app-shell--nav-collapsed .app-shell-navbar {
+  align-items: center;
+}
+
+.app-brand--compact {
+  font-size: 1rem !important;
+  letter-spacing: 0.04em;
+  background: none !important;
+  -webkit-text-fill-color: #e8ecf4 !important;
+  color: #e8ecf4 !important;
+}
+
+.app-user-panel--compact {
+  padding: 8px 4px !important;
+  align-items: center;
+}
+
+.app-nav-link .mantine-NavLink-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-shell--nav-collapsed .app-nav-link:hover {
+  transform: none;
 }
 
 .surface-card {

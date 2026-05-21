@@ -7,7 +7,7 @@ type PageContainerProps = PropsWithChildren<{
 
 export function PageContainer({ children }: PageContainerProps) {
   return (
-    <Container fluid px="md" py="sm" className="page-container">
+    <Container fluid px={0} py={0} className="page-container">
       <div className="page-enter">{children}</div>
     </Container>
   )
