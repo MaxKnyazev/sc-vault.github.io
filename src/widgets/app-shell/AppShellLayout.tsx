@@ -198,33 +198,34 @@ export function AppShellLayout() {
   return (
     <AppShell
       className={desktopCollapsed ? 'app-shell app-shell--nav-collapsed' : 'app-shell'}
-      navbar={{ width: navbarWidth, breakpoint: 'sm', collapsed: { mobile: !opened } }}
+      navbar={{
+        width: navbarWidth,
+        breakpoint: 'sm',
+        collapsed: { mobile: !opened, desktop: false },
+      }}
       padding={{ base: 0, sm: 'xs' }}
-      transitionDuration={200}
-      transitionTimingFunction="ease"
+      transitionDuration={280}
+      transitionTimingFunction="cubic-bezier(0.22, 1, 0.36, 1)"
       styles={{
         root: {
           '--app-layout-bg': 'var(--sc-bg)',
           backgroundColor: 'var(--app-layout-bg)',
         },
-        main: {
-          paddingLeft: 'var(--app-shell-main-px, 10px)',
-          paddingRight: 'var(--app-shell-main-px, 10px)',
-          paddingTop: 'var(--app-shell-main-py, 10px)',
-          paddingBottom: 'var(--app-shell-main-py, 10px)',
-        },
       }}
     >
       <AppShell.Navbar p={desktopCollapsed ? 'sm' : 'md'} className="app-shell-navbar">
         <Stack gap="md" h="100%">
-          <Group justify={desktopCollapsed ? 'center' : 'space-between'} wrap="nowrap">
-            {desktopCollapsed ? (
-              <Text className="app-brand app-brand--compact" fw={800}>
-                SC
-              </Text>
-            ) : (
-              <Text className="app-brand">SCTool</Text>
-            )}
+          <Group
+            justify={desktopCollapsed ? 'center' : 'space-between'}
+            wrap="nowrap"
+            className="app-shell-navbar__header"
+          >
+            <Text className="app-brand app-brand--full" fw={800}>
+              SCTool
+            </Text>
+            <Text className="app-brand app-brand--compact" fw={800}>
+              SC
+            </Text>
             {isDesktop ? (
               <ActionIcon
                 variant="subtle"
