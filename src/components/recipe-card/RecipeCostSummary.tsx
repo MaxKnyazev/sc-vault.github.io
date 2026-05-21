@@ -25,7 +25,13 @@ export function RecipeCostSummary({ buyCraftLine, hybridLine, onOpenCostTree }: 
     <Stack gap={8} className="recipe-cost-summary">
       <Group gap={8} wrap="nowrap" align="stretch" grow preventGrowOverflow={false}>
         <Box className="recipe-cost-pill">
-          <Badge size="xs" variant="light" color="gray" radius="sm">
+          <Badge
+            size="sm"
+            variant="light"
+            color="gray"
+            radius="sm"
+            classNames={{ label: 'recipe-cost-pill__badge-label' }}
+          >
             Скуп / крафт
           </Badge>
           <Text size="sm" fw={600} mt={6} lh={1.35} className="recipe-cost-pill__value">
@@ -33,7 +39,13 @@ export function RecipeCostSummary({ buyCraftLine, hybridLine, onOpenCostTree }: 
           </Text>
         </Box>
         <Box className="recipe-cost-pill recipe-cost-pill--hybrid">
-          <Badge size="xs" variant="light" color="blue" radius="sm">
+          <Badge
+            size="sm"
+            variant="light"
+            color="blue"
+            radius="sm"
+            classNames={{ label: 'recipe-cost-pill__badge-label' }}
+          >
             Гибрид
           </Badge>
           <Text size="sm" fw={600} mt={6} lh={1.35} className="recipe-cost-pill__value">

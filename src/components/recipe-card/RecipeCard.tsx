@@ -1,5 +1,5 @@
-import { ActionIcon, Box, Button, Group, Stack, Text, TextInput, UnstyledButton } from '@mantine/core'
-import { useEffect, useState } from 'react'
+import { ActionIcon, Box, Button, Group, Stack, Text, TextInput } from '@mantine/core'
+import { useEffect, useMemo, useState } from 'react'
 import { AuctionPrice24hLine } from '../auction-price-24h/AuctionPrice24hLine'
 import { ItemBadge } from '../item-badge/ItemBadge'
 import type { HideoutRecipe } from '../../entities/hideout/types'
@@ -35,10 +35,9 @@ type RecipeCardProps = {
   showCraftToggle?: boolean
   defaultCraftOpen?: boolean
   showAdminOverrideControls?: boolean
-  /** Себестоимость по скупу и крафту (без аукциона как отдельной строки). */
   costBuyCraft?: string
-  /** Гибридная себестоимость. */
   costHybrid?: string
+  usedInRecipes?: HideoutRecipe[]
   onOpenCostTree?: (itemId: string) => void
 }
 
@@ -69,6 +68,7 @@ export function RecipeCard({
   showAdminOverrideControls = false,
   costBuyCraft,
   costHybrid,
+  usedInRecipes = [],
   onOpenCostTree,
 }: RecipeCardProps) {
   const { isFavoriteCraft, toggleFavoriteCraft } = useFavoritesStore()
@@ -79,6 +79,7 @@ export function RecipeCard({
   const recipeId = recipeFavoriteId || getRecipeFavoriteId(recipe)
   const duplicateCraftTitle = getDuplicateCraftDisplayLabel(recipe)
   const [isCraftOpen, setIsCraftOpen] = useState(defaultCraftOpen)
+  const [showUsedIn, setShowUsedIn] = useState(false)
   const [isEditingBonus, setIsEditingBonus] = useState(false)
   const [draftBonus, setDraftBonus] = useState('0')
   const [isSavingLocal, setIsSavingLocal] = useState(false)
@@ -96,6 +97,7 @@ export function RecipeCard({
   const currentBonus = activeOverride?.bonusAmount ?? 0
   const craftPartsCount = recipe.ingredients.length + (recipe.energy > 0 ? 1 : 0)
   const showCostSummary = Boolean(costBuyCraft && costHybrid && primaryResultItemId && !hideResultSection)
+  const usedInCount = usedInRecipes.length
 
   useEffect(() => {
     setDraftBonus(String(currentBonus))
@@ -103,68 +105,104 @@ export function RecipeCard({
     setIsSavingLocal(false)
   }, [currentBonus, recipeId])
 
-  const resultItems = recipe.result.map((entry) => {
-    const view = getItemPresentation(entry.item, itemsById, realm)
-    return { ...entry, ...view }
-  })
+  const resultItems = useMemo(
+    () =>
+      recipe.result.map((entry) => {
+        const view = getItemPresentation(entry.item, itemsById, realm)
+        return { ...entry, ...view }
+      }),
+    [recipe.result, itemsById, realm],
+  )
 
-  const ingredientItems = recipe.ingredients.map((entry) => {
-    const view = getItemPresentation(entry.item, itemsById, realm)
-    return { ...entry, ...view }
-  })
+  const ingredientItems = useMemo(
+    () =>
+      recipe.ingredients.map((entry) => {
+        const view = getItemPresentation(entry.item, itemsById, realm)
+        return { ...entry, ...view }
+      }),
+    [recipe.ingredients, itemsById, realm],
+  )
+
+  const ingredientsBlock = (
+    <Stack gap="xs" className="recipe-card__ingredients">
+      {ingredientItems.map((item) => (
+        <Stack key={`ingredient-${item.item}`} gap={4}>
+          <ItemBadge
+            itemId={item.itemId}
+            showFavoriteButton={false}
+            name={item.name}
+            iconUrl={item.iconUrl}
+            amount={item.amount}
+            qualityColor={item.qualityColor}
+            size="ingredient"
+          />
+          <AuctionPrice24hLine itemId={item.itemId} layout="stacked" />
+        </Stack>
+      ))}
+      {recipe.energy > 0 ? (
+        <ItemBadge
+          name="Энергия"
+          amount={recipe.energy}
+          iconUrl={energyIconSvg}
+          qualityColor="DEFAULT"
+          size="ingredient"
+          disableGlow
+        />
+      ) : null}
+    </Stack>
+  )
 
   return (
     <Stack
       gap="sm"
       p="md"
       className={`surface-card recipe-card${isSkillInsufficient ? ' recipe-card--warning' : ''}`}
-      style={{ position: 'relative' }}
     >
-      {isSkillInsufficient ? (
-        <Text size="xs" fw={700} className="recipe-card__skill-warn">
-          Недостаточный уровень навыка
-        </Text>
-      ) : null}
-      {recipeFavoriteId && primaryResultItemId ? (
-        <ActionIcon
-          size={36}
-          variant="subtle"
-          color={isFavoriteCraft(recipeFavoriteId) ? 'yellow' : 'gray'}
-          onClick={(event) => {
-            event.stopPropagation()
-            toggleFavoriteCraft(recipeFavoriteId)
-          }}
-          className="recipe-card__favorite"
-          aria-label="Добавить крафт в избранное"
-        >
-          {isFavoriteCraft(recipeFavoriteId) ? '★' : '☆'}
-        </ActionIcon>
-      ) : null}
-
-      {!hideRecipeTitle ? (
-        <Stack gap={4} pr={recipeFavoriteId ? 36 : 0} style={{ minWidth: 0 }}>
-          {duplicateCraftTitle ? (
-            <Text size="md" fw={700} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
-              {duplicateCraftTitle}
-            </Text>
-          ) : null}
-          <Text
-            size="sm"
-            fw={600}
-            c={duplicateCraftTitle ? 'dimmed' : undefined}
-            style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
-          >
-            {getLocalizedLine(recipe.category.lines)}
-            {recipe.subcategory?.lines ? ` / ${getLocalizedLine(recipe.subcategory.lines)}` : ''}
+      <Box className="recipe-card__main">
+        {isSkillInsufficient ? (
+          <Text size="xs" fw={700} className="recipe-card__skill-warn">
+            Недостаточный уровень навыка
           </Text>
-        </Stack>
-      ) : null}
+        ) : null}
+        {recipeFavoriteId && primaryResultItemId ? (
+          <ActionIcon
+            size={36}
+            variant="subtle"
+            color={isFavoriteCraft(recipeFavoriteId) ? 'yellow' : 'gray'}
+            onClick={(event) => {
+              event.stopPropagation()
+              toggleFavoriteCraft(recipeFavoriteId)
+            }}
+            className="recipe-card__favorite"
+            aria-label="Добавить крафт в избранное"
+          >
+            {isFavoriteCraft(recipeFavoriteId) ? '★' : '☆'}
+          </ActionIcon>
+        ) : null}
 
-      {!hideResultSection ? (
-        <Stack gap="sm" className="recipe-card__result-block">
-          {resultItems.map((item) => (
-            <Group key={`result-${item.item}`} align="flex-start" wrap="nowrap" gap="sm">
-              <Box style={{ flex: 1, minWidth: 0 }}>
+        {!hideRecipeTitle ? (
+          <Stack gap={4} pr={recipeFavoriteId ? 36 : 0} style={{ minWidth: 0 }}>
+            {duplicateCraftTitle ? (
+              <Text size="md" fw={700} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                {duplicateCraftTitle}
+              </Text>
+            ) : null}
+            <Text
+              size="sm"
+              fw={600}
+              c={duplicateCraftTitle ? 'dimmed' : undefined}
+              style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
+            >
+              {getLocalizedLine(recipe.category.lines)}
+              {recipe.subcategory?.lines ? ` / ${getLocalizedLine(recipe.subcategory.lines)}` : ''}
+            </Text>
+          </Stack>
+        ) : null}
+
+        {!hideResultSection ? (
+          <Stack gap="sm" className="recipe-card__result-block" mt={hideRecipeTitle ? 0 : 'xs'}>
+            {resultItems.map((item) => (
+              <Stack key={`result-${item.item}`} gap={6}>
                 <ItemBadge
                   itemId={item.itemId}
                   showFavoriteButton={false}
@@ -174,179 +212,167 @@ export function RecipeCard({
                   qualityColor={item.qualityColor}
                   size="result"
                 />
-              </Box>
-              {user?.role === 'admin' ? (
-                <AdminAuctionTrackingButton itemId={item.itemId} itemName={item.name} />
-              ) : null}
-            </Group>
-          ))}
-
-          {showCostSummary ? (
-            <RecipeCostSummary
-              buyCraftLine={costBuyCraft!}
-              hybridLine={costHybrid!}
-              onOpenCostTree={
-                onOpenCostTree && primaryResultItemId
-                  ? () => onOpenCostTree(primaryResultItemId)
-                  : undefined
-              }
-            />
-          ) : null}
-        </Stack>
-      ) : showResultTextOnly ? (
-        <Stack gap={4}>
-          {resultItems.map((item) => (
-            <Text key={`result-text-${item.item}`} size="sm" fw={600}>
-              {item.name} x{item.amount}
-            </Text>
-          ))}
-        </Stack>
-      ) : null}
-
-      {showCraftToggle ? (
-        <UnstyledButton
-          className="recipe-card__section-toggle"
-          onClick={() => setIsCraftOpen((prev) => !prev)}
-          aria-expanded={isCraftOpen}
-        >
-          <Group gap={6} wrap="nowrap">
-            <Text
-              size="xs"
-              c="dimmed"
-              style={{
-                transform: isCraftOpen ? 'rotate(90deg)' : 'none',
-                transition: 'transform 160ms ease',
-                lineHeight: 1,
-              }}
-              aria-hidden
-            >
-              ›
-            </Text>
-            <Text size="sm" fw={600}>
-              {isCraftOpen ? 'Скрыть состав' : 'Состав крафта'}
-            </Text>
-            <Text size="xs" c="dimmed">
-              ({craftPartsCount})
-            </Text>
-          </Group>
-        </UnstyledButton>
-      ) : null}
-
-      {showCraftToggle ? (
-        isCraftOpen ? (
-          <Stack gap="xs" className="recipe-card__ingredients">
-            {ingredientItems.map((item) => (
-              <Stack key={`ingredient-${item.item}`} gap={4}>
-                <ItemBadge
-                  itemId={item.itemId}
-                  showFavoriteButton={false}
-                  name={item.name}
-                  iconUrl={item.iconUrl}
-                  amount={item.amount}
-                  qualityColor={item.qualityColor}
-                  size="ingredient"
-                />
-                <AuctionPrice24hLine itemId={item.itemId} layout="stacked" />
+                <AuctionPrice24hLine itemId={item.itemId} />
+                <Box className="recipe-card__admin-track">
+                  <AdminAuctionTrackingButton itemId={item.itemId} itemName={item.name} />
+                </Box>
               </Stack>
             ))}
-            {recipe.energy > 0 ? (
-              <ItemBadge
-                name="Энергия"
-                amount={recipe.energy}
-                iconUrl={energyIconSvg}
-                qualityColor="DEFAULT"
-                size="ingredient"
-                disableGlow
+
+            {showCostSummary ? (
+              <RecipeCostSummary
+                buyCraftLine={costBuyCraft!}
+                hybridLine={costHybrid!}
+                onOpenCostTree={
+                  onOpenCostTree && primaryResultItemId
+                    ? () => onOpenCostTree(primaryResultItemId)
+                    : undefined
+                }
               />
             ) : null}
           </Stack>
-        ) : null
-      ) : (
-        <Stack gap="xs" className="recipe-card__ingredients">
-          {ingredientItems.map((item) => (
-            <Stack key={`ingredient-${item.item}`} gap={4}>
-              <ItemBadge
-                itemId={item.itemId}
-                showFavoriteButton={false}
-                name={item.name}
-                iconUrl={item.iconUrl}
-                amount={item.amount}
-                qualityColor={item.qualityColor}
-                size="ingredient"
-              />
-              <AuctionPrice24hLine itemId={item.itemId} layout="stacked" />
-            </Stack>
-          ))}
-          {recipe.energy > 0 ? (
-            <ItemBadge
-              name="Энергия"
-              amount={recipe.energy}
-              iconUrl={energyIconSvg}
-              qualityColor="DEFAULT"
-              size="ingredient"
-              disableGlow
-            />
-          ) : null}
-        </Stack>
-      )}
+        ) : showResultTextOnly ? (
+          <Stack gap={4}>
+            {resultItems.map((item) => (
+              <Text key={`result-text-${item.item}`} size="sm" fw={600}>
+                {item.name} x{item.amount}
+              </Text>
+            ))}
+          </Stack>
+        ) : null}
+      </Box>
 
-      {canEditOverride ? (
-        <Stack gap={6} className="recipe-card__admin-bonus">
-          <Text size="sm" fw={600}>
-            Бонусный крафт
-          </Text>
-          <Group wrap="nowrap" align="flex-end">
-            <TextInput
-              value={draftBonus}
-              onChange={(event) => {
-                const raw = event.currentTarget.value.replace(',', '.')
-                const sanitized = raw
-                  .replace(/[^\d.]/g, '')
-                  .replace(/^(\d*\.\d*).*$/, '$1')
-                setDraftBonus(sanitized)
-              }}
-              disabled={!isEditingBonus || isSavingLocal}
-              style={{ flex: 1 }}
-            />
+      <Box className="recipe-card__footer">
+        {showCraftToggle ? (
+          <Stack gap={6}>
             <Button
-              style={{ minWidth: 168, height: 36 }}
               variant="default"
               color="gray"
-              loading={isSavingLocal}
-              onClick={async () => {
-                if (!isEditingBonus) {
-                  setIsEditingBonus(true)
-                  return
-                }
-                if (!primaryResultItemId) return
-                const parsedBonus = Number.parseFloat(draftBonus.replace(',', '.'))
-                const safeBonus =
-                  Number.isFinite(parsedBonus) && parsedBonus >= 0 ? Number(parsedBonus.toFixed(3)) : 0
-                setIsSavingLocal(true)
-                try {
-                  await saveOneOverride({
-                    recipeId,
-                    resultItemId: primaryResultItemId,
-                    baseAmount: null,
-                    bonusAmount: safeBonus,
-                  })
-                  setIsEditingBonus(false)
-                } finally {
-                  setIsSavingLocal(false)
-                }
-              }}
+              size="xs"
+              fullWidth
+              onClick={() => setIsCraftOpen((prev) => !prev)}
+              aria-expanded={isCraftOpen}
             >
-              {isEditingBonus ? 'Сохранить' : 'Изменить бонус'}
+              {isCraftOpen ? `Скрыть состав крафта (${craftPartsCount})` : `Состав крафта (${craftPartsCount})`}
             </Button>
-          </Group>
-          <Text size="xs" c="dimmed">
-            Дефолтное значение: 0, текущий бонус: {currentBonus}
-            {requiredSkill
-              ? ` · Требуется: ${requiredSkill.level}, ваш уровень: ${userSkillLevel}`
-              : ''}
-          </Text>
-        </Stack>
-      ) : null}
+            {isCraftOpen ? ingredientsBlock : null}
+            {usedInCount > 0 ? (
+              <Button
+                variant="default"
+                color="gray"
+                size="xs"
+                fullWidth
+                onClick={() => setShowUsedIn((prev) => !prev)}
+                aria-expanded={showUsedIn}
+              >
+                {showUsedIn
+                  ? `Скрыть «Для чего используется» (${usedInCount})`
+                  : `Для чего используется (${usedInCount})`}
+              </Button>
+            ) : null}
+            {showUsedIn && usedInCount > 0 ? (
+              <Stack gap="xs" className="recipe-card__used-in-list">
+                {usedInRecipes.map((parentRecipe, index) => {
+                  const parentTitle = getDuplicateCraftDisplayLabel(parentRecipe)
+                  const categoryLine = getLocalizedLine(parentRecipe.category.lines)
+                  return (
+                    <Stack
+                      key={`used-in-${parentRecipe.bench}-${index}`}
+                      gap={6}
+                      p="sm"
+                      className="recipe-card__used-in-item"
+                    >
+                      <Text size="xs" fw={600} lh={1.35}>
+                        {parentTitle || categoryLine}
+                      </Text>
+                      {parentTitle ? (
+                        <Text size="xs" c="dimmed" lh={1.3}>
+                          {categoryLine}
+                        </Text>
+                      ) : null}
+                      {parentRecipe.result.map((entry) => {
+                        const view = getItemPresentation(entry.item, itemsById, realm)
+                        return (
+                          <ItemBadge
+                            key={`used-in-result-${entry.item}-${entry.amount}`}
+                            itemId={view.itemId}
+                            name={view.name}
+                            iconUrl={view.iconUrl}
+                            amount={entry.amount}
+                            qualityColor={view.qualityColor}
+                            size="ingredient"
+                            showFavoriteButton={false}
+                          />
+                        )
+                      })}
+                    </Stack>
+                  )
+                })}
+              </Stack>
+            ) : null}
+          </Stack>
+        ) : (
+          ingredientsBlock
+        )}
+
+        {canEditOverride ? (
+          <Stack gap={6} className="recipe-card__admin-bonus" mt="sm">
+            <Text size="sm" fw={600}>
+              Бонусный крафт
+            </Text>
+            <Group wrap="nowrap" align="flex-end">
+              <TextInput
+                value={draftBonus}
+                onChange={(event) => {
+                  const raw = event.currentTarget.value.replace(',', '.')
+                  const sanitized = raw
+                    .replace(/[^\d.]/g, '')
+                    .replace(/^(\d*\.\d*).*$/, '$1')
+                  setDraftBonus(sanitized)
+                }}
+                disabled={!isEditingBonus || isSavingLocal}
+                style={{ flex: 1 }}
+              />
+              <Button
+                style={{ minWidth: 168, height: 36 }}
+                variant="default"
+                color="gray"
+                loading={isSavingLocal}
+                onClick={async () => {
+                  if (!isEditingBonus) {
+                    setIsEditingBonus(true)
+                    return
+                  }
+                  if (!primaryResultItemId) return
+                  const parsedBonus = Number.parseFloat(draftBonus.replace(',', '.'))
+                  const safeBonus =
+                    Number.isFinite(parsedBonus) && parsedBonus >= 0 ? Number(parsedBonus.toFixed(3)) : 0
+                  setIsSavingLocal(true)
+                  try {
+                    await saveOneOverride({
+                      recipeId,
+                      resultItemId: primaryResultItemId,
+                      baseAmount: null,
+                      bonusAmount: safeBonus,
+                    })
+                    setIsEditingBonus(false)
+                  } finally {
+                    setIsSavingLocal(false)
+                  }
+                }}
+              >
+                {isEditingBonus ? 'Сохранить' : 'Изменить бонус'}
+              </Button>
+            </Group>
+            <Text size="xs" c="dimmed">
+              Дефолтное значение: 0, текущий бонус: {currentBonus}
+              {requiredSkill
+                ? ` · Требуется: ${requiredSkill.level}, ваш уровень: ${userSkillLevel}`
+                : ''}
+            </Text>
+          </Stack>
+        ) : null}
+      </Box>
     </Stack>
   )
 }

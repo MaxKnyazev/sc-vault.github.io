@@ -141,6 +141,18 @@ export function RecipesOverview() {
     [recipes, recipeOverridesById, craftBranchLevels],
   )
 
+  const usedInRecipesByItemId = useMemo(() => {
+    const map = new Map<string, HideoutRecipe[]>()
+    for (const parent of adjustedRecipes) {
+      for (const ing of parent.ingredients) {
+        const list = map.get(ing.item)
+        if (list) list.push(parent)
+        else map.set(ing.item, [parent])
+      }
+    }
+    return map
+  }, [adjustedRecipes])
+
   const allCategories = useMemo(() => {
     const set = new Set<CanonBranch>()
     for (const recipe of adjustedRecipes) {
@@ -626,7 +638,7 @@ export function RecipesOverview() {
                     </Group>
                   </Accordion.Control>
                   <Accordion.Panel>
-                    <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="sm">
+                    <SimpleGrid cols={{ base: 1, sm: 2, xl: 3 }} spacing="sm" className="recipe-cards-grid">
                       {categoryRecipes.map(({ recipe, recipeFavoriteId }, index) => {
                         const batchOut = recipeBatchOutputForPrimaryItem(recipe)
                         const primaryResultItemId = batchOut?.primaryItemId
@@ -825,17 +837,23 @@ export function RecipesOverview() {
                           return base
                         })()
                         return (
-                          <RecipeCard
-                            key={`${categoryName}-${recipe.bench}-${index}`}
-                            recipe={recipe}
-                            itemsById={itemsById}
-                            realm={realm}
-                            recipeFavoriteId={recipeFavoriteId}
-                            showAdminOverrideControls
-                            costBuyCraft={line1}
-                            costHybrid={line3}
-                            onOpenCostTree={setCostTreeItemId}
-                          />
+                          <Box key={`${categoryName}-${recipe.bench}-${index}`} className="recipe-card-grid-cell">
+                            <RecipeCard
+                              recipe={recipe}
+                              itemsById={itemsById}
+                              realm={realm}
+                              recipeFavoriteId={recipeFavoriteId}
+                              showAdminOverrideControls
+                              costBuyCraft={line1}
+                              costHybrid={line3}
+                              usedInRecipes={
+                                primaryResultItemId
+                                  ? (usedInRecipesByItemId.get(primaryResultItemId) ?? [])
+                                  : []
+                              }
+                              onOpenCostTree={setCostTreeItemId}
+                            />
+                          </Box>
                         )
                       })}
                     </SimpleGrid>
