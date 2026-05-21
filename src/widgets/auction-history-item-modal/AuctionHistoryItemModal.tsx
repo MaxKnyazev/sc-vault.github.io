@@ -12,7 +12,7 @@ import { ItemBadge } from '../../components/item-badge/ItemBadge'
 import { AuctionLiquidityBadge } from '../../components/auction-liquidity-badge/AuctionLiquidityBadge'
 import { useHideoutStore } from '../../entities/hideout/store'
 import { buildItemIconUrl, getItemName } from '../../entities/item/lib'
-import { getQualityModalGlowBoxShadow } from '../../shared/lib/getQualityGlowColor'
+import { appModalStyles } from '../../shared/theme/appModalStyles'
 import {
   useAuctionHistoryItemModalStore,
   type AuctionHistoryModalView,
@@ -87,14 +87,6 @@ type ChartSeriesEntry = { point: AuctionHistoryPoint; x: number; y: number }
 type AuctionModalViewMode = AuctionHistoryModalView
 type ActiveLotsSortKey = 'name' | 'remaining' | 'amount' | 'startPrice' | 'buyoutPrice' | 'pricePerUnit'
 type ActiveLotsSortDirection = 'asc' | 'desc'
-
-function hexToRgba(hex: string, alpha: number): string {
-  const h = hex.replace('#', '')
-  const r = Number.parseInt(h.slice(0, 2), 16)
-  const g = Number.parseInt(h.slice(2, 4), 16)
-  const b = Number.parseInt(h.slice(4, 6), 16)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
-}
 
 function buildChartSeries(points: AuctionHistoryPoint[]): {
   series: ChartSeriesEntry[]
@@ -256,17 +248,6 @@ export function AuctionHistoryItemModal() {
   const selectedQualityGlowColor =
     showQualityFilter && effectiveQuality !== 'all' ? QUALITY_GLOW_BY_KEY[effectiveQuality] : undefined
   const badgeQualityColor = selectedQualityGlowColor ?? item?.color
-  const qualityForGlow = item?.color
-  const modalGlow = useMemo(() => {
-    if (selectedQualityGlowColor) {
-      return [
-        `0 0 0 1px ${hexToRgba(selectedQualityGlowColor, 0.45)}`,
-        `0 0 28px ${hexToRgba(selectedQualityGlowColor, 0.55)}`,
-        `0 0 56px ${hexToRgba(selectedQualityGlowColor, 0.28)}`,
-      ].join(', ')
-    }
-    return getQualityModalGlowBoxShadow(qualityForGlow)
-  }, [qualityForGlow, selectedQualityGlowColor])
   const latestPrice = useMemo(() => {
     const last = [...points].reverse().find((point) => point.avgPerUnit !== null)
     return last?.avgPerUnit ?? null
@@ -456,12 +437,8 @@ export function AuctionHistoryItemModal() {
       removeScrollProps={{
         removeScrollBar: false,
       }}
-      styles={{
-        content: {
-          boxShadow: modalGlow,
-          overflow: 'visible',
-        },
-      }}
+      styles={appModalStyles}
+      classNames={{ content: 'app-modal-content' }}
     >
       <Stack gap="sm">
         {itemId ? (

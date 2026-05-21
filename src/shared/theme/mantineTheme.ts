@@ -1,4 +1,5 @@
 import { createTheme } from '@mantine/core'
+import { appModalOverlayProps, appModalStyles } from './appModalStyles'
 
 export const appTheme = createTheme({
   fontFamily: 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
@@ -15,6 +16,8 @@ export const appTheme = createTheme({
         radius: 'md',
         centered: true,
         removeScrollProps: { removeScrollBar: false },
+        overlayProps: appModalOverlayProps,
+        styles: appModalStyles,
       },
     },
     Card: {

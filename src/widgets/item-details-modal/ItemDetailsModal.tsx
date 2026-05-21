@@ -8,8 +8,8 @@ import { AuctionPrice24hLine } from '../../components/auction-price-24h/AuctionP
 import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
 import { useItemDetailsModalStore } from '../../shared/store/itemDetailsModalStore'
 import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
-import { getQualityModalGlowBoxShadow } from '../../shared/lib/getQualityGlowColor'
 import { useRecipeOverridesStore } from '../../shared/store/recipeOverridesStore'
+import { appModalStyles } from '../../shared/theme/appModalStyles'
 import { applyRecipeResultOverride } from '../../shared/lib/applyRecipeResultOverride'
 import { useAuthStore } from '../../shared/store/authStore'
 
@@ -42,8 +42,6 @@ export function ItemDetailsModal() {
   }, [itemId, recipes])
 
   const iconUrl = item ? buildItemIconUrl(item.icon, realm) : undefined
-  const qualityForGlow = item?.color
-  const modalGlow = useMemo(() => getQualityModalGlowBoxShadow(qualityForGlow), [qualityForGlow])
 
   const closeModal = () => {
     setShowCrafts(false)
@@ -63,14 +61,10 @@ export function ItemDetailsModal() {
       removeScrollProps={{
         removeScrollBar: false,
       }}
-      styles={{
-        content: {
-          boxShadow: modalGlow,
-          overflow: 'visible',
-        },
-      }}
+      styles={appModalStyles}
+      classNames={{ content: 'app-modal-content' }}
     >
-      <ScrollArea.Autosize mah="calc(100vh - 140px)" className="item-details-modal-body">
+      <ScrollArea.Autosize mah="calc(100vh - 140px)" className="app-modal-body item-details-modal-body">
         <Stack gap="sm">
           {itemId ? (
             <>
@@ -178,8 +172,7 @@ export function ItemDetailsModal() {
                           key={`used-in-${recipe.bench}-${index}`}
                           gap={6}
                           p="md"
-                          bd="1px solid var(--mantine-color-default-border)"
-                          style={{ borderRadius: 8 }}
+                          className="app-modal-nested-panel"
                         >
                           <Text size="xs" c="dimmed">
                             Результат крафта

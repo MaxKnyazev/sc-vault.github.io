@@ -295,6 +295,27 @@ body::before {
   max-width: 320px;
 }
 
+/* Модалки — единая палитра с карточками страницы */
+.mantine-Modal-overlay {
+  background: rgba(5, 5, 7, 0.72) !important;
+}
+
+.app-modal-content,
+.mantine-Modal-content {
+  color: #e8ecf4;
+}
+
+.app-modal-body {
+  animation: sc-fade-in 220ms ease both;
+}
+
+.app-modal-nested-panel {
+  padding: 12px;
+  border-radius: var(--sc-radius-sm);
+  border: 1px solid var(--sc-border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .recipe-cost-pill--hybrid {
   border-color: rgba(59, 130, 246, 0.25);
   background: rgba(59, 130, 246, 0.06);

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { normalizeAuctionHybridSettings, type AuctionHybridSettings } from '../../shared/api/backendApi'
 import { useAuthStore } from '../../shared/store/authStore'
 import { AuctionHybridSettingsFormFields } from './AuctionHybridSettingsFormFields'
+import { appModalOverlayProps, appModalStyles } from '../../shared/theme/appModalStyles'
 
 type Props = {
   opened: boolean
@@ -43,7 +44,9 @@ export function AuctionHybridSettingsModal({ opened, onClose, onSaved }: Props) 
       title="Аукцион для себестоимости"
       size="md"
       centered
-      overlayProps={{ backgroundOpacity: 0.55, blur: 3 }}
+      overlayProps={appModalOverlayProps}
+      styles={appModalStyles}
+      classNames={{ content: 'app-modal-content' }}
     >
       <Stack gap="md">
         <Text size="sm" c="dimmed" lh={1.5}>

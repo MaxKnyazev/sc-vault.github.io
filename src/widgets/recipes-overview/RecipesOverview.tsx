@@ -35,6 +35,7 @@ import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 import { recipeBatchOutputForPrimaryItem } from '../../shared/lib/recipeBatchOutput'
 import { getDuplicateCraftDisplayLabel } from '../../shared/lib/craftDuplicateRecipeLabels'
 import { buildInsufficientCostMessage } from '../../shared/lib/recipeCostLineDisplay'
+import { appModalStyles } from '../../shared/theme/appModalStyles'
 import {
   auctionHybridSettingsKey,
   fetchBackendHybridAuctionPrices,
@@ -836,6 +837,8 @@ export function RecipesOverview() {
               title={costTreeItemId ? `Дерево крафтов: ${costTreeItemName}` : 'Дерево крафтов'}
               size="90%"
               centered
+              styles={appModalStyles}
+              classNames={{ content: 'app-modal-content' }}
               removeScrollProps={{
                 removeScrollBar: false,
               }}
