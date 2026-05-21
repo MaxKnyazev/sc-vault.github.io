@@ -138,7 +138,7 @@ export function AppShellLayout() {
   }, [close, location.pathname])
 
   useEffect(() => {
-    const routeTitleMap: Record<string, string> = {
+    const exact: Record<string, string> = {
       '/': 'Главная',
       '/crafts/orders': 'Заказы',
       '/ingredients': 'Ингредиенты',
@@ -146,18 +146,15 @@ export function AppShellLayout() {
       '/profile': 'Профиль',
       '/users': 'Пользователи',
     }
-
-    let pageTitle = routeTitleMap[location.pathname]
-    if (!pageTitle) {
-      if (location.pathname === '/crafts/orders') pageTitle = 'Заказы'
-      else if (location.pathname.startsWith('/crafts')) pageTitle = 'Крафты'
-      else if (location.pathname.startsWith('/ingredients')) pageTitle = 'Ингредиенты'
-      else if (location.pathname.startsWith('/auction-history')) pageTitle = 'Отслеживание аукциона'
-      else if (location.pathname.startsWith('/profile')) pageTitle = 'Профиль'
-      else if (location.pathname.startsWith('/users')) pageTitle = 'Пользователи'
-      else pageTitle = 'Главная'
-    }
-
+    const path = location.pathname
+    const pageTitle =
+      exact[path] ??
+      (path.startsWith('/crafts') ? 'Крафты' : null) ??
+      (path.startsWith('/ingredients') ? 'Ингредиенты' : null) ??
+      (path.startsWith('/auction-history') ? 'Отслеживание аукциона' : null) ??
+      (path.startsWith('/profile') ? 'Профиль' : null) ??
+      (path.startsWith('/users') ? 'Пользователи' : null) ??
+      'Главная'
     document.title = `SCTool - ${pageTitle}`
   }, [location.pathname])
 
@@ -215,30 +212,43 @@ export function AppShellLayout() {
     >
       <AppShell.Navbar p={desktopCollapsed ? 'sm' : 'md'} className="app-shell-navbar">
         <Stack gap="md" h="100%">
-          <Group
-            justify={desktopCollapsed ? 'center' : 'space-between'}
-            wrap="nowrap"
-            className="app-shell-navbar__header"
-          >
-            <Text className="app-brand app-brand--full" fw={800}>
-              SCTool
-            </Text>
-            <Text className="app-brand app-brand--compact" fw={800}>
-              SC
-            </Text>
-            {isDesktop ? (
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                size="lg"
-                onClick={toggleNavCollapsed}
-                aria-label={desktopCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
-                title={desktopCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
-              >
-                <NavIconCollapse collapsed={desktopCollapsed} />
-              </ActionIcon>
-            ) : null}
-          </Group>
+          <Box className="app-shell-navbar__header">
+            {isDesktop && desktopCollapsed ? (
+              <Stack gap={10} align="center" w="100%">
+                <Text className="app-brand app-brand--compact" fw={800}>
+                  SC
+                </Text>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="lg"
+                  onClick={toggleNavCollapsed}
+                  aria-label="Развернуть меню"
+                  title="Развернуть меню"
+                >
+                  <NavIconCollapse collapsed />
+                </ActionIcon>
+              </Stack>
+            ) : (
+              <Group justify="space-between" wrap="nowrap" w="100%">
+                <Text className="app-brand app-brand--full" fw={800}>
+                  SCTool
+                </Text>
+                {isDesktop ? (
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size="lg"
+                    onClick={toggleNavCollapsed}
+                    aria-label="Свернуть меню"
+                    title="Свернуть меню"
+                  >
+                    <NavIconCollapse collapsed={false} />
+                  </ActionIcon>
+                ) : null}
+              </Group>
+            )}
+          </Box>
 
           <Stack gap={4}>
             {navItems

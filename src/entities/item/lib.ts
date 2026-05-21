@@ -1,7 +1,7 @@
 import { appConfig, type Realm } from '../../shared/config/app'
 import type { ListingItem, ListingItemWithId } from './types'
 
-export function getItemIdFromDataPath(dataPath: string): string {
+function getItemIdFromDataPath(dataPath: string): string {
   const normalized = dataPath.replaceAll('\\', '/')
   const fileName = normalized.split('/').pop() ?? ''
   return fileName.replace('.json', '')

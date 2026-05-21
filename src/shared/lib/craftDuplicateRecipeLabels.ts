@@ -4,7 +4,7 @@ import { recipeBatchOutputForPrimaryItem } from './recipeBatchOutput'
 /**
  * Ключ устойчив к admin-override количества результата: bench + энергия + основной предмет + набор ингредиентов.
  */
-export function duplicateRecipeStructuralKey(recipe: HideoutRecipe): string | null {
+function duplicateRecipeStructuralKey(recipe: HideoutRecipe): string | null {
   const batch = recipeBatchOutputForPrimaryItem(recipe)
   if (!batch) return null
   const ing = [...recipe.ingredients]

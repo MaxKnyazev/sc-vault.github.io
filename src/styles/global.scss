@@ -95,43 +95,20 @@ body::before {
 }
 
 .app-shell-navbar__header {
-  position: relative;
   min-height: 32px;
 }
 
-.app-brand--full {
-  transition: opacity 200ms ease, transform 200ms ease;
-}
-
+.app-brand--full,
 .app-brand--compact {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 1rem;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   background: none !important;
   -webkit-text-fill-color: #e8ecf4 !important;
   color: #e8ecf4 !important;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 200ms ease;
 }
 
-.app-shell--nav-collapsed .app-brand--full {
-  opacity: 0;
-  transform: translateX(-6px);
-  pointer-events: none;
-  position: absolute;
-}
-
-.app-shell--nav-collapsed .app-brand--compact {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.app-shell:not(.app-shell--nav-collapsed) .app-brand--compact {
-  opacity: 0;
+.app-brand--compact {
+  font-size: 1rem;
+  letter-spacing: 0.04em;
 }
 
 .app-shell--nav-collapsed .app-shell-navbar {
@@ -140,14 +117,6 @@ body::before {
 
 .app-shell--nav-collapsed .app-shell-navbar__header {
   width: 100%;
-  justify-content: center;
-}
-
-.app-shell--nav-collapsed .app-shell-navbar__header .mantine-ActionIcon-root {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
 }
 
 .app-user-panel--compact {

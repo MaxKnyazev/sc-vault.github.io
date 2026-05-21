@@ -1,5 +1,5 @@
 /** Подписи редкости аукциона для UI/уведомлений (ключи API в нижнем регистре). */
-export const AUCTION_QUALITY_LABEL_RU: Record<string, string> = {
+const AUCTION_QUALITY_LABEL_RU: Record<string, string> = {
   all: 'Все',
   normal: 'Обычная',
   uncommon: 'Необычная',

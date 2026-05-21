@@ -6,14 +6,14 @@ import {
   getStalcraftAuctionRegion,
 } from '../config/stalcraftApi'
 
-export type AuctionHistoryPriceRow = {
+type AuctionHistoryPriceRow = {
   amount: number
   price: number
   time: string
   additional?: unknown
 }
 
-export type AuctionHistoryResponse = {
+type AuctionHistoryResponse = {
   prices?: AuctionHistoryPriceRow[]
 }
 
@@ -49,7 +49,7 @@ function buildAuctionHistoryUrl(itemId: string): URL {
   return new URL(path, origin)
 }
 
-export async function fetchAuctionHistoryPage(
+async function fetchAuctionHistoryPage(
   itemId: string,
   offset: number,
   signal?: AbortSignal,

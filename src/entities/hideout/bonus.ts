@@ -1,16 +1,6 @@
 import { hideoutBonusConfig } from '../../shared/config/hideout-bonus'
 import type { HideoutRecipe } from './types'
 
-export type CraftBonusCalc = {
-  playerLevel: number
-  requiredLevel: number
-  craftBoostFactor: number
-  bonusPercent: number
-  guaranteedBonusUnits: number
-  extraBonusChancePercent: number
-  expectedBonusUnits: number
-}
-
 export type MissingCraftBoostFactorReport = {
   totalRecipes: number
   craftedItemsWithoutExplicitFactor: string[]
@@ -30,35 +20,6 @@ function getRecipeRequiredLevel(recipe: HideoutRecipe): { perkId: string; requir
   )
 
   return { perkId, requiredLevel }
-}
-
-export function getCraftBoostFactor(perkId?: string): number {
-  if (!perkId) return hideoutBonusConfig.defaultCraftBoostFactor
-  return (
-    hideoutBonusConfig.craftBoostFactorByPerk[perkId] ?? hideoutBonusConfig.defaultCraftBoostFactor
-  )
-}
-
-export function calculateLevelBonus(recipe: HideoutRecipe): CraftBonusCalc {
-  const playerLevel = hideoutBonusConfig.level
-  const required = getRecipeRequiredLevel(recipe)
-  const requiredLevel = required?.requiredLevel ?? 0
-  const craftBoostFactor = getCraftBoostFactor(required?.perkId)
-  const rawBonusPercent = (playerLevel - requiredLevel) * craftBoostFactor
-  const bonusPercent = Math.max(0, rawBonusPercent)
-  const guaranteedBonusUnits = Math.floor(bonusPercent / 100)
-  const extraBonusChancePercent = bonusPercent % 100
-  const expectedBonusUnits = guaranteedBonusUnits + extraBonusChancePercent / 100
-
-  return {
-    playerLevel,
-    requiredLevel,
-    craftBoostFactor,
-    bonusPercent,
-    guaranteedBonusUnits,
-    extraBonusChancePercent,
-    expectedBonusUnits,
-  }
 }
 
 export function collectMissingCraftBoostFactors(

@@ -1,6 +1,6 @@
 import type { AuctionActiveLot } from '../api/backendApi'
 
-export function parseAuctionLotUtcDate(ts: string): Date | null {
+function parseAuctionLotUtcDate(ts: string): Date | null {
   const normalized = ts.includes('T') ? ts : `${ts.replace(' ', 'T')}Z`
   const d = new Date(normalized)
   if (Number.isNaN(d.getTime())) return null
