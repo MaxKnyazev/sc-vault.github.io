@@ -266,6 +266,16 @@ body::before {
   transform: translateY(-1px);
 }
 
+.hero-tile--static {
+  cursor: default;
+}
+
+.hero-tile--static:hover {
+  border-color: var(--sc-border);
+  background: rgba(255, 255, 255, 0.03);
+  transform: none;
+}
+
 .item-badge--clickable:hover .item-badge__icon {
   transform: scale(1.04);
   box-shadow: 0 0 16px 2px rgba(59, 130, 246, 0.25);
