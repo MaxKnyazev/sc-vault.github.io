@@ -1,5 +1,7 @@
-import { ActionIcon, Badge, Box, Button, Group, Stack, Text } from '@mantine/core'
+import { ActionIcon, Box, Button, Group, Stack, Text } from '@mantine/core'
 import { useState } from 'react'
+import { parseRecipeCostLineDisplay } from '../../shared/lib/recipeCostLineDisplay'
+import { RecipeCostPillValue } from './RecipeCostPillValue'
 
 type RecipeCostSummaryProps = {
   buyCraftLine: string
@@ -7,50 +9,30 @@ type RecipeCostSummaryProps = {
   onOpenCostTree?: () => void
 }
 
-/** Краткая подпись до первого « · » (цена ₽/шт). */
-function costPreview(line: string): string {
-  const sep = line.indexOf(' · ')
-  return sep === -1 ? line : line.slice(0, sep)
-}
-
 export function RecipeCostSummary({ buyCraftLine, hybridLine, onOpenCostTree }: RecipeCostSummaryProps) {
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const buyParsed = parseRecipeCostLineDisplay(buyCraftLine)
+  const hybridParsed = parseRecipeCostLineDisplay(hybridLine)
   const hasDetails =
-    buyCraftLine !== costPreview(buyCraftLine) ||
-    hybridLine !== costPreview(hybridLine) ||
-    buyCraftLine.length > 48 ||
-    hybridLine.length > 48
+    (!buyParsed.isInsufficient && buyCraftLine !== buyParsed.preview) ||
+    (!hybridParsed.isInsufficient && hybridLine !== hybridParsed.preview) ||
+    (!buyParsed.isInsufficient && buyCraftLine.length > 48) ||
+    (!hybridParsed.isInsufficient && hybridLine.length > 48)
 
   return (
     <Stack gap={8} className="recipe-cost-summary">
       <Group gap={8} wrap="nowrap" align="stretch" grow preventGrowOverflow={false}>
         <Box className="recipe-cost-pill">
-          <Badge
-            size="sm"
-            variant="light"
-            color="gray"
-            radius="sm"
-            classNames={{ label: 'recipe-cost-pill__badge-label' }}
-          >
+          <Text component="span" className="recipe-cost-pill__label">
             Скуп / крафт
-          </Badge>
-          <Text size="sm" fw={600} mt={6} lh={1.35} className="recipe-cost-pill__value">
-            {costPreview(buyCraftLine)}
           </Text>
+          <RecipeCostPillValue line={buyCraftLine} />
         </Box>
         <Box className="recipe-cost-pill recipe-cost-pill--hybrid">
-          <Badge
-            size="sm"
-            variant="light"
-            color="blue"
-            radius="sm"
-            classNames={{ label: 'recipe-cost-pill__badge-label' }}
-          >
+          <Text component="span" className="recipe-cost-pill__label recipe-cost-pill__label--hybrid">
             Гибрид
-          </Badge>
-          <Text size="sm" fw={600} mt={6} lh={1.35} className="recipe-cost-pill__value">
-            {costPreview(hybridLine)}
           </Text>
+          <RecipeCostPillValue line={hybridLine} />
         </Box>
       </Group>
 

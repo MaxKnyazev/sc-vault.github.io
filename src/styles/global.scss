@@ -250,12 +250,24 @@ body::before {
   background: rgba(255, 255, 255, 0.02);
 }
 
-.recipe-cost-pill__badge-label {
-  text-transform: none !important;
-  white-space: normal !important;
-  line-height: 1.25 !important;
-  font-size: 11px !important;
+.recipe-cost-pill__label {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: var(--sc-radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
   letter-spacing: 0.01em;
+  color: #e8ecf4;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--sc-border);
+  white-space: normal;
+  word-break: break-word;
+}
+
+.recipe-cost-pill__label--hybrid {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.28);
 }
 
 .recipe-cost-pill {
@@ -265,6 +277,15 @@ body::before {
   border-radius: var(--sc-radius-sm);
   border: 1px solid var(--sc-border);
   background: rgba(255, 255, 255, 0.03);
+  overflow: visible;
+}
+
+.recipe-cost-pill__value-row {
+  min-height: 24px;
+}
+
+.recipe-cost-pill__hint {
+  flex-shrink: 0;
 }
 
 .recipe-cost-pill--hybrid {
