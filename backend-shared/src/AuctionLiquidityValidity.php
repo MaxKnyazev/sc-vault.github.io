@@ -125,14 +125,13 @@ function get_auction_liquidity_validity_bulk(PDO $db, array $itemIds, string $wi
     }
     $ids = array_keys($normalized);
 
-    if (count($ids) > 0) {
-        ensure_auction_stats_for_items($db, $ids, $windowName);
-    }
+    // Только кэш auction_stats (cron); без ensure/recalculate — иначе таймаут и 400 на больших батчах.
     $stats = count($ids) > 0 ? get_auction_stats($db, $ids, $windowName) : [];
+    $trackedLookup = count($ids) > 0 ? global_tracked_item_id_lookup($db, $ids) : [];
 
     $items = [];
     foreach ($ids as $itemId) {
-        $isTracked = global_has_tracked_item($db, $itemId);
+        $isTracked = isset($trackedLookup[$itemId]);
         $row = $stats[$itemId] ?? null;
         $tradeCount = $row ? (int)$row['tradeCount'] : 0;
         $tierInfo = liquidity_tier_for_trade_count($tradeCount, $isTracked, $benchmark);

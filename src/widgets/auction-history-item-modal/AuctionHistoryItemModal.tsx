@@ -30,6 +30,8 @@ import {
 } from '../../shared/api/backendApi'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 import { isArtifactDataPath, isModuleCoreItem } from '../../shared/lib/itemKinds'
+import { getBackendApiBaseUrl } from '../../shared/config/backendApi'
+import { useAuctionLiquidityStore } from '../../shared/store/auctionLiquidityStore'
 
 const RANGE_OPTIONS: AuctionHistoryRange[] = ['30m', '1h', '12h', '24h', '7d', '30d', '90d']
 const QUALITY_OPTIONS: Array<{ value: AuctionHistoryQuality; label: string }> = [
@@ -212,6 +214,11 @@ export function AuctionHistoryItemModal() {
       setUpgrade(initialUpgradeFromStore ?? 'all')
     }
   }, [opened, itemId, initialViewFromStore, initialQualityFromStore, initialUpgradeFromStore])
+
+  useEffect(() => {
+    if (!opened || !itemId || !getBackendApiBaseUrl()) return
+    void useAuctionLiquidityStore.getState().ensureForItems([itemId])
+  }, [opened, itemId])
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [activeLotsSortKey, setActiveLotsSortKey] = useState<ActiveLotsSortKey>('buyoutPrice')
   const [activeLotsSortDirection, setActiveLotsSortDirection] = useState<ActiveLotsSortDirection>('asc')

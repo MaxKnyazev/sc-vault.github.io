@@ -380,8 +380,11 @@ if ($path === '/auction/liquidity-validity') {
     }
     try {
         $payload = get_auction_liquidity_validity_bulk($db, $ids, $windowRaw);
-    } catch (Throwable $e) {
+    } catch (InvalidArgumentException $e) {
         send_json(400, ['error' => $e->getMessage()]);
+        exit;
+    } catch (Throwable $e) {
+        send_json(500, ['error' => $e->getMessage()]);
         exit;
     }
     send_json(200, $payload);

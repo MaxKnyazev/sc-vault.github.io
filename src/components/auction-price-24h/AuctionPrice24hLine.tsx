@@ -1,8 +1,9 @@
 import { ActionIcon, Box, Group, Stack, Text } from '@mantine/core'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AuctionLiquidityBadge } from '../auction-liquidity-badge/AuctionLiquidityBadge'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 import { useAuctionPricesStore } from '../../shared/store/auctionPricesStore'
+import { useAuctionLiquidityStore } from '../../shared/store/auctionLiquidityStore'
 import { useAuctionBlacklistStore } from '../../shared/store/auctionBlacklistStore'
 import { useAuctionHistoryItemModalStore } from '../../shared/store/auctionHistoryItemModalStore'
 import { getBackendApiBaseUrl } from '../../shared/config/backendApi'
@@ -36,6 +37,11 @@ export function AuctionPrice24hLine({
   }
 
   const showLiquidityBadge = Boolean(getBackendApiBaseUrl())
+
+  useEffect(() => {
+    if (!showLiquidityBadge || !itemId) return
+    void useAuctionLiquidityStore.getState().ensureForItems([itemId])
+  }, [showLiquidityBadge, itemId])
 
   const historyIcon = (
     <ActionIcon

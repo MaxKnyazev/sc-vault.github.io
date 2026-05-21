@@ -44,6 +44,39 @@ function global_has_tracked_item(PDO $db, string $itemId): bool
     return (bool)$stmt->fetchColumn();
 }
 
+/**
+ * @param list<string> $itemIds
+ * @return array<string, true> item_id => true для глобально отслеживаемых
+ */
+function global_tracked_item_id_lookup(PDO $db, array $itemIds): array
+{
+    $normalized = [];
+    foreach ($itemIds as $itemId) {
+        $id = trim((string)$itemId);
+        if ($id !== '') {
+            $normalized[$id] = true;
+        }
+    }
+    $ids = array_keys($normalized);
+    if (count($ids) === 0) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = $db->prepare(
+        "SELECT item_id FROM auction_tracked_items WHERE item_id IN ($placeholders)",
+    );
+    $stmt->execute($ids);
+    $out = [];
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $id = trim((string)($row['item_id'] ?? ''));
+        if ($id !== '') {
+            $out[$id] = true;
+        }
+    }
+    return $out;
+}
+
 function user_has_tracked_item(PDO $db, int $userId, string $itemId): bool
 {
     $norm = trim($itemId);

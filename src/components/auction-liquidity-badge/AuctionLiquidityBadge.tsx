@@ -1,5 +1,4 @@
 import { Badge, Tooltip } from '@mantine/core'
-import { useEffect } from 'react'
 import {
   AUCTION_LIQUIDITY_BADGE_COLOR,
   type AuctionLiquidityTier,
@@ -37,12 +36,6 @@ type AuctionLiquidityBadgeProps = {
 
 export function AuctionLiquidityBadge({ itemId, window = '12h' }: AuctionLiquidityBadgeProps) {
   const row = useAuctionLiquidityStore((s) => s.byItemId[itemId])
-  const ensureForItems = useAuctionLiquidityStore((s) => s.ensureForItems)
-
-  useEffect(() => {
-    if (!getBackendApiBaseUrl() || !itemId) return
-    void ensureForItems([itemId], window)
-  }, [itemId, window, ensureForItems])
 
   if (!getBackendApiBaseUrl() || !row) return null
 
