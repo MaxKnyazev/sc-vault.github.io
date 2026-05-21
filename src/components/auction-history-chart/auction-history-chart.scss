@@ -1,0 +1,69 @@
+.auction-history-chart {
+  position: relative;
+  width: 100%;
+  padding: var(--mantine-spacing-xs);
+  border: 1px solid var(--sc-border, var(--mantine-color-default-border));
+  border-radius: var(--mantine-radius-md);
+  background: color-mix(in srgb, var(--sc-surface-elevated, var(--mantine-color-body)) 88%, transparent);
+
+  &__plot {
+    width: 100%;
+    height: 300px;
+    user-select: none;
+    touch-action: none;
+  }
+
+  &__footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: var(--mantine-spacing-xs);
+    gap: var(--mantine-spacing-sm);
+  }
+
+  &__empty {
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .recharts-cartesian-grid-horizontal line,
+  .recharts-cartesian-grid-vertical line {
+    stroke: color-mix(in srgb, var(--mantine-color-dimmed) 22%, transparent);
+  }
+
+  .recharts-cartesian-axis-tick-value {
+    fill: var(--mantine-color-dimmed);
+    font-size: 10px;
+  }
+
+  .recharts-tooltip-cursor {
+    stroke: color-mix(in srgb, #3b82f6 45%, transparent);
+    stroke-width: 1;
+    stroke-dasharray: 4 4;
+  }
+}
+
+.auction-history-chart-tooltip {
+  min-width: 200px;
+  max-width: 280px;
+  padding: 8px 10px;
+  border-radius: var(--mantine-radius-md);
+  border: 1px solid var(--sc-border, var(--mantine-color-default-border));
+  background: var(--sc-surface-elevated, var(--mantine-color-body));
+  box-shadow: var(--mantine-shadow-md);
+  pointer-events: none;
+
+  &__title {
+    font-size: var(--mantine-font-size-xs);
+    font-weight: 600;
+    color: var(--mantine-color-text);
+    margin-bottom: 4px;
+  }
+
+  &__row {
+    font-size: var(--mantine-font-size-xs);
+    color: var(--mantine-color-dimmed);
+    line-height: 1.45;
+  }
+}
