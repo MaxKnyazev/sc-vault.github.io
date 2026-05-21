@@ -159,6 +159,78 @@ body::before {
   border-color: var(--sc-border);
 }
 
+.recipe-card {
+  gap: 12px;
+}
+
+.recipe-card__favorite {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+}
+
+.recipe-card__skill-warn {
+  background: #4a1f1f;
+  color: #ffdede;
+  border-radius: 6px;
+  padding: 4px 8px;
+  align-self: flex-start;
+}
+
+.recipe-card__result-block {
+  padding-top: 2px;
+}
+
+.recipe-card__section-toggle {
+  display: block;
+  width: 100%;
+  padding: 6px 4px;
+  border-radius: var(--sc-radius-sm);
+  color: inherit;
+  transition: background 140ms ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+}
+
+.recipe-card__ingredients {
+  padding: 4px 2px 0;
+  border-top: 1px solid var(--sc-border);
+  margin-top: 4px;
+}
+
+.recipe-card__admin-bonus {
+  padding-top: 8px;
+  border-top: 1px solid var(--sc-border);
+}
+
+.recipe-cost-pill {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: var(--sc-radius-sm);
+  border: 1px solid var(--sc-border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.recipe-cost-pill--hybrid {
+  border-color: rgba(59, 130, 246, 0.25);
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.recipe-cost-pill__value {
+  word-break: break-word;
+}
+
+.recipe-cost-details {
+  padding: 10px 12px;
+  border-radius: var(--sc-radius-sm);
+  border: 1px dashed var(--sc-border);
+  background: rgba(0, 0, 0, 0.15);
+}
+
 .recipe-card--warning {
   border-color: rgba(239, 68, 68, 0.45) !important;
   box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.2), var(--sc-shadow-sm) !important;

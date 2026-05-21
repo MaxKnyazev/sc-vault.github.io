@@ -832,9 +832,8 @@ export function RecipesOverview() {
                             realm={realm}
                             recipeFavoriteId={recipeFavoriteId}
                             showAdminOverrideControls
-                            costLine1={line1}
-                            costLine2="Заглушка (будет реализовано далее)"
-                            costLine3={line3}
+                            costBuyCraft={line1}
+                            costHybrid={line3}
                             onOpenCostTree={setCostTreeItemId}
                           />
                         )

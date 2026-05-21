@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Group, Stack, Text, TextInput } from '@mantine/core'
+import { ActionIcon, Box, Button, Group, Stack, Text, TextInput, UnstyledButton } from '@mantine/core'
 import { useEffect, useState } from 'react'
 import { AuctionPrice24hLine } from '../auction-price-24h/AuctionPrice24hLine'
 import { ItemBadge } from '../item-badge/ItemBadge'
@@ -14,6 +14,7 @@ import { getRecipeFavoriteId } from '../../shared/lib/getRecipeFavoriteId'
 import { AdminAuctionTrackingButton } from '../admin-auction-ignore/AdminAuctionTrackingButton'
 import { getRecipeRequiredSkill, getUserSkillLevel } from '../../shared/lib/craftSkills'
 import { getDuplicateCraftDisplayLabel } from '../../shared/lib/craftDuplicateRecipeLabels'
+import { RecipeCostSummary } from './RecipeCostSummary'
 
 function createEnergyIconSvg(fillColor: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -34,9 +35,10 @@ type RecipeCardProps = {
   showCraftToggle?: boolean
   defaultCraftOpen?: boolean
   showAdminOverrideControls?: boolean
-  costLine1?: string
-  costLine2?: string
-  costLine3?: string
+  /** Себестоимость по скупу и крафту (без аукциона как отдельной строки). */
+  costBuyCraft?: string
+  /** Гибридная себестоимость. */
+  costHybrid?: string
   onOpenCostTree?: (itemId: string) => void
 }
 
@@ -65,9 +67,8 @@ export function RecipeCard({
   showCraftToggle = true,
   defaultCraftOpen = false,
   showAdminOverrideControls = false,
-  costLine1,
-  costLine2,
-  costLine3,
+  costBuyCraft,
+  costHybrid,
   onOpenCostTree,
 }: RecipeCardProps) {
   const { isFavoriteCraft, toggleFavoriteCraft } = useFavoritesStore()
@@ -78,7 +79,6 @@ export function RecipeCard({
   const recipeId = recipeFavoriteId || getRecipeFavoriteId(recipe)
   const duplicateCraftTitle = getDuplicateCraftDisplayLabel(recipe)
   const [isCraftOpen, setIsCraftOpen] = useState(defaultCraftOpen)
-  const [isCostTreeHovered, setIsCostTreeHovered] = useState(false)
   const [isEditingBonus, setIsEditingBonus] = useState(false)
   const [draftBonus, setDraftBonus] = useState('0')
   const [isSavingLocal, setIsSavingLocal] = useState(false)
@@ -94,6 +94,8 @@ export function RecipeCard({
   const isSkillInsufficient = requiredSkill ? userSkillLevel < requiredSkill.level : false
   const activeOverride = overridesByRecipeId[recipeId]
   const currentBonus = activeOverride?.bonusAmount ?? 0
+  const craftPartsCount = recipe.ingredients.length + (recipe.energy > 0 ? 1 : 0)
+  const showCostSummary = Boolean(costBuyCraft && costHybrid && primaryResultItemId && !hideResultSection)
 
   useEffect(() => {
     setDraftBonus(String(currentBonus))
@@ -119,17 +121,7 @@ export function RecipeCard({
       style={{ position: 'relative' }}
     >
       {isSkillInsufficient ? (
-        <Text
-          size="xs"
-          fw={700}
-          style={{
-            background: '#4a1f1f',
-            color: '#ffdede',
-            borderRadius: 6,
-            padding: '4px 8px',
-            alignSelf: 'flex-start',
-          }}
-        >
+        <Text size="xs" fw={700} className="recipe-card__skill-warn">
           Недостаточный уровень навыка
         </Text>
       ) : null}
@@ -142,7 +134,7 @@ export function RecipeCard({
             event.stopPropagation()
             toggleFavoriteCraft(recipeFavoriteId)
           }}
-          style={{ position: 'absolute', top: 6, right: 6, zIndex: 2 }}
+          className="recipe-card__favorite"
           aria-label="Добавить крафт в избранное"
         >
           {isFavoriteCraft(recipeFavoriteId) ? '★' : '☆'}
@@ -150,89 +142,55 @@ export function RecipeCard({
       ) : null}
 
       {!hideRecipeTitle ? (
-        <Group justify="space-between" align="flex-start" wrap="nowrap">
-          <Stack gap={4} style={{ minWidth: 0 }}>
-            {duplicateCraftTitle ? (
-              <Text size="md" fw={700} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                {duplicateCraftTitle}
-              </Text>
-            ) : null}
-            <Text size="sm" fw={600} c={duplicateCraftTitle ? 'dimmed' : undefined} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
-              {getLocalizedLine(recipe.category.lines)}
-              {recipe.subcategory?.lines ? ` / ${getLocalizedLine(recipe.subcategory.lines)}` : ''}
+        <Stack gap={4} pr={recipeFavoriteId ? 36 : 0} style={{ minWidth: 0 }}>
+          {duplicateCraftTitle ? (
+            <Text size="md" fw={700} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+              {duplicateCraftTitle}
             </Text>
-          </Stack>
-        </Group>
+          ) : null}
+          <Text
+            size="sm"
+            fw={600}
+            c={duplicateCraftTitle ? 'dimmed' : undefined}
+            style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
+          >
+            {getLocalizedLine(recipe.category.lines)}
+            {recipe.subcategory?.lines ? ` / ${getLocalizedLine(recipe.subcategory.lines)}` : ''}
+          </Text>
+        </Stack>
       ) : null}
 
       {!hideResultSection ? (
-        <Stack gap={6}>
-          <Text size="xs" c="dimmed">
-            Результат
-          </Text>
+        <Stack gap="sm" className="recipe-card__result-block">
           {resultItems.map((item) => (
-            <Stack key={`result-${item.item}`} gap={4}>
-              <ItemBadge
-                itemId={item.itemId}
-                showFavoriteButton={false}
-                name={item.name}
-                iconUrl={item.iconUrl}
-                amount={item.amount}
-                qualityColor={item.qualityColor}
-                size="result"
-              />
-              <AuctionPrice24hLine itemId={item.itemId} />
-              <AdminAuctionTrackingButton itemId={item.itemId} itemName={item.name} />
-            </Stack>
-          ))}
-          {primaryResultItemId ? (
-            <Group gap={8} wrap="nowrap" align="flex-start">
-              <ActionIcon
-                size={26}
-                radius="md"
-                variant={isCostTreeHovered ? 'filled' : 'light'}
-                color={isCostTreeHovered ? 'blue' : 'gray'}
-                aria-label="Открыть дерево крафтов"
-                title="Открыть дерево крафтов"
-                onClick={() => onOpenCostTree?.(primaryResultItemId)}
-                onMouseEnter={() => setIsCostTreeHovered(true)}
-                onMouseLeave={() => setIsCostTreeHovered(false)}
-                style={{
-                  backgroundColor: isCostTreeHovered ? undefined : 'rgba(255,255,255,0.10)',
-                  transition: 'background-color 140ms ease, color 140ms ease, transform 140ms ease',
-                  marginTop: 2,
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path
-                    d="M12 4V8M12 8L7 12M12 8L17 12M7 12V16M7 12L4 16M7 12L10 16M17 12V16M17 12L14 16M17 12L20 16"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <circle cx="12" cy="4" r="1.4" fill="currentColor" />
-                  <circle cx="12" cy="8" r="1.4" fill="currentColor" />
-                  <circle cx="7" cy="12" r="1.4" fill="currentColor" />
-                  <circle cx="17" cy="12" r="1.4" fill="currentColor" />
-                  <circle cx="4" cy="16" r="1.4" fill="currentColor" />
-                  <circle cx="10" cy="16" r="1.4" fill="currentColor" />
-                  <circle cx="14" cy="16" r="1.4" fill="currentColor" />
-                  <circle cx="20" cy="16" r="1.4" fill="currentColor" />
-                </svg>
-              </ActionIcon>
-              <Stack gap={2}>
-                <Text size="xs" c="dimmed">
-                  1) По цене скупа/крафта: {costLine1 ?? 'Недостаточно данных для расчета себестоимости'}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  2) По цене аукциона: {costLine2 ?? 'Заглушка (будет реализовано далее)'}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  3) Гибридный вариант: {costLine3 ?? 'Заглушка (будет реализовано далее)'}
-                </Text>
-              </Stack>
+            <Group key={`result-${item.item}`} align="flex-start" wrap="nowrap" gap="sm">
+              <Box style={{ flex: 1, minWidth: 0 }}>
+                <ItemBadge
+                  itemId={item.itemId}
+                  showFavoriteButton={false}
+                  name={item.name}
+                  iconUrl={item.iconUrl}
+                  amount={item.amount}
+                  qualityColor={item.qualityColor}
+                  size="result"
+                />
+              </Box>
+              {user?.role === 'admin' ? (
+                <AdminAuctionTrackingButton itemId={item.itemId} itemName={item.name} />
+              ) : null}
             </Group>
+          ))}
+
+          {showCostSummary ? (
+            <RecipeCostSummary
+              buyCraftLine={costBuyCraft!}
+              hybridLine={costHybrid!}
+              onOpenCostTree={
+                onOpenCostTree && primaryResultItemId
+                  ? () => onOpenCostTree(primaryResultItemId)
+                  : undefined
+              }
+            />
           ) : null}
         </Stack>
       ) : showResultTextOnly ? (
@@ -246,22 +204,37 @@ export function RecipeCard({
       ) : null}
 
       {showCraftToggle ? (
-        <Button
-          variant="default"
-          color="gray"
-          size="xs"
+        <UnstyledButton
+          className="recipe-card__section-toggle"
           onClick={() => setIsCraftOpen((prev) => !prev)}
+          aria-expanded={isCraftOpen}
         >
-          {isCraftOpen ? 'Скрыть крафт' : 'Показать крафт'}
-        </Button>
+          <Group gap={6} wrap="nowrap">
+            <Text
+              size="xs"
+              c="dimmed"
+              style={{
+                transform: isCraftOpen ? 'rotate(90deg)' : 'none',
+                transition: 'transform 160ms ease',
+                lineHeight: 1,
+              }}
+              aria-hidden
+            >
+              ›
+            </Text>
+            <Text size="sm" fw={600}>
+              {isCraftOpen ? 'Скрыть состав' : 'Состав крафта'}
+            </Text>
+            <Text size="xs" c="dimmed">
+              ({craftPartsCount})
+            </Text>
+          </Group>
+        </UnstyledButton>
       ) : null}
 
-      {isCraftOpen || !showCraftToggle ? (
-        <Stack gap={6}>
-          <Text size="xs" c="dimmed">
-            Ингредиенты
-          </Text>
-          <Stack gap="xs">
+      {showCraftToggle ? (
+        isCraftOpen ? (
+          <Stack gap="xs" className="recipe-card__ingredients">
             {ingredientItems.map((item) => (
               <Stack key={`ingredient-${item.item}`} gap={4}>
                 <ItemBadge
@@ -276,6 +249,35 @@ export function RecipeCard({
                 <AuctionPrice24hLine itemId={item.itemId} layout="stacked" />
               </Stack>
             ))}
+            {recipe.energy > 0 ? (
+              <ItemBadge
+                name="Энергия"
+                amount={recipe.energy}
+                iconUrl={energyIconSvg}
+                qualityColor="DEFAULT"
+                size="ingredient"
+                disableGlow
+              />
+            ) : null}
+          </Stack>
+        ) : null
+      ) : (
+        <Stack gap="xs" className="recipe-card__ingredients">
+          {ingredientItems.map((item) => (
+            <Stack key={`ingredient-${item.item}`} gap={4}>
+              <ItemBadge
+                itemId={item.itemId}
+                showFavoriteButton={false}
+                name={item.name}
+                iconUrl={item.iconUrl}
+                amount={item.amount}
+                qualityColor={item.qualityColor}
+                size="ingredient"
+              />
+              <AuctionPrice24hLine itemId={item.itemId} layout="stacked" />
+            </Stack>
+          ))}
+          {recipe.energy > 0 ? (
             <ItemBadge
               name="Энергия"
               amount={recipe.energy}
@@ -284,12 +286,12 @@ export function RecipeCard({
               size="ingredient"
               disableGlow
             />
-          </Stack>
+          ) : null}
         </Stack>
-      ) : null}
+      )}
 
       {canEditOverride ? (
-        <Stack gap={6}>
+        <Stack gap={6} className="recipe-card__admin-bonus">
           <Text size="sm" fw={600}>
             Бонусный крафт
           </Text>
@@ -318,7 +320,8 @@ export function RecipeCard({
                 }
                 if (!primaryResultItemId) return
                 const parsedBonus = Number.parseFloat(draftBonus.replace(',', '.'))
-                const safeBonus = Number.isFinite(parsedBonus) && parsedBonus >= 0 ? Number(parsedBonus.toFixed(3)) : 0
+                const safeBonus =
+                  Number.isFinite(parsedBonus) && parsedBonus >= 0 ? Number(parsedBonus.toFixed(3)) : 0
                 setIsSavingLocal(true)
                 try {
                   await saveOneOverride({
