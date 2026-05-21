@@ -330,7 +330,11 @@ if ($path === '/auction/hybrid-prices') {
 }
 
 if ($path === '/auction/liquidity-validity') {
-    require_method('GET');
+    $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    if ($method !== 'GET' && $method !== 'POST') {
+        send_json(405, ['error' => 'Method not allowed']);
+        exit;
+    }
     $token = bearer_token_from_headers();
     if (!$token) {
         send_json(401, ['error' => 'Missing token']);
@@ -342,15 +346,36 @@ if ($path === '/auction/liquidity-validity') {
         exit;
     }
     enforce_auth_user($user);
-    $idsRaw = trim((string)($_GET['ids'] ?? ''));
-    $windowRaw = trim((string)($_GET['window'] ?? '12h'));
-    if ($idsRaw === '') {
+
+    $windowRaw = '12h';
+    $ids = [];
+    if ($method === 'POST') {
+        $body = read_json_body();
+        $windowRaw = trim((string)($body['window'] ?? '12h'));
+        $rawIds = $body['itemIds'] ?? null;
+        if (is_array($rawIds)) {
+            foreach ($rawIds as $x) {
+                $t = trim((string)$x);
+                if ($t !== '') {
+                    $ids[] = $t;
+                }
+            }
+        }
+    } else {
+        $windowRaw = trim((string)($_GET['window'] ?? '12h'));
+        $idsRaw = trim((string)($_GET['ids'] ?? ''));
+        if ($idsRaw !== '') {
+            $ids = array_values(array_filter(array_unique(array_map('trim', explode(',', $idsRaw)))));
+        }
+    }
+
+    $ids = array_values(array_unique($ids));
+    if (count($ids) === 0) {
         send_json(200, ['fetchedAt' => gmdate('c'), 'benchmark' => compute_tracked_liquidity_benchmark($db, $windowRaw), 'items' => []]);
         exit;
     }
-    $ids = array_values(array_filter(array_unique(array_map('trim', explode(',', $idsRaw)))));
     if (count($ids) > 400) {
-        send_json(400, ['error' => 'Too many ids']);
+        send_json(400, ['error' => 'Too many itemIds']);
         exit;
     }
     try {

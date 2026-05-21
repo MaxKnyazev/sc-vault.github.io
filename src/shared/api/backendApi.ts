@@ -239,7 +239,7 @@ async function parseJsonOrThrow<T>(response: Response): Promise<T> {
 
 /** Меньше лимита бэкенда (400), чтобы тело запроса и запас по длине URL не упирались в ограничения. */
 const HYBRID_AUCTION_PRICES_CHUNK_SIZE = 320
-const LIQUIDITY_VALIDITY_CHUNK_SIZE = 380
+const LIQUIDITY_VALIDITY_CHUNK_SIZE = 320
 
 export type AuctionLiquidityTier =
   | 'invalid'
@@ -340,18 +340,16 @@ async function fetchAuctionLiquidityValidityOnce(
 ): Promise<AuctionLiquidityValidityResponse> {
   const token = getBackendAuthToken()
   if (!token) throw new Error('Нужна авторизация')
-  const params = new URLSearchParams({
-    window,
-    ids: itemIds.join(','),
-  })
-  const url = buildApiUrl(`/auction/liquidity-validity?${params.toString()}`)
+  const url = buildApiUrl('/auction/liquidity-validity')
   const response = await fetch(url, {
-    method: 'GET',
+    method: 'POST',
     headers: {
+      'Content-Type': 'application/json',
       Accept: 'application/json',
       Authorization: `Bearer ${token}`,
       'X-Auth-Token': token,
     },
+    body: JSON.stringify({ itemIds, window }),
   })
   return parseJsonOrThrow<AuctionLiquidityValidityResponse>(response)
 }
@@ -372,13 +370,23 @@ export async function fetchAuctionLiquidityValidity(
   let benchmark: AuctionLiquidityBenchmark | undefined
   let lastFetchedAt = ''
 
+  const chunkErrors: string[] = []
   for (let offset = 0; offset < ids.length; offset += LIQUIDITY_VALIDITY_CHUNK_SIZE) {
     const slice = ids.slice(offset, offset + LIQUIDITY_VALIDITY_CHUNK_SIZE)
-    const part = await fetchAuctionLiquidityValidityOnce(slice, window)
-    Object.assign(mergedItems, part.items ?? {})
-    if (part.benchmark) benchmark = part.benchmark
-    const fa = part.fetchedAt
-    if (fa && fa > lastFetchedAt) lastFetchedAt = fa
+    try {
+      const part = await fetchAuctionLiquidityValidityOnce(slice, window)
+      Object.assign(mergedItems, part.items ?? {})
+      if (part.benchmark) benchmark = part.benchmark
+      const fa = part.fetchedAt
+      if (fa && fa > lastFetchedAt) lastFetchedAt = fa
+    } catch (e) {
+      const msg = e instanceof BackendApiError ? e.message : e instanceof Error ? e.message : String(e)
+      chunkErrors.push(`батч ${offset + 1}–${offset + slice.length}: ${msg}`)
+    }
+  }
+
+  if (Object.keys(mergedItems).length === 0 && chunkErrors.length > 0) {
+    throw new BackendApiError(chunkErrors.join('; '), 400)
   }
 
   return {

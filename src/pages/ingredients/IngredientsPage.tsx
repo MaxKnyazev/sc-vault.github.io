@@ -22,6 +22,7 @@ import { useFavoritesStore } from '../../shared/store/favoritesStore'
 import { useIngredientPricesStore } from '../../shared/store/ingredientPricesStore'
 import { AdminAuctionTrackingButton } from '../../components/admin-auction-ignore/AdminAuctionTrackingButton'
 import { useAuthStore } from '../../shared/store/authStore'
+import { useAuctionLiquidityStore } from '../../shared/store/auctionLiquidityStore'
 import { normalizeDecimalPriceForSubmit, sanitizeDecimalInput } from '../../shared/lib/sanitizeDecimalInput'
 
 function createEnergyIconSvg(fillColor: string): string {
@@ -191,6 +192,12 @@ export function IngredientsPage() {
   }, [itemsById, recipes, realm])
 
   const auctionItemIds = useMemo(() => collectHideoutItemIds(recipes), [recipes])
+  const authToken = useAuthStore((s) => s.token)
+
+  useEffect(() => {
+    if (!authToken || auctionItemIds.length === 0) return
+    void useAuctionLiquidityStore.getState().ensureForItems(auctionItemIds)
+  }, [authToken, auctionItemIds])
 
   const filteredIngredients = useMemo(() => {
     const query = search.trim().toLowerCase()

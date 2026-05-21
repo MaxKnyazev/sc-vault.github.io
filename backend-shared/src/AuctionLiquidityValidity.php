@@ -55,7 +55,7 @@ function compute_tracked_liquidity_benchmark(PDO $db, string $window): array
         ];
     }
 
-    ensure_auction_stats_for_items($db, $trackedIds, $windowName);
+    // Бенчмарк только по уже посчитанным stats (cron); без массового ensure — иначе таймаут.
     $stats = get_auction_stats($db, $trackedIds, $windowName);
     $positive = [];
     foreach ($trackedIds as $itemId) {
