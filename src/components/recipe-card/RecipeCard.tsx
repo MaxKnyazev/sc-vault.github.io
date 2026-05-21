@@ -1,4 +1,5 @@
 import { ActionIcon, Box, Button, Group, Stack, Text, TextInput } from '@mantine/core'
+import { RecipeCardSectionToggle } from './RecipeCardSectionToggle'
 import { useEffect, useMemo, useState } from 'react'
 import { AuctionPrice24hLine } from '../auction-price-24h/AuctionPrice24hLine'
 import { ItemBadge } from '../item-badge/ItemBadge'
@@ -245,30 +246,20 @@ export function RecipeCard({
       <Box className="recipe-card__footer">
         {showCraftToggle ? (
           <Stack gap={6}>
-            <Button
-              variant="default"
-              color="gray"
-              size="xs"
-              fullWidth
-              onClick={() => setIsCraftOpen((prev) => !prev)}
-              aria-expanded={isCraftOpen}
-            >
-              {isCraftOpen ? `Скрыть состав крафта (${craftPartsCount})` : `Состав крафта (${craftPartsCount})`}
-            </Button>
+            <RecipeCardSectionToggle
+              expanded={isCraftOpen}
+              label={isCraftOpen ? 'Скрыть состав' : 'Состав крафта'}
+              count={craftPartsCount}
+              onToggle={() => setIsCraftOpen((prev) => !prev)}
+            />
             {isCraftOpen ? ingredientsBlock : null}
             {usedInCount > 0 ? (
-              <Button
-                variant="default"
-                color="gray"
-                size="xs"
-                fullWidth
-                onClick={() => setShowUsedIn((prev) => !prev)}
-                aria-expanded={showUsedIn}
-              >
-                {showUsedIn
-                  ? `Скрыть «Для чего используется» (${usedInCount})`
-                  : `Для чего используется (${usedInCount})`}
-              </Button>
+              <RecipeCardSectionToggle
+                expanded={showUsedIn}
+                label={showUsedIn ? 'Скрыть «Для чего используется»' : 'Для чего используется'}
+                count={usedInCount}
+                onToggle={() => setShowUsedIn((prev) => !prev)}
+              />
             ) : null}
             {showUsedIn && usedInCount > 0 ? (
               <Stack gap="xs" className="recipe-card__used-in-list">
