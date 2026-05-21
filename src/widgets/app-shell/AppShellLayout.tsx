@@ -33,7 +33,8 @@ import {
 } from './navIcons'
 
 const NAV_COLLAPSED_KEY = 'sc-vault-nav-collapsed'
-const NAV_WIDTH_EXPANDED = 212
+/** Достаточно для «Ограниченный доступ» + никнейм и кнопка выхода без ellipsis. */
+const NAV_WIDTH_EXPANDED = 284
 const NAV_WIDTH_COLLAPSED = 72
 
 type NavItemDef = {
@@ -372,11 +373,11 @@ export function AppShellLayout() {
                         boxShadow: `0 0 10px ${roleGlowColor}`,
                       }}
                     />
-                    <Stack gap={0} style={{ minWidth: 0 }}>
-                      <Text fw={700} size="md" style={{ lineHeight: 1.1 }} truncate>
+                    <Stack gap={0} style={{ minWidth: 0, flex: 1 }}>
+                      <Text fw={700} size="md" style={{ lineHeight: 1.2, wordBreak: 'break-word' }}>
                         {user.nickname}
                       </Text>
-                      <Text c="dimmed" size="xs" truncate>
+                      <Text c="dimmed" size="xs" style={{ lineHeight: 1.25 }}>
                         {getRoleLabel(user.role)}
                       </Text>
                     </Stack>
