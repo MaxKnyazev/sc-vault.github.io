@@ -34,6 +34,7 @@ import { buildCraftCostModel } from '../../shared/lib/costModel'
 import { formatAuctionRub } from '../../shared/lib/formatAuctionPrice'
 import { recipeBatchOutputForPrimaryItem } from '../../shared/lib/recipeBatchOutput'
 import { getDuplicateCraftDisplayLabel } from '../../shared/lib/craftDuplicateRecipeLabels'
+import { buildInsufficientCostMessage } from '../../shared/lib/recipeCostLineDisplay'
 import {
   auctionHybridSettingsKey,
   fetchBackendHybridAuctionPrices,
@@ -678,29 +679,13 @@ export function RecipesOverview() {
                           let base: string
                           if (resolved !== null) base = `${formatAuctionRub(resolved)} ₽/шт`
                           else {
-                            const meta = costModel.unresolvedMetaByItemId.get(primaryResultItemId)
-                            if (!meta && missingReasons.length === 0) base = 'Недостаточно данных для расчета себестоимости'
-                            else {
-                              const reasons: string[] = []
-                              reasons.push(...missingReasons)
-                              if (!buyPerUnit) reasons.push('нет цены скупа')
-                              if (meta?.cycleUnanchored) reasons.push('цикл без ценового якоря')
-                              if (meta?.unstableCycle) reasons.push('цикл не сошелся')
-                              if (meta?.missingEnergy) reasons.push('нет цены энергии')
-                              if ((meta?.missingIngredientIds.length ?? 0) > 0) {
-                                reasons.push(
-                                  `нет цен ингредиентов: ${meta!.missingIngredientIds
-                                    .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
-                                    .join(', ')}`,
-                                )
-                              }
-                              if (meta?.noRecipes) reasons.push('нет крафтовых рецептов')
-                              if (meta?.noBuy) reasons.push('нет цены скупа')
-                              base =
-                                reasons.length > 0
-                                  ? `Недостаточно данных (${reasons.join('; ')})`
-                                  : 'Недостаточно данных для расчета себестоимости'
-                            }
+                            base = buildInsufficientCostMessage(missingReasons, {
+                              hasBuyOrLeafPrice: buyPerUnit !== null,
+                              buyMissingLabel: 'нет цены скупа',
+                              meta: costModel.unresolvedMetaByItemId.get(primaryResultItemId),
+                              ingredientNamesById: (id) =>
+                                getItemName(itemsById[id]?.name?.lines) || id,
+                            })
                           }
 
                           const dup = getDuplicateCraftDisplayLabel(recipe)
@@ -781,29 +766,13 @@ export function RecipesOverview() {
                               }
                             }
                           } else {
-                            const meta = costModelHybrid.unresolvedMetaByItemId.get(primaryResultItemId)
-                            if (!meta && missingReasons.length === 0) base = 'Недостаточно данных для расчета себестоимости'
-                            else {
-                              const reasons: string[] = []
-                              reasons.push(...missingReasons)
-                              if (!leafPrimary) reasons.push('нет базовой цены (скуп/аукцион)')
-                              if (meta?.cycleUnanchored) reasons.push('цикл без ценового якоря')
-                              if (meta?.unstableCycle) reasons.push('цикл не сошелся')
-                              if (meta?.missingEnergy) reasons.push('нет цены энергии')
-                              if ((meta?.missingIngredientIds.length ?? 0) > 0) {
-                                reasons.push(
-                                  `нет цен ингредиентов: ${meta!.missingIngredientIds
-                                    .map((id) => getItemName(itemsById[id]?.name?.lines) || id)
-                                    .join(', ')}`,
-                                )
-                              }
-                              if (meta?.noRecipes) reasons.push('нет крафтовых рецептов')
-                              if (meta?.noBuy) reasons.push('нет базовой цены (скуп/аукцион)')
-                              base =
-                                reasons.length > 0
-                                  ? `Недостаточно данных (${reasons.join('; ')})`
-                                  : 'Недостаточно данных для расчета себестоимости'
-                            }
+                            base = buildInsufficientCostMessage(missingReasons, {
+                              hasBuyOrLeafPrice: leafPrimary !== null,
+                              buyMissingLabel: 'нет базовой цены (скуп/аукцион)',
+                              meta: costModelHybrid.unresolvedMetaByItemId.get(primaryResultItemId),
+                              ingredientNamesById: (id) =>
+                                getItemName(itemsById[id]?.name?.lines) || id,
+                            })
                           }
 
                           const dup = getDuplicateCraftDisplayLabel(recipe)

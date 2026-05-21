@@ -21,6 +21,7 @@ export function RecipeCostPillValue({ line }: RecipeCostPillValueProps) {
           withArrow
           color="dark"
           position="top"
+          classNames={{ tooltip: 'recipe-cost-hint-tooltip' }}
           transitionProps={{ transition: 'fade', duration: 120 }}
         >
           <ActionIcon

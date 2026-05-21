@@ -288,6 +288,13 @@ body::before {
   flex-shrink: 0;
 }
 
+.recipe-cost-hint-tooltip {
+  border: 1px solid var(--sc-border) !important;
+  box-shadow: var(--sc-shadow-sm) !important;
+  line-height: 1.45 !important;
+  max-width: 320px;
+}
+
 .recipe-cost-pill--hybrid {
   border-color: rgba(59, 130, 246, 0.25);
   background: rgba(59, 130, 246, 0.06);

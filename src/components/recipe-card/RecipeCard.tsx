@@ -182,22 +182,16 @@ export function RecipeCard({
         ) : null}
 
         {!hideRecipeTitle ? (
-          <Stack gap={4} pr={recipeFavoriteId ? 36 : 0} style={{ minWidth: 0 }}>
-            {duplicateCraftTitle ? (
-              <Text size="md" fw={700} style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                {duplicateCraftTitle}
-              </Text>
-            ) : null}
-            <Text
-              size="sm"
-              fw={600}
-              c={duplicateCraftTitle ? 'dimmed' : undefined}
-              style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
-            >
-              {getLocalizedLine(recipe.category.lines)}
-              {recipe.subcategory?.lines ? ` / ${getLocalizedLine(recipe.subcategory.lines)}` : ''}
-            </Text>
-          </Stack>
+          <Text
+            size="sm"
+            fw={600}
+            c="dimmed"
+            pr={recipeFavoriteId ? 36 : 0}
+            style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
+          >
+            {getLocalizedLine(recipe.category.lines)}
+            {recipe.subcategory?.lines ? ` / ${getLocalizedLine(recipe.subcategory.lines)}` : ''}
+          </Text>
         ) : null}
 
         {!hideResultSection ? (
@@ -207,7 +201,7 @@ export function RecipeCard({
                 <ItemBadge
                   itemId={item.itemId}
                   showFavoriteButton={false}
-                  name={item.name}
+                  name={duplicateCraftTitle ?? item.name}
                   iconUrl={item.iconUrl}
                   amount={item.amount}
                   qualityColor={item.qualityColor}
